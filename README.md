@@ -1,4 +1,4 @@
-# Instalación del proyecto
+# Ejecución del proyecto
 
 ## Backend 
 
