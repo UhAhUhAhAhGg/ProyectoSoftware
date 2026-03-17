@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Django
+db.sqlite3
+
+# Virtual environment
+venv/
+env/
+
+# Node
+node_modules/
+
+# Next.js
+.next/
+
+# Environment variables
+.env
+
+# OS
+.DS_Store
+Thumbs.db
