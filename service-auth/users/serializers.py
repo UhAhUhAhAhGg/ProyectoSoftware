@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, UserProfile, Role, Permission
+from .models import User, UserProfile, Role, Permission, RolePermission
 
 
 class PermissionSerializer(serializers.ModelSerializer):
@@ -9,21 +9,26 @@ class PermissionSerializer(serializers.ModelSerializer):
 
 
 class RoleSerializer(serializers.ModelSerializer):
-    permissions = PermissionSerializer(many=True, read_only=True)
+    permissions = serializers.SerializerMethodField()
 
     class Meta:
         model = Role
         fields = ['id', 'name', 'permissions']
 
+    def get_permissions(self, obj):
+        role_permissions = RolePermission.objects.filter(role=obj).select_related('permission')
+        perms = [rp.permission for rp in role_permissions]
+        return PermissionSerializer(perms, many=True).data
+
 
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
-        fields = ['user_id', 'first_name', 'last_name', 'phone', 'date_of_birth', 'profile_photo_url']
+        fields = ['first_name', 'last_name', 'phone', 'date_of_birth', 'profile_photo_url']
 
 
 class UserSerializer(serializers.ModelSerializer):
-    profile = UserProfileSerializer(source='userprofile', read_only=True)
+    profile = UserProfileSerializer(read_only=True)
     role_name = serializers.CharField(source='role.name', read_only=True)
 
     class Meta:
@@ -41,9 +46,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop('password')
-        user = User(**validated_data)
-        user.set_password(password)
-        user.save()
+        user = User.objects.create_user(password=password, **validated_data)
         return user
 
 

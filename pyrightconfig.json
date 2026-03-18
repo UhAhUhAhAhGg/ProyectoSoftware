@@ -1,0 +1,13 @@
+{
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/migrations"
+  ],
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "reportUndefinedVariable": "warning",
+  "pythonVersion": "3.11",
+  "venvPath": ".",
+  "useLibraryCodeForTypes": true
+}

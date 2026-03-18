@@ -27,8 +27,13 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
-    'users',  # Tu app de usuarios
+    'rest_framework_simplejwt',
+    'django_filters',
+    'users',  # App de usuarios
 ]
+
+# Modelo de usuario personalizado
+AUTH_USER_MODEL = 'users.User'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
