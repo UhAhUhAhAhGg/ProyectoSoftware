@@ -13,7 +13,7 @@ class PermissionSerializer(serializers.ModelSerializer):
         model = Permission
         fields = ['id', 'name']
 
-
+#"(Ariana) Verificación de rol de usuario"
 class RoleSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField()
 
