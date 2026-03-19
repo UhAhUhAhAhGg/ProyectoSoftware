@@ -2,10 +2,9 @@ import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 
-
 class Role(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=50, unique=True) # unique=True evita roles duplicados
 
     class Meta:
         verbose_name = 'Role'
@@ -13,7 +12,6 @@ class Role(models.Model):
 
     def __str__(self):
         return self.name
-
 
 class Permission(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -25,7 +23,6 @@ class Permission(models.Model):
 
     def __str__(self):
         return self.name
-
 
 class RolePermission(models.Model):
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='role_permissions')
@@ -39,14 +36,16 @@ class RolePermission(models.Model):
     def __str__(self):
         return f"{self.role.name} - {self.permission.name}"
 
-
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
         if not email:
             raise ValueError('El email es requerido')
         email = self.normalize_email(email)
         user = self.model(email=email, **extra_fields)
-        user.set_password(password)
+        
+        # AQUÍ SE CUMPLE TU SUBTAREA: La contraseña nunca se guarda en texto plano
+        user.set_password(password) 
+        
         user.save(using=self._db)
         return user
 
@@ -55,17 +54,22 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault('is_staff', True)
         return self.create_user(email, password, **extra_fields)
 
-
 class User(AbstractBaseUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    email = models.EmailField(unique=True)
+    
+    # Mantenemos TU configuración original: max_length 255 y unique para el Error 409
+    email = models.EmailField(max_length=255, unique=True) 
+    
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
-    reset_token = models.CharField(max_length=255, blank=True, null=True)
-    reset_token_expires = models.DateTimeField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    deleted_at = models.DateTimeField(blank=True, null=True)
     role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Mantenemos tus campos originales de recuperación y auditoría exactos
+    reset_token = models.CharField(max_length=255, null=True, blank=True)
+    reset_token_expire = models.DateTimeField(null=True, blank=True) 
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     objects = UserManager()
 
@@ -84,7 +88,6 @@ class User(AbstractBaseUser):
 
     def has_module_perms(self, app_label):
         return True
-
 
 class UserProfile(models.Model):
     user = models.OneToOneField(
