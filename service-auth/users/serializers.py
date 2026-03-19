@@ -49,7 +49,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['email', 'password', 'role']
-
+#"(Ariana) Verificación de formato de correo válido"
     def validate_email(self, value):
         try:
             validate_email(value)
