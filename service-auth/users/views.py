@@ -47,7 +47,8 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.errors, status=400)
 
-    # 🔥 PROFILE
+    # PERFIL
+    #"(Ariana) Autenticación de usuarios según los roles existentes: <QuerySet [<Role: buyer>, <Role: promoter>, <Role: admin>]>"
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def me(self, request):
         return Response({
