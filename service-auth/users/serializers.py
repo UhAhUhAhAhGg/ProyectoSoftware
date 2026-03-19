@@ -1,4 +1,10 @@
 from rest_framework import serializers
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError
+from django.contrib.auth import authenticate
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.tokens import RefreshToken
+
 from .models import User, UserProfile, Role, Permission, RolePermission
 
 
@@ -16,7 +22,7 @@ class RoleSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'permissions']
 
     def get_permissions(self, obj):
-        role_permissions = RolePermission.objects.filter(role=obj).select_related('permission')
+        role_permissions = RolePermission.objects.filter(role=obj)
         perms = [rp.permission for rp in role_permissions]
         return PermissionSerializer(perms, many=True).data
 
@@ -29,25 +35,62 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     profile = UserProfileSerializer(read_only=True)
-    role_name = serializers.CharField(source='role.name', read_only=True)
+    role = serializers.CharField(source='role.name', read_only=True)
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'is_active', 'created_at', 'role_name', 'profile']
-        read_only_fields = ['id', 'created_at']
+        fields = ['id', 'email', 'role', 'created_at', 'profile']
 
 
+# 🔥 REGISTER
 class UserCreateSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True)
+    password = serializers.CharField(write_only=True)
 
     class Meta:
         model = User
         fields = ['email', 'password', 'role']
 
+    def validate_email(self, value):
+        try:
+            validate_email(value)
+        except ValidationError:
+            raise serializers.ValidationError("Correo inválido")
+
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Este correo ya está registrado")
+
+        return value
+
     def create(self, validated_data):
         password = validated_data.pop('password')
-        user = User.objects.create_user(password=password, **validated_data)
-        return user
+        return User.objects.create_user(password=password, **validated_data)
+
+
+# 🔥 LOGIN (JWT)
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        user = authenticate(username=data['email'], password=data['password'])
+
+        if user is None:
+            raise AuthenticationFailed("Credenciales inválidas")
+
+        if not user.is_active:
+            raise AuthenticationFailed("Usuario inactivo")
+
+        refresh = RefreshToken.for_user(user)
+
+        refresh['email'] = user.email
+        refresh['role'] = user.role.name if user.role else None
+
+        return {
+            'email': user.email,
+            'role': user.role.name if user.role else None,
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+        }
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
