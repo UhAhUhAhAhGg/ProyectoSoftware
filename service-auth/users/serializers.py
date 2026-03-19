@@ -66,11 +66,11 @@ class UserCreateSerializer(serializers.ModelSerializer):
         return User.objects.create_user(password=password, **validated_data)
 
 
-# 🔥 LOGIN (JWT)
+# LOGIN (JWT)
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
-
+#"(Ariana) Verificación los datos ingresados con la base de datos"
     def validate(self, data):
         user = authenticate(username=data['email'], password=data['password'])
 
