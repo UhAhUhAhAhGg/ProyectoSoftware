@@ -46,6 +46,7 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response(serializer.validated_data, status=200)
 
         return Response(serializer.errors, status=400)
+#"(Ariana) Pedir ingreso de contraseña"
 
     # PERFIL
     #"(Ariana) Autenticación de usuarios según los roles existentes: <QuerySet [<Role: buyer>, <Role: promoter>, <Role: admin>]>"
