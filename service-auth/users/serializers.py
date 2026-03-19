@@ -93,7 +93,7 @@ class LoginSerializer(serializers.Serializer):
             'refresh': str(refresh),
         }
 
-
+#"(Ariana) Creación del servicio de inicio de sesión"
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
