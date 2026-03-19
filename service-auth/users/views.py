@@ -36,7 +36,8 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.errors, status=400)
 
-    # 🔥 LOGIN
+    #LOGIN
+    #"(Ariana) Creación del servicio para inicio de sesión"
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def login(self, request):
         serializer = LoginSerializer(data=request.data)
