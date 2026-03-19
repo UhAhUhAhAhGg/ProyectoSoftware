@@ -57,6 +57,7 @@ class User(AbstractBaseUser):
     created_at = models.DateTimeField(auto_now_add=True)
 
     role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True)
+#(Ariana) Creación de estructura para endpoint, modelo, serializer, url, view
 
     objects = UserManager()
 
