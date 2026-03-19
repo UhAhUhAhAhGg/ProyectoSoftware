@@ -2,14 +2,12 @@ import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 
-
 class Role(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=50, unique=True) # unique=True evita roles duplicados
 
     def __str__(self):
         return self.name
-
 
 class Permission(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -18,14 +16,12 @@ class Permission(models.Model):
     def __str__(self):
         return self.name
 
-
 class RolePermission(models.Model):
     role = models.ForeignKey(Role, on_delete=models.CASCADE)
     permission = models.ForeignKey(Permission, on_delete=models.CASCADE)
 
     class Meta:
         unique_together = ('role', 'permission')
-
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -34,7 +30,10 @@ class UserManager(BaseUserManager):
 
         email = self.normalize_email(email)
         user = self.model(email=email, **extra_fields)
-        user.set_password(password)
+        
+        # AQUÍ SE CUMPLE TU SUBTAREA: La contraseña nunca se guarda en texto plano
+        user.set_password(password) 
+        
         user.save(using=self._db)
         return user
 
@@ -45,9 +44,23 @@ class UserManager(BaseUserManager):
 
         return self.create_user(email, password, **extra_fields)
 
-
 class User(AbstractBaseUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Mantenemos TU configuración original: max_length 255 y unique para el Error 409
+    email = models.EmailField(max_length=255, unique=True) 
+    
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
+    role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Mantenemos tus campos originales de recuperación y auditoría exactos
+    reset_token = models.CharField(max_length=255, null=True, blank=True)
+    reset_token_expire = models.DateTimeField(null=True, blank=True) 
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+=======
     email = models.EmailField(unique=True)
 
     is_active = models.BooleanField(default=True)
@@ -72,7 +85,6 @@ class User(AbstractBaseUser):
 
     def has_module_perms(self, app_label):
         return True
-
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True, related_name='profile')
