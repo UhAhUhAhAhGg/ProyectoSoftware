@@ -1,16 +1,16 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.contrib.auth.hashers import make_password
-from .models import User, UserProfile, Role, Permission
+
+from .models import User, Role, Permission
 from .serializers import (
     UserSerializer,
     UserCreateSerializer,
     UserUpdateSerializer,
     RoleSerializer,
     PermissionSerializer,
-    UserProfileSerializer
+    LoginSerializer
 )
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -18,11 +18,12 @@ class UserViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
-        if self.action == 'create':
+        if self.action in ['create', 'register']:
             return UserCreateSerializer
-        elif self.action == 'partial_update' or self.action == 'update':
+        elif self.action in ['update', 'partial_update']:
             return UserUpdateSerializer
         return UserSerializer
+
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def me(self, request):
@@ -44,7 +45,11 @@ class UserViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_409_CONFLICT)
 
         # 2. Usamos el serializer profesional que ya tienes configurado
+    # 🔥 REGISTER
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def register(self, request):
         serializer = UserCreateSerializer(data=request.data)
+
         if serializer.is_valid():
             serializer.save()
             return Response({
@@ -107,22 +112,30 @@ class UserViewSet(viewsets.ModelViewSet):
         user.set_password(password)
         user.save()
         return Response({'success': 'Password updated'})
+            return Response({"message": "Usuario creado correctamente"}, status=201)
 
-    @action(detail=True, methods=['post'])
-    def activate(self, request, pk=None):
-        """Activar usuario"""
-        user = self.get_object()
-        user.is_active = True
-        user.save()
-        return Response({'success': 'User activated'})
+        return Response(serializer.errors, status=400)
 
-    @action(detail=True, methods=['post'])
-    def deactivate(self, request, pk=None):
-        """Desactivar usuario"""
-        user = self.get_object()
-        user.is_active = False
-        user.save()
-        return Response({'success': 'User deactivated'})
+    #LOGIN
+    #"(Ariana) Creación del servicio para inicio de sesión"
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def login(self, request):
+        serializer = LoginSerializer(data=request.data)
+
+        if serializer.is_valid():
+            return Response(serializer.validated_data, status=200)
+
+        return Response(serializer.errors, status=400)
+#"(Ariana) Pedir ingreso de contraseña"
+
+    # PERFIL
+    #"(Ariana) Autenticación de usuarios según los roles existentes: <QuerySet [<Role: buyer>, <Role: promoter>, <Role: admin>]>"
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def me(self, request):
+        return Response({
+            "email": request.user.email,
+            "role": request.user.role.name if request.user.role else None
+        })
 
 
 class RoleViewSet(viewsets.ReadOnlyModelViewSet):
