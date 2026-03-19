@@ -55,7 +55,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             validate_email(value)
         except ValidationError:
             raise serializers.ValidationError("Correo inválido")
-
+#"(Ariana) Verificación del correo no Repetido"
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("Este correo ya está registrado")
 
