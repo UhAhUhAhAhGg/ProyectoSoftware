@@ -60,7 +60,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Este correo ya está registrado")
 
         return value
-
+#"(Ariana) Creación de servicio que identifica tipo de usuario"
     def create(self, validated_data):
         password = validated_data.pop('password')
         return User.objects.create_user(password=password, **validated_data)
