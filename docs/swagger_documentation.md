@@ -10,8 +10,8 @@ La tarea original era definir y documentar el modelo `TicketType`, pero se descu
 
 La documentación de la API está disponible en las siguientes rutas mientras el servidor de desarrollo está en ejecución:
 
-- **Swagger UI**: [http://127.0.0.1:8000/api/v1/schema/swagger-ui/](http://127.0.0.1:8000/api/v1/schema/swagger-ui/)
-- **ReDoc**: [http://127.0.0.1:8000/api/v1/schema/redoc/](http://127.0.0.1:8000/api/v1/schema/redoc/)
+- **Swagger UI**: [http://127.0.0.1:8002/api/v1/schema/swagger-ui/](http://127.0.0.1:8000/api/v1/schema/swagger-ui/)
+- **ReDoc**: [http://127.0.0.1:8002/api/v1/schema/redoc/](http://127.0.0.1:8000/api/v1/schema/redoc/)
 
 ## Cambios Realizados
 
