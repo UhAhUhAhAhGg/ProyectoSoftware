@@ -2,15 +2,14 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.contrib.auth.hashers import make_password
-from .models import User, UserProfile, Role, Permission
+from .models import User, Role, Permission
 from .serializers import (
     UserSerializer,
     UserCreateSerializer,
     UserUpdateSerializer,
     RoleSerializer,
     PermissionSerializer,
-    UserProfileSerializer
+    LoginSerializer,
 )
 
 
@@ -19,30 +18,58 @@ class UserViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
-        if self.action == 'create':
+        if self.action in ['create', 'register']:
             return UserCreateSerializer
-        elif self.action == 'partial_update' or self.action == 'update':
+        elif self.action in ['update', 'partial_update']:
             return UserUpdateSerializer
         return UserSerializer
 
+    # --- PERFIL DEL USUARIO AUTENTICADO ---
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def me(self, request):
-        """Obtener datos del usuario actual"""
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
 
+    # --- REGISTRO ---
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def register(self, request):
-        """Registrar nuevo usuario"""
+        email = request.data.get('email')
+
+        # Verificación anticipada de duplicado (devuelve 409 antes de llegar al serializer)
+        if email and User.objects.filter(email=email).exists():
+            return Response({
+                "status": "error",
+                "message": "El correo ingresado ya pertenece a otro usuario."
+            }, status=status.HTTP_409_CONFLICT)
+
         serializer = UserCreateSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response({
+                "status": "success",
+                "message": "Usuario creado correctamente.",
+                "data": serializer.data
+            }, status=status.HTTP_201_CREATED)
+
+        return Response({
+            "status": "error",
+            "message": "Error en los datos enviados.",
+            "details": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    # --- LOGIN con JWT ---
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def login(self, request):
+        serializer = LoginSerializer(data=request.data)
+
+        if serializer.is_valid():
+            return Response(serializer.validated_data, status=status.HTTP_200_OK)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    # --- CAMBIAR CONTRASEÑA ---
     @action(detail=True, methods=['post'])
     def set_password(self, request, pk=None):
-        """Cambiar contraseña de usuario"""
         user = self.get_object()
         password = request.data.get('password')
         if not password:
@@ -54,9 +81,9 @@ class UserViewSet(viewsets.ModelViewSet):
         user.save()
         return Response({'success': 'Password updated'})
 
+    # --- ACTIVAR / DESACTIVAR USUARIO ---
     @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):
-        """Activar usuario"""
         user = self.get_object()
         user.is_active = True
         user.save()
@@ -64,7 +91,6 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def deactivate(self, request, pk=None):
-        """Desactivar usuario"""
         user = self.get_object()
         user.is_active = False
         user.save()
