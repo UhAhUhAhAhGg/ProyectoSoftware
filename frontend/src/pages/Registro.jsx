@@ -120,23 +120,45 @@ function Registro() {
     if (passwordStrength >= 4) return 'strong';
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const nuevosErrores = validarFormulario();
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  const nuevosErrores = validarFormulario();
+  
+  if (Object.keys(nuevosErrores).length === 0) {
     
-    if (Object.keys(nuevosErrores).length === 0) {
-      // Guardar datos del usuario registrado
-      const userData = {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/users/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          nombre: formData.nombre,
+          email: formData.email,
+          password: formData.password,
+          tipo_usuario: formData.tipoUsuario,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setErrores({
+          email: data.email || 'Error al registrar'
+        });
+        return;
+      }
+
+      // exito
+      setRegisteredUser({
         nombre: formData.nombre,
         email: formData.email,
         tipoUsuario: formData.tipoUsuario,
         fechaRegistro: new Date().toLocaleDateString()
-      };
-      
-      setRegisteredUser(userData);
+      });
+
       setShowWelcomeModal(true);
-      
-      // Resetear formulario
+
       setFormData({
         nombre: '',
         email: '',
@@ -144,10 +166,18 @@ function Registro() {
         confirmPassword: '',
         tipoUsuario: 'comprador'
       });
-    } else {
-      setErrores(nuevosErrores);
+
+    } catch (error) {
+      console.error(error);
+      setErrores({
+        email: 'Error conectando con el servidor'
+      });
     }
-  };
+
+  } else {
+    setErrores(nuevosErrores);
+  }
+};
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
