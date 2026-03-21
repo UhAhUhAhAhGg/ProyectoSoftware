@@ -172,6 +172,72 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return TicketTypeCreateSerializer
         return TicketTypeSerializer
+    # --- AQUÍ EMPIEZA TU TAREA DE CREACIÓN DE ENTRADAS ---
+    def create(self, request, *args, **kwargs):
+        """Crear tipo de entrada validando propiedad del evento y capacidad máxima"""
+        event_id = request.data.get('event')
+        
+        # Obtenemos la capacidad que el promotor quiere para esta entrada (0 por defecto si no manda)
+        try:
+            new_capacity = int(request.data.get('max_capacity', 0))
+        except ValueError:
+            new_capacity = 0
+
+        if not event_id:
+            return Response({
+                "status": "error",
+                "message": "El ID del evento es requerido."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Buscamos el evento en la base de datos
+        from .models import Event
+        try:
+            event = Event.objects.get(id=event_id)
+        except Event.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "El evento especificado no existe."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # 1. Validar Permisos: ¿El usuario actual es el dueño de este evento?
+        if str(event.promoter_id) != str(request.user.id):
+            return Response({
+                "status": "error",
+                "message": "Acceso denegado. No puedes crear entradas para un evento que no te pertenece."
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. Validar Capacidad: Que la suma de todas las entradas no supere la del evento
+        from django.db.models import Sum
+        # Sumamos la capacidad de los tickets que ya existen para este evento
+        current_tickets = TicketType.objects.filter(event=event).aggregate(
+            total=Sum('max_capacity')
+        )['total'] or 0
+
+        # Si lo que ya existe + lo nuevo supera el límite del evento, lo rebotamos
+        if (current_tickets + new_capacity) > event.capacity:
+            capacidad_disponible = event.capacity - current_tickets
+            return Response({
+                "status": "error",
+                "message": f"La capacidad solicitada supera el límite del evento. Solo te queda espacio para {capacidad_disponible} entradas más."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Si todo está perfecto, creamos el ticket
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            self.perform_create(serializer)
+            return Response({
+                "status": "success",
+                "message": "Tipo de entrada creado exitosamente.",
+                "data": serializer.data
+            }, status=status.HTTP_201_CREATED)
+
+        # 4. Si faltan datos o el formato está mal (ej. precio negativo)
+        return Response({
+            "status": "error",
+            "message": "Error al validar los datos de la entrada.",
+            "details": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+    # --- AQUÍ TERMINA TU TAREA ---
 
     @action(detail=False, methods=['get'])
     def by_event(self, request):
