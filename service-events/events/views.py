@@ -43,7 +43,6 @@ class EventViewSet(viewsets.ModelViewSet):
         elif self.action == 'partial_update' or self.action == 'update':
             return EventUpdateSerializer
         return EventSerializer
-    # --- AQUÍ EMPIEZA TU TAREA DE EDICIÓN DE EVENTOS ---
     def update(self, request, *args, **kwargs):
         """Editar un evento validando permisos y estado (PUT/PATCH)"""
         partial = kwargs.pop('partial', False)
@@ -81,7 +80,40 @@ class EventViewSet(viewsets.ModelViewSet):
             "message": "Error al validar los datos enviados.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
-    # --- AQUÍ TERMINA TU TAREA ---
+  
+    def destroy(self, request, *args, **kwargs):
+        """Eliminación lógica de un evento (Soft Delete para proteger compras)"""
+        instance = self.get_object()
+
+        # 1. Validar Permisos: Solo el dueño puede eliminarlo
+        if str(instance.promoter_id) != str(request.user.id):
+            return Response({
+                "status": "error",
+                "message": "No tienes permisos. Solo el promotor que creó el evento puede eliminarlo."
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. Validar Estado: Si ya está cancelado o completado, no hacemos nada
+        if instance.status in ['cancelled', 'completed']:
+            return Response({
+                "status": "error",
+                "message": f"El evento ya se encuentra en estado '{instance.status}'."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. ELIMINACIÓN LÓGICA: Cambiamos el estado en lugar de borrarlo de la BD
+        instance.status = 'cancelled'
+        instance.save()
+
+        # 4. BONUS DE SEGURIDAD: Desactivamos todos sus tickets para congelar las ventas
+        # Así evitamos que alguien compre un ticket de un evento recién eliminado
+        tickets = instance.tickettype_set.all()
+        for ticket in tickets:
+            ticket.status = 'inactive'
+            ticket.save()
+
+        return Response({
+            "status": "success",
+            "message": "El evento ha sido eliminado lógicamente. El historial de compras previas se mantiene intacto."
+        }, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'])
     def upcoming(self, request):
