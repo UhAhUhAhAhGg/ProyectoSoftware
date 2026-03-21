@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import './Registro.css';
 
 function Registro() {
@@ -164,14 +164,14 @@ function Registro() {
       </button>
 
       {/* Botón volver al inicio */}
-      <Link to="/" className="back-home-btn">
+      <Link href="/" className="back-home-btn">
         <span className="back-icon">←</span>
         Volver al Inicio
       </Link>
 
       <div className="registro-card">
         <h2>Crear Cuenta</h2>
-        <p className="subtitulo">Elige tu tipo de perfil</p>
+        <p className="subtitulo">Selecciona si deseas registrarte como Comprador o Promotor</p>
 
         <form onSubmit={handleSubmit}>
           <div className="tipo-usuario">

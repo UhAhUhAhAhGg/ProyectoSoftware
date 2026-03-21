@@ -1,4 +1,7 @@
 self.__BUILD_MANIFEST = {
+  "/Registro": [
+    "static/chunks/pages/Registro.js"
+  ],
   "__rewrites": {
     "afterFiles": [],
     "beforeFiles": [],

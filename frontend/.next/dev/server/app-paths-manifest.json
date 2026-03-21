@@ -1,7 +1,3 @@
 {
-  "/dashboard/admin/page": "app/dashboard/admin/page.js",
-  "/dashboard/comprador/page": "app/dashboard/comprador/page.js",
-  "/dashboard/promotor/page": "app/dashboard/promotor/page.js",
-  "/login/page": "app/login/page.js",
   "/page": "app/page.js"
 }
