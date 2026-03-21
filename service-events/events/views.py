@@ -238,6 +238,62 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
     # --- AQUÍ TERMINA TU TAREA ---
+    # --- AQUÍ EMPIEZA TU TAREA DE VALIDACIÓN DE CUPO (EDICIÓN) ---
+    def update(self, request, *args, **kwargs):
+        """Editar tipo de entrada validando que no exceda la capacidad total del evento"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object() # La entrada que queremos editar
+        event = instance.event # El evento al que pertenece
+        
+        # 1. Validar Permisos: ¿Sigue siendo el dueño?
+        if str(event.promoter_id) != str(request.user.id):
+            return Response({
+                "status": "error",
+                "message": "Acceso denegado. No puedes editar entradas de un evento que no te pertenece."
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. Obtenemos la nueva capacidad que intentan poner (si no mandan nada, mantenemos la que ya tenía)
+        try:
+            new_capacity = request.data.get('max_capacity')
+            new_capacity = int(new_capacity) if new_capacity is not None else instance.max_capacity
+        except ValueError:
+            return Response({
+                "status": "error",
+                "message": "La capacidad debe ser un número entero válido."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. LÓGICA DE NEGOCIO: Matemática de cupos
+        from django.db.models import Sum
+        
+        # Sumamos todos los tickets de este evento, EXCEPTO el que estamos editando ahora mismo
+        current_other_tickets = TicketType.objects.filter(event=event).exclude(id=instance.id).aggregate(
+            total=Sum('max_capacity')
+        )['total'] or 0
+
+        # Verificamos si las otras entradas + la nueva capacidad superan el límite del local
+        if (current_other_tickets + new_capacity) > event.capacity:
+            capacidad_disponible = event.capacity - current_other_tickets
+            return Response({
+                "status": "error",
+                "message": f"Error: Superas la capacidad del evento. Solo puedes aumentar esta entrada hasta un máximo de {capacidad_disponible} cupos."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 4. Si la matemática cuadra, guardamos la edición
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            return Response({
+                "status": "success",
+                "message": "Entrada actualizada correctamente respetando el cupo del evento.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        return Response({
+            "status": "error",
+            "message": "Error en los datos enviados.",
+            "details": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+    # --- AQUÍ TERMINA TU TAREA ---
 
     @action(detail=False, methods=['get'])
     def by_event(self, request):
