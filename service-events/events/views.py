@@ -43,6 +43,45 @@ class EventViewSet(viewsets.ModelViewSet):
         elif self.action == 'partial_update' or self.action == 'update':
             return EventUpdateSerializer
         return EventSerializer
+    # --- AQUÍ EMPIEZA TU TAREA DE EDICIÓN DE EVENTOS ---
+    def update(self, request, *args, **kwargs):
+        """Editar un evento validando permisos y estado (PUT/PATCH)"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object() # Obtenemos el evento de la base de datos
+
+        # 1. Validar Permisos: ¿El usuario actual es el promotor dueño de este evento?
+        # (Convertimos a string por si acaso uno es UUID y el otro texto plano)
+        if str(instance.promoter_id) != str(request.user.id):
+            return Response({
+                "status": "error",
+                "message": "No tienes permisos. Solo el promotor que creó el evento puede editarlo."
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. Validar Estado: Solo se puede editar si está en borrador o publicado
+        if instance.status in ['cancelled', 'completed']:
+            return Response({
+                "status": "error",
+                "message": f"Acción denegada. No se puede editar un evento que ya está '{instance.status}'."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Si pasa la seguridad, guardamos los datos profesionalmente
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            return Response({
+                "status": "success",
+                "message": "Evento actualizado correctamente.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        # 4. Si el usuario mandó datos malos (ej. un texto en lugar de un número)
+        return Response({
+            "status": "error",
+            "message": "Error al validar los datos enviados.",
+            "details": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+    # --- AQUÍ TERMINA TU TAREA ---
 
     @action(detail=False, methods=['get'])
     def upcoming(self, request):
