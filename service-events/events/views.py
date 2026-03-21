@@ -172,7 +172,7 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return TicketTypeCreateSerializer
         return TicketTypeSerializer
-    # --- AQUÍ EMPIEZA TU TAREA DE CREACIÓN DE ENTRADAS ---
+    
     def create(self, request, *args, **kwargs):
         """Crear tipo de entrada validando propiedad del evento y capacidad máxima"""
         event_id = request.data.get('event')
@@ -237,8 +237,7 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
             "message": "Error al validar los datos de la entrada.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
-    # --- AQUÍ TERMINA TU TAREA ---
-    # --- AQUÍ EMPIEZA TU TAREA DE VALIDACIÓN DE CUPO (EDICIÓN) ---
+    
     def update(self, request, *args, **kwargs):
         """Editar tipo de entrada validando que no exceda la capacidad total del evento"""
         partial = kwargs.pop('partial', False)
@@ -293,7 +292,6 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
             "message": "Error en los datos enviados.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
-    # --- AQUÍ TERMINA TU TAREA ---
 
     @action(detail=False, methods=['get'])
     def by_event(self, request):
