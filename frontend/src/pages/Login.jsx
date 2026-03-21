@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
+import { authService } from '../services/authService';
 import './Login.css';
 
 function Login() {
@@ -15,7 +16,7 @@ function Login() {
   const [loginError, setLoginError] = useState('');
   const [darkMode, setDarkMode] = useState(false);
 
-  const { loginWithRole, isAuthenticated, isComprador, isPromotor, isAdmin } = useAuth();
+  const { login, isAuthenticated, isComprador, isPromotor, isAdmin } = useAuth();
   const navigate = useNavigate();
 
   // Verificar preferencia del sistema para modo oscuro
@@ -100,7 +101,17 @@ function Login() {
       setLoginError('');
 
       try {
-        await loginWithRole(formData.role, formData.email, formData.password);
+        const response = await authService.login(formData.email, formData.password);
+        
+        // Verificar si el rol del backend coincide con la pestaña seleccionada
+        const userRole = response.data.user.role.toLowerCase();
+        const tabRole = formData.role.toLowerCase();
+        
+        if (userRole !== tabRole && !(userRole === 'administrador' && tabRole === 'administrador')) {
+           throw new Error(`Credenciales válidas, pero este usuario es de tipo ${response.data.user.role}.`);
+        }
+        
+        login(response.data.user, response.data.token, response.data.refresh);
       } catch (error) {
         setLoginError(error.message);
       } finally {
@@ -131,7 +142,7 @@ function Login() {
       </button>
 
       {/* Botón Volver al Inicio */}
-      <Link to="/" className="back-to-home-btn">
+      <Link to="/" className="back-to-home">
         <span className="back-icon">←</span>
         Volver al Inicio
       </Link>

@@ -21,7 +21,7 @@ class AuthTests(APITestCase):
         response = self.client.post("/api/v1/users/register/", {
             "email": "nuevo@test.com",
             "password": "123456",
-            "role": self.role_buyer.id
+            "role": "Comprador"
         })
         self.assertEqual(response.status_code, 201)
 
@@ -30,7 +30,7 @@ class AuthTests(APITestCase):
         response = self.client.post("/api/v1/users/register/", {
             "email": "test@test.com",
             "password": "nuevapass",
-            "role": self.role_buyer.id
+            "role": "Comprador"
         })
         self.assertEqual(response.status_code, 409)
 

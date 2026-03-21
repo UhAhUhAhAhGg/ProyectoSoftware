@@ -46,6 +46,10 @@ class UserSerializer(serializers.ModelSerializer):
 # --- REGISTRO ---
 class UserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True)
+    role = serializers.SlugRelatedField(
+        queryset=Role.objects.all(),
+        slug_field='name'
+    )
 
     class Meta:
         model = User

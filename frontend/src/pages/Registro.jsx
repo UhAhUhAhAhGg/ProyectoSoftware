@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { authService } from '../services/authService';
+import { useAuth } from '../context/AuthContext';
 import './Registro.css';
 
 function Registro() {
@@ -11,6 +13,9 @@ function Registro() {
     tipoUsuario: 'comprador'
   });
 
+  const navigate = useNavigate();
+  const { login } = useAuth();
+
   const [errores, setErrores] = useState({});
   const [darkMode, setDarkMode] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -18,6 +23,8 @@ function Registro() {
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [registeredUser, setRegisteredUser] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [backendError, setBackendError] = useState('');
 
   // Requisitos de contraseña
   const passwordRequirements = [
@@ -120,30 +127,49 @@ function Registro() {
     if (passwordStrength >= 4) return 'strong';
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const nuevosErrores = validarFormulario();
-    
+
     if (Object.keys(nuevosErrores).length === 0) {
-      // Guardar datos del usuario registrado
-      const userData = {
-        nombre: formData.nombre,
-        email: formData.email,
-        tipoUsuario: formData.tipoUsuario,
-        fechaRegistro: new Date().toLocaleDateString()
-      };
-      
-      setRegisteredUser(userData);
-      setShowWelcomeModal(true);
-      
-      // Resetear formulario
-      setFormData({
-        nombre: '',
-        email: '',
-        password: '',
-        confirmPassword: '',
-        tipoUsuario: 'comprador'
-      });
+      setLoading(true);
+      setBackendError('');
+
+      try {
+        const roleName = formData.tipoUsuario === 'comprador' ? 'Comprador' : 'Promotor';
+        await authService.register(formData.email, formData.password, roleName);
+
+        // Auto-login post-registro para que puedan entrar al dashboard directamente
+        try {
+          const authResponse = await authService.login(formData.email, formData.password);
+          login(authResponse.data.user, authResponse.data.token, authResponse.data.refresh);
+        } catch (e) {
+          console.error("No se pudo auto-logear:", e);
+        }
+
+        // Registro exitoso — mostrar modal de bienvenida (comportamiento original)
+        const userData = {
+          nombre: formData.nombre,
+          email: formData.email,
+          tipoUsuario: formData.tipoUsuario,
+          fechaRegistro: new Date().toLocaleDateString()
+        };
+        setRegisteredUser(userData);
+        setShowWelcomeModal(true);
+
+        setFormData({
+          nombre: '',
+          email: '',
+          password: '',
+          confirmPassword: '',
+          tipoUsuario: 'comprador'
+        });
+      } catch (error) {
+        // Error del backend (email duplicado, validación, etc.)
+        setBackendError(error.message);
+      } finally {
+        setLoading(false);
+      }
     } else {
       setErrores(nuevosErrores);
     }
@@ -155,6 +181,14 @@ function Registro() {
 
   const closeModal = () => {
     setShowWelcomeModal(false);
+    // Redirigir al dashboard según el rol
+    if (registeredUser) {
+      if (registeredUser.tipoUsuario === 'promotor') {
+        navigate('/dashboard'); // O cambiar a /dashboard/promotor si existe la ruta dedicada
+      } else {
+        navigate('/dashboard'); // O cambiar a /dashboard/comprador
+      }
+    }
   };
 
   return (
@@ -164,7 +198,7 @@ function Registro() {
       </button>
 
       {/* Botón volver al inicio */}
-      <Link to="/" className="back-home-btn">
+      <Link to="/" className="back-to-home">
         <span className="back-icon">←</span>
         Volver al Inicio
       </Link>
@@ -338,8 +372,14 @@ function Registro() {
             )}
           </div>
 
-          <button type="submit" className="btn-registro">
-            Registrarse
+          {backendError && (
+            <div className="error-mensaje" style={{ marginBottom: '1rem', textAlign: 'center' }}>
+              ⚠️ {backendError}
+            </div>
+          )}
+
+          <button type="submit" className="btn-registro" disabled={loading}>
+            {loading ? 'Registrando...' : 'Registrarse'}
           </button>
 
           <p className="login-link">

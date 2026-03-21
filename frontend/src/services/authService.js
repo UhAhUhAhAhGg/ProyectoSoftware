@@ -31,6 +31,25 @@ export const authService = {
     };
   },
 
+  // Registro de nuevo usuario
+  register: async (email, password, roleName) => {
+    const response = await fetch(`${API_URL}/api/v1/users/register/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, role: roleName }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      // El backend devuelve { message: "..." } en errores 409/400
+      const msg = data.message || data.detail || 'Error al registrarse.';
+      throw new Error(msg);
+    }
+
+    return { success: true, data };
+  },
+
   // Logout — solo limpia localStorage (sin endpoint en el backend aún)
   logout: async () => {
     return { success: true };
