@@ -208,7 +208,6 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
 
         # 2. Validar Capacidad: Que la suma de todas las entradas no supere la del evento
         from django.db.models import Sum
-        # Sumamos la capacidad de los tickets que ya existen para este evento
         current_tickets = TicketType.objects.filter(event=event).aggregate(
             total=Sum('max_capacity')
         )['total'] or 0
