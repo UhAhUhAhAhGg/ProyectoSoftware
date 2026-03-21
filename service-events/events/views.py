@@ -240,8 +240,8 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         """Editar tipo de entrada validando que no exceda la capacidad total del evento"""
         partial = kwargs.pop('partial', False)
-        instance = self.get_object() # La entrada que queremos editar
-        event = instance.event # El evento al que pertenece
+        instance = self.get_object() 
+        event = instance.event 
         
         # 1. Validar Permisos: ¿Sigue siendo el dueño?
         if str(event.promoter_id) != str(request.user.id):
