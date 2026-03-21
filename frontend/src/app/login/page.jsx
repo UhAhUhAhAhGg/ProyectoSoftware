@@ -1,9 +1,17 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
-import './Login.css';
+'use client';
 
-function Login() {
+// ─── SOLO ESTOS 3 IMPORTS CAMBIAN RESPECTO AL Login.jsx DE MARCIA ───────────
+// useNavigate  → useRouter   (Next.js)
+// Link (react-router-dom) → Link (next/link)
+// authService.login real (sin loginWithRole que no existe en el backend)
+import { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
+import { authService } from '../../services/authService';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import '../../pages/Login.css';
+
+function LoginPage() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -15,8 +23,8 @@ function Login() {
   const [loginError, setLoginError] = useState('');
   const [darkMode, setDarkMode] = useState(false);
 
-  const { loginWithRole, isAuthenticated, isComprador, isPromotor, isAdmin } = useAuth();
-  const navigate = useNavigate();
+  const { login, isAuthenticated, isComprador, isPromotor, isAdministrador, getDashboardPath } = useAuth();
+  const router = useRouter();
 
   // Verificar preferencia del sistema para modo oscuro
   useEffect(() => {
@@ -24,18 +32,18 @@ function Login() {
     setDarkMode(prefersDark);
   }, []);
 
-  // Redirigir según el rol
+  // Redirigir según el rol (misma lógica que Login.jsx de Marcia)
   useEffect(() => {
     if (isAuthenticated) {
-      if (isAdmin) {
-        navigate('/admin/dashboard');
+      if (isAdministrador) {
+        router.push('/dashboard/admin');
       } else if (isPromotor) {
-        navigate('/dashboard');
+        router.push('/dashboard/promotor');
       } else if (isComprador) {
-        navigate('/dashboard');
+        router.push('/dashboard/comprador');
       }
     }
-  }, [isAuthenticated, isAdmin, isPromotor, isComprador, navigate]);
+  }, [isAuthenticated, isAdministrador, isPromotor, isComprador, router]);
 
   // Aplicar modo oscuro
   useEffect(() => {
@@ -61,12 +69,12 @@ function Login() {
     setLoginError('');
   };
 
-  // Prellenar según el rol seleccionado
+  // Prellenar según el rol seleccionado (igual que Marcia, solo para demo)
   const handleRoleChange = (role) => {
     const credentials = {
       comprador: { email: 'comprador@ticketgo.com', password: 'Comprador123!' },
       promotor: { email: 'promotor@ticketgo.com', password: 'Promotor123!' },
-      administrador: { email: 'admin@ticketgo.com', password: 'Admin2024!' }
+      administrador: { email: 'admin@ticketproject.com', password: 'Admin1234!' }
     };
 
     setFormData({
@@ -100,9 +108,17 @@ function Login() {
       setLoginError('');
 
       try {
-        await loginWithRole(formData.role, formData.email, formData.password);
+        // Llamada real al backend (authService.login llama POST /api/v1/users/login/)
+        const response = await authService.login(formData.email, formData.password);
+
+        if (response.success) {
+          // Guardar sesión en AuthContext + localStorage
+          login(response.data.user, response.data.token, response.data.refresh);
+
+          // La redirección la maneja el useEffect de isAuthenticated arriba
+        }
       } catch (error) {
-        setLoginError(error.message);
+        setLoginError(error.message || 'Correo o contraseña incorrectos.');
       } finally {
         setLoading(false);
       }
@@ -124,6 +140,8 @@ function Login() {
     return '';
   };
 
+  // ─── JSX IDÉNTICO AL Login.jsx DE MARCIA ────────────────────────────────
+  // Solo se reemplaza:  to="..."  →  href="..."  en los <Link>
   return (
     <div className="login-container">
       <button onClick={toggleDarkMode} className="dark-mode-toggle">
@@ -131,7 +149,7 @@ function Login() {
       </button>
 
       {/* Botón Volver al Inicio */}
-      <Link to="/" className="back-to-home-btn">
+      <Link href="/" className="back-to-home">
         <span className="back-icon">←</span>
         Volver al Inicio
       </Link>
@@ -239,7 +257,7 @@ function Login() {
 
           <div className="login-footer">
             <p>¿No tienes cuenta?</p>
-            <Link to="/registro" className="register-link">
+            <Link href="/registro" className="register-link">
               Regístrate aquí
             </Link>
           </div>
@@ -249,4 +267,4 @@ function Login() {
   );
 }
 
-export default Login;
+export default LoginPage;
