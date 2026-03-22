@@ -15,7 +15,7 @@ const eventos = [
     titulo: "GRUPO FIRME",
     precio: "Bs. 400",
     fecha: "20/04/2026",
-    lugar: "Santa Cruz  - Estadio Real Santa Cruz",
+    lugar: "Santa Cruz - Estadio Real Santa Cruz",
     imagen: "/eventos/evento2.jpeg"
   },
   {
@@ -30,12 +30,8 @@ const eventos = [
 
 export default function EventosPage() {
 
-  // 🔥 IMÁGENES DEL CARRUSEL
-  const imagenesCarrusel = [
-    "/eventos/evento1.jpeg",
-    "/eventos/evento2.jpeg",
-    "/eventos/evento3.jpeg"
-  ];
+  // 🔥 USAMOS LOS EVENTOS DIRECTAMENTE
+  const imagenesCarrusel = eventos.map(e => e.imagen);
 
   const [index, setIndex] = useState(0);
 
@@ -46,19 +42,30 @@ export default function EventosPage() {
     }, 3000);
 
     return () => clearInterval(intervalo);
-  }, []);
+  }, [imagenesCarrusel.length]);
 
   return (
     <div className="container">
 
-      {/* 🔥 CARRUSEL */}
+      {/* 🔥 CARRUSEL PRO */}
       <div className="carrusel">
+
         <img
           src={imagenesCarrusel[index]}
-          alt="evento"
-          className="carrusel-img"
+          alt={eventos[index].titulo}
+          className="carrusel-img fade"
         />
 
+        {/* 🌫 Overlay */}
+        <div className="overlay"></div>
+
+        {/* 📝 TEXTO DINÁMICO */}
+        <div className="carrusel-texto">
+          <h2>{eventos[index].titulo}</h2>
+          <p>{eventos[index].lugar}</p>
+        </div>
+
+        {/* BOTONES */}
         <button
           className="prev"
           onClick={() =>
@@ -76,6 +83,18 @@ export default function EventosPage() {
         >
           ❯
         </button>
+
+        {/* ⚪ DOTS */}
+        <div className="dots">
+          {imagenesCarrusel.map((_, i) => (
+            <span
+              key={i}
+              className={i === index ? "dot active" : "dot"}
+              onClick={() => setIndex(i)}
+            ></span>
+          ))}
+        </div>
+
       </div>
 
       <h1 className="titulo">Eventos Disponibles</h1>
@@ -102,6 +121,8 @@ export default function EventosPage() {
           </div>
         ))}
       </div>
+
     </div>
   );
 }
+
