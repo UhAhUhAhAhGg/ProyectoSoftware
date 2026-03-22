@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from .permissions import IsAdministrador, IsPromotor, IsComprador
 from .models import AdminProfile, BuyerProfile, PromotorProfile
 from .serializers import (
     AdminProfileSerializer,
@@ -15,7 +16,9 @@ from .serializers import (
 
 class AdminProfileViewSet(viewsets.ModelViewSet):
     queryset = AdminProfile.objects.all()
-    permission_classes = [IsAuthenticated]
+    
+    def get_permissions(self):
+        return [IsAuthenticated(), IsAdministrador()]
 
     def get_serializer_class(self):
         if self.action == 'create':

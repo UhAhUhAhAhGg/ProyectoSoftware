@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from .permissions import IsAdministrador, IsPromotor, IsComprador
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from .models import Category, Event, TicketType
@@ -18,7 +19,13 @@ from .serializers import (
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.filter(is_active=True)
     serializer_class = CategorySerializer
-    permission_classes = [IsAuthenticated]
+
+
+    def get_permissions(self):
+        action = getattr(self, 'action', None)
+        if action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAuthenticated(), IsAdministrador()]
+        return [IsAuthenticated()]
 
     @action(detail=False, methods=['get'])
     def active(self, request):
@@ -30,7 +37,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 class EventViewSet(viewsets.ModelViewSet):
     queryset = Event.objects.all()
-    permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'category', 'event_date']
     search_fields = ['name', 'location', 'description']
@@ -43,6 +49,12 @@ class EventViewSet(viewsets.ModelViewSet):
         elif self.action == 'partial_update' or self.action == 'update':
             return EventUpdateSerializer
         return EventSerializer
+
+    def get_permissions(self):
+        action = getattr(self, 'action', None)
+        if action in ['create', 'update', 'partial_update', 'destroy', 'cancel']:
+            return [IsAuthenticated(), IsPromotor()]
+        return [IsAuthenticated()]
     def update(self, request, *args, **kwargs):
         """Editar un evento validando permisos y estado (PUT/PATCH)"""
         partial = kwargs.pop('partial', False)
@@ -163,7 +175,6 @@ class EventViewSet(viewsets.ModelViewSet):
 
 class TicketTypeViewSet(viewsets.ModelViewSet):
     queryset = TicketType.objects.all()
-    permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ['event', 'status']
     search_fields = ['name', 'description']
@@ -172,6 +183,12 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return TicketTypeCreateSerializer
         return TicketTypeSerializer
+
+    def get_permissions(self):
+        action = getattr(self, 'action', None)
+        if action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAuthenticated(), IsPromotor()]
+        return [IsAuthenticated()]
     
     def create(self, request, *args, **kwargs):
         """Crear tipo de entrada validando propiedad del evento y capacidad máxima"""

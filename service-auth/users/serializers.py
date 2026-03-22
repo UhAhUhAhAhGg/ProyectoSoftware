@@ -101,3 +101,48 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['email', 'is_active', 'role']
+
+
+# --- FORMULARIO DE APLICACIÓN DE ADMIN ---
+class AdminApplySerializer(serializers.Serializer):
+    token = serializers.CharField(required=True)
+    password = serializers.CharField(write_only=True, required=True, min_length=8)
+    first_name = serializers.CharField(required=True, max_length=100)
+    last_name = serializers.CharField(required=True, max_length=100)
+    phone = serializers.CharField(required=True, max_length=50)
+    date_of_birth = serializers.DateField(required=True)
+    profile_photo_url = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    employee_code = serializers.CharField(required=True, max_length=50)
+    department = serializers.CharField(required=True, max_length=50)
+
+
+# --- LOGIN ESTRICTO DE ADMIN ---
+class AdminLoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        try:
+            user = User.objects.get(email=data['email'])
+        except User.DoesNotExist:
+            raise AuthenticationFailed("Correo o contraseña incorrectos.")
+
+        if not user.check_password(data['password']):
+            raise AuthenticationFailed("Correo o contraseña incorrectos.")
+
+        if user.role and user.role.name != 'Administrador':
+            raise AuthenticationFailed("Acceso denegado. Este portal es solo para Administradores.")
+
+        if not user.is_active:
+            raise AuthenticationFailed("Su cuenta está pendiente de aprobación por el Administrador Global.")
+
+        refresh = RefreshToken.for_user(user)
+        refresh['email'] = user.email
+        refresh['role'] = user.role.name if user.role else None
+
+        return {
+            'email': user.email,
+            'role': user.role.name if user.role else None,
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+        }
