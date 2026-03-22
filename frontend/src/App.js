@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ListaEventos from './components/dashboard/eventos/ListaEventos';
 import FormularioEvento from './components/dashboard/eventos/FormularioEvento';
+import Eventos from './pages/Eventos';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
             <Route path="/dashboard/mis-eventos" element={<ListaEventos />} />
             <Route path="/dashboard/crear-evento" element={<FormularioEvento />} />
             <Route path="/dashboard/evento/:id/editar" element={<FormularioEvento />} />
+            <Route path="/Eventos" element={<Eventos />} />
           </Routes>
         </div>
       </Router>

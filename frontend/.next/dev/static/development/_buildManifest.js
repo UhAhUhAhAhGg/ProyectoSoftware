@@ -1,6 +1,6 @@
 self.__BUILD_MANIFEST = {
-  "/Registro": [
-    "static/chunks/pages/Registro.js"
+  "/eventos": [
+    "static/chunks/pages/eventos.js"
   ],
   "__rewrites": {
     "afterFiles": [],
@@ -13,6 +13,7 @@ self.__BUILD_MANIFEST = {
     "/Login",
     "/Registro",
     "/_app",
-    "/_error"
+    "/_error",
+    "/eventos"
   ]
 };self.__BUILD_MANIFEST_CB && self.__BUILD_MANIFEST_CB()
