@@ -85,3 +85,38 @@ body {
 .btn:hover {
   background: #EABF0B;
 }
+
+.carrusel {
+  position: relative;
+  width: 100%;
+  height: 300px;
+  overflow: hidden;
+  border-radius: 15px;
+  margin-bottom: 30px;
+}
+
+.carrusel-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* BOTONES */
+.prev, .next {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0,0,0,0.5);
+  border: none;
+  color: white;
+  font-size: 25px;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.prev { left: 10px; }
+.next { right: 10px; }
+
+.prev:hover, .next:hover {
+  background: rgba(0,0,0,0.8);
+}

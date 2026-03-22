@@ -1,4 +1,5 @@
 import './eventos.css';
+import { useState, useEffect } from "react";
 
 const eventos = [
   {
@@ -25,15 +26,61 @@ const eventos = [
     lugar: "Cochabamba - Teatro Acha",
     imagen: "/eventos/evento3.jpeg"
   }
-  
 ];
 
-
 export default function EventosPage() {
+
+  // 🔥 IMÁGENES DEL CARRUSEL
+  const imagenesCarrusel = [
+    "/eventos/evento1.jpeg",
+    "/eventos/evento2.jpeg",
+    "/eventos/evento3.jpeg"
+  ];
+
+  const [index, setIndex] = useState(0);
+
+  // 🔁 AUTO PLAY
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      setIndex((prev) => (prev + 1) % imagenesCarrusel.length);
+    }, 3000);
+
+    return () => clearInterval(intervalo);
+  }, []);
+
   return (
     <div className="container">
+
+      {/* 🔥 CARRUSEL */}
+      <div className="carrusel">
+        <img
+          src={imagenesCarrusel[index]}
+          alt="evento"
+          className="carrusel-img"
+        />
+
+        <button
+          className="prev"
+          onClick={() =>
+            setIndex((index - 1 + imagenesCarrusel.length) % imagenesCarrusel.length)
+          }
+        >
+          ❮
+        </button>
+
+        <button
+          className="next"
+          onClick={() =>
+            setIndex((index + 1) % imagenesCarrusel.length)
+          }
+        >
+          ❯
+        </button>
+      </div>
+
       <h1 className="titulo">Eventos Disponibles</h1>
 
+      {/* 🔥 TARJETAS */}
       <div className="grid">
         {eventos.map((evento) => (
           <div className="card" key={evento.id}>
