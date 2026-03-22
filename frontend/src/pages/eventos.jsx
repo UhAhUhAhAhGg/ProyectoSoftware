@@ -30,24 +30,26 @@ const eventos = [
 
 export default function EventosPage() {
   return (
-    <div className="eventos-container">
-      <h1 className="titulo">Eventos</h1>
+    <div className="container">
+      <h1 className="titulo">Eventos Disponibles</h1>
 
       <div className="grid">
         {eventos.map((evento) => (
           <div className="card" key={evento.id}>
-            <img src={evento.imagen} alt={evento.titulo} />
+            <div className="image-container">
+              <img src={evento.imagen} alt={evento.titulo} />
+              <span className="precio">{evento.precio}</span>
+            </div>
 
-            <div className="card-content">
-              <div className="card-header">
-                <h3>{evento.titulo}</h3>
-                <span>{evento.precio}</span>
+            <div className="content">
+              <h3>{evento.titulo}</h3>
+
+              <div className="info">
+                <p>📅 {evento.fecha}</p>
+                <p>📍 {evento.lugar}</p>
               </div>
 
-              <div className="card-info">
-                <p>{evento.fecha}</p>
-                <p>{evento.lugar}</p>
-              </div>
+              <button className="btn">Ver evento</button>
             </div>
           </div>
         ))}
