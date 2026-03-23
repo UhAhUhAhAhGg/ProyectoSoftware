@@ -8,6 +8,7 @@ import ListaEventos from './components/dashboard/eventos/ListaEventos';
 import FormularioEvento from './components/dashboard/eventos/FormularioEvento';
 import Eventos from './pages/Eventos';
 import Eventos from './pages/Recuperar';
+import PerfilPage from "./pages/perfil";
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
             <Route path="/dashboard/evento/:id/editar" element={<FormularioEvento />} />
             <Route path="/Eventos" element={<Eventos />} />
             <Route path="/Recuperar" element={<Recuperar />} />
+            <Route path="/perfil" element={<PerfilPage />} />
           </Routes>
         </div>
       </Router>
