@@ -17,24 +17,38 @@ class TicketTypeSerializer(serializers.ModelSerializer):
 class EventSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     tickets = TicketTypeSerializer(source='tickettype_set', many=True, read_only=True)
+    disponibilidad = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
         fields = [
             'id',
             'promoter_id',
-            'name',
+            'name',           # PA: Nombre
             'description',
-            'event_date',
+            'event_date',     # PA: Fecha
             'event_time',
-            'location',
+            'location',       # PA: Lugar
             'capacity',
             'status',
             'created_at',
             'category_name',
-            'tickets'
+            'tickets',
+            'disponibilidad' 
         ]
         read_only_fields = ['id', 'created_at']
+
+    def get_disponibilidad(self, obj):
+        # Si el evento no está publicado, no debe mostrarse como disponible
+        if obj.status != 'published':
+            return "No disponible"
+            
+        # Validación base: Si la capacidad es mayor a 0. 
+        # (Nota: Más adelante, cuando integres ventas, aquí restaremos los tickets vendidos)
+        if obj.capacity and obj.capacity > 0:
+            return "Disponible"
+            
+        return "Agotado"
 
 
 class EventCreateSerializer(serializers.ModelSerializer):
