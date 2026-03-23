@@ -17,8 +17,6 @@ class TicketTypeSerializer(serializers.ModelSerializer):
 class EventSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     tickets = TicketTypeSerializer(source='tickettype_set', many=True, read_only=True)
-    
-    # 👇 1. NUEVO: Agregamos el campo calculado para la Prueba de Aceptación
     disponibilidad = serializers.SerializerMethodField()
 
     class Meta:
@@ -36,7 +34,7 @@ class EventSerializer(serializers.ModelSerializer):
             'created_at',
             'category_name',
             'tickets',
-            'disponibilidad'  # 👇 2. NUEVO: Lo agregamos a la lista de campos que se envían al frontend
+            'disponibilidad' 
         ]
         read_only_fields = ['id', 'created_at']
 
