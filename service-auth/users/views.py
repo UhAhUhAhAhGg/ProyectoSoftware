@@ -2,6 +2,8 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from .models import User, Role, Permission
+from django.core.cache import cache
 from .models import User, Role, Permission, UserProfile
 from .serializers import (
     UserSerializer,
@@ -43,7 +45,6 @@ class UserViewSet(viewsets.ModelViewSet):
     def register(self, request):
         email = request.data.get('email')
 
-        # Verificación anticipada de duplicado (devuelve 409 antes de llegar al serializer)
         if email and User.objects.filter(email=email).exists():
             return Response({
                 "status": "error",
@@ -231,6 +232,75 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def admin_login(self, request):
+        """Inicio de sesión exclusivo para el panel de Administradores con bloqueo de seguridad"""
+        email = request.data.get('email')
+        password = request.data.get('password')
+
+        if not email or not password:
+            return Response({
+                "status": "error",
+                "message": "Por favor ingresa tu correo y contraseña."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. REVISAR INTENTOS PREVIOS (Usando Caché)
+        cache_key = f"admin_login_attempts_{email}"
+        attempts = cache.get(cache_key, 0)
+
+        if attempts >= 3:
+            return Response({
+                "status": "error",
+                "message": "Cuenta bloqueada por múltiples intentos fallidos. Intenta de nuevo en 15 minutos."
+            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        try:
+            user = User.objects.get(email=email)
+
+            # 2. Validar la contraseña
+            if not user.check_password(password):
+                attempts += 1
+                cache.set(cache_key, attempts, timeout=900) # Bloqueo por 15 minutos
+                
+                intentos_restantes = 3 - attempts
+                if intentos_restantes > 0:
+                    mensaje_error = f"Correo o contraseña incorrectos. Te quedan {intentos_restantes} intento(s)."
+                else:
+                    mensaje_error = "Cuenta bloqueada por múltiples intentos fallidos. Intenta de nuevo en 15 minutos."
+
+                return Response({
+                    "status": "error",
+                    "message": mensaje_error
+                }, status=status.HTTP_401_UNAUTHORIZED)
+
+            # 3. Validar el rol
+            if not user.role or user.role.name.lower() not in ['administrador', 'admin']:
+                return Response({
+                    "status": "error",
+                    "message": "Permisos insuficientes."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+
+            cache.delete(cache_key)
+
+            serializer = UserSerializer(user)
+            
+            return Response({
+                "status": "success",
+                "message": "Bienvenido al panel de administración.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except User.DoesNotExist:
+            # Táctica anti-enumeración de usuarios
+            attempts += 1
+            cache.set(cache_key, attempts, timeout=900)
+            
+            return Response({
+                "status": "error",
+                "message": "Correo o contraseña incorrectos."
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
     # --- CAMBIAR CONTRASEÑA ---
     @action(detail=True, methods=['post'])
     def set_password(self, request, pk=None):
@@ -245,7 +315,6 @@ class UserViewSet(viewsets.ModelViewSet):
         user.save()
         return Response({'success': 'Password updated'})
 
-    # --- ACTIVAR / DESACTIVAR USUARIO ---
     @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):
         user = self.get_object()
