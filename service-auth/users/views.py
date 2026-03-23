@@ -36,7 +36,6 @@ class UserViewSet(viewsets.ModelViewSet):
     def register(self, request):
         email = request.data.get('email')
 
-        # Verificación anticipada de duplicado (devuelve 409 antes de llegar al serializer)
         if email and User.objects.filter(email=email).exists():
             return Response({
                 "status": "error",
@@ -68,7 +67,6 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # --- LOGIN DE ADMINISTRADOR (CON BLOQUEO DE SEGURIDAD) ---
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def admin_login(self, request):
         """Inicio de sesión exclusivo para el panel de Administradores con bloqueo de seguridad"""
@@ -85,7 +83,6 @@ class UserViewSet(viewsets.ModelViewSet):
         cache_key = f"admin_login_attempts_{email}"
         attempts = cache.get(cache_key, 0)
 
-        # Si ya falló 3 veces, lo bloqueamos sin consultar la base de datos
         if attempts >= 3:
             return Response({
                 "status": "error",
@@ -118,7 +115,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     "message": "Permisos insuficientes."
                 }, status=status.HTTP_403_FORBIDDEN)
 
-            # 4. ÉXITO: Borramos el historial de fallos porque ya entró
+
             cache.delete(cache_key)
 
             serializer = UserSerializer(user)
@@ -153,7 +150,6 @@ class UserViewSet(viewsets.ModelViewSet):
         user.save()
         return Response({'success': 'Password updated'})
 
-    # --- ACTIVAR / DESACTIVAR USUARIO ---
     @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):
         user = self.get_object()
