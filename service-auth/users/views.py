@@ -67,6 +67,52 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    # --- AQUÍ EMPIEZA TU TAREA DE LOGIN DE ADMINISTRADOR ---
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def admin_login(self, request):
+        """Inicio de sesión exclusivo para el panel de Administradores"""
+        email = request.data.get('email')
+        password = request.data.get('password')
+
+        if not email or not password:
+            return Response({
+                "status": "error",
+                "message": "Por favor ingresa tu correo y contraseña."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email=email)
+
+            # 1. Validar la contraseña
+            if not user.check_password(password):
+                return Response({
+                    "status": "error",
+                    "message": "Correo o contraseña incorrectos."
+                }, status=status.HTTP_401_UNAUTHORIZED)
+
+            # 2. PRUEBA DE ACEPTACIÓN (PA): Validar el rol
+            if not user.role or user.role.name.lower() not in ['administrador', 'admin']:
+                return Response({
+                    "status": "error",
+                    "message": "Permisos insuficientes."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # 3. Éxito
+            serializer = UserSerializer(user)
+            
+            return Response({
+                "status": "success",
+                "message": "Bienvenido al panel de administración.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except User.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Correo o contraseña incorrectos."
+            }, status=status.HTTP_401_UNAUTHORIZED)
+    # --- AQUÍ TERMINA TU TAREA ---
+
     # --- CAMBIAR CONTRASEÑA ---
     @action(detail=True, methods=['post'])
     def set_password(self, request, pk=None):
