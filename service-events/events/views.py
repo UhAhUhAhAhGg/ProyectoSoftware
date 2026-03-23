@@ -36,7 +36,23 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 
 class EventViewSet(viewsets.ModelViewSet):
-    queryset = Event.objects.all()
+    # 👇 ELIMINAMOS la línea "queryset = Event.objects.all()" 
+    # y la reemplazamos por esta lógica dinámica:
+
+    def get_queryset(self):
+        """
+        Lógica dinámica de consultas:
+        - Si el usuario pide el catálogo completo (GET /events/), solo mostramos los 'publicados'.
+        - Si busca un evento específico o intenta editarlo, buscamos en todos (las reglas 
+          de seguridad de edición ya las tenemos blindadas en los métodos update/destroy).
+        """
+        if self.action == 'list':
+            # Solo los publicados para el catálogo del Comprador
+            return Event.objects.filter(status='published')
+        
+        # Para retrieve, update, destroy, etc., buscamos en toda la base de datos
+        return Event.objects.all()
+
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'category', 'event_date']
     search_fields = ['name', 'location', 'description']
@@ -47,9 +63,11 @@ class EventViewSet(viewsets.ModelViewSet):
         action = getattr(self, 'action', None)
         if action in ['create', 'update', 'partial_update', 'destroy', 'cancel']:
             return [IsAuthenticated(), IsPromotor()]
-        return [IsAuthenticated()]
+        # Para ver la lista (catálogo) dejamos pasar a usuarios autenticados (compradores)
+        return [IsAuthenticated()] 
 
     def get_serializer_class(self):
+        # ... (todo lo demás sigue intacto)
         if self.action == 'create':
             return EventCreateSerializer
         elif self.action in ['partial_update', 'update']:
