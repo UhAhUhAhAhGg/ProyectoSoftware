@@ -145,6 +145,7 @@ services:
       REACT_APP_AUTH_URL: "http://service-auth:8000"
       REACT_APP_PROFILES_URL: "http://service-profiles:8000"
       REACT_APP_EVENTS_URL: "http://service-events:8000"
+      NEXT_PUBLIC_AUTH_URL: "http://localhost:8000"
     depends_on:
       - service-auth
       - service-profiles

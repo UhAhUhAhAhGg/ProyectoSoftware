@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .models import User, Role, Permission
 from django.core.cache import cache
+from .models import User, Role, Permission, UserProfile
 from .serializers import (
     UserSerializer,
     UserCreateSerializer,
@@ -11,7 +12,15 @@ from .serializers import (
     RoleSerializer,
     PermissionSerializer,
     LoginSerializer,
+    AdminApplySerializer,
+    AdminLoginSerializer,
 )
+import jwt
+import datetime
+import requests
+from django.conf import settings
+from django.db import transaction
+from django.core.mail import send_mail
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -56,6 +65,162 @@ class UserViewSet(viewsets.ModelViewSet):
             "message": "Error en los datos enviados.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+
+    # === HU-4: INVITAR ADMINISTRADOR (Solo Superadmin) ===
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def invite_admin(self, request):
+        if not getattr(request.user, 'is_staff', False) and not (request.user.role and request.user.role.name == 'Administrador'):
+            return Response({"error": "No tienes permisos de SuperAdmin."}, status=status.HTTP_403_FORBIDDEN)
+            
+        email = request.data.get('email')
+        if not email:
+            return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        payload = {
+            'email': email,
+            'type': 'admin_invitation',
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(days=2)
+        }
+        token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+        
+        # Enviar correo (Impreso en consola por si falta config SMTP)
+        link = f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/admin/register?token={token}"
+        try:
+            send_mail(
+                'Invitación para ser Administrador',
+                f'Utiliza este enlace para registrarte: {link}',
+                getattr(settings, 'EMAIL_HOST_USER', 'noreply@ticketproject.com'),
+                [email],
+                fail_silently=True,
+            )
+        except Exception:
+            print("Correo no enviado (falta configuración SMTP). Link:", link)
+            
+        return Response({"message": "Invitación generada y enviada", "mock_link": link}, status=status.HTTP_200_OK)
+
+    # === HU-4: APLICAR PARA ADMIN (Público con Token) ===
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def apply_admin(self, request):
+        serializer = AdminApplySerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        data = serializer.validated_data
+        
+        # 1. Validar el token matemáticamente
+        try:
+            payload = jwt.decode(data['token'], settings.SECRET_KEY, algorithms=['HS256'])
+            if payload.get('type') != 'admin_invitation':
+                raise jwt.InvalidTokenError
+            email = payload['email']
+        except jwt.ExpiredSignatureError:
+            return Response({"error": "La invitación ha expirado."}, status=status.HTTP_400_BAD_REQUEST)
+        except jwt.InvalidTokenError:
+            return Response({"error": "Token de invitación inválido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verificar si ya existe
+        if User.objects.filter(email=email).exists():
+            return Response({"error": "El email ya está registrado."}, status=status.HTTP_409_CONFLICT)
+            
+        try:
+            rol_admin = Role.objects.get(name='Administrador')
+        except Role.DoesNotExist:
+            return Response({"error": "El rol Administrador no existe en la BD."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            with transaction.atomic():
+                # 2. Crear User (is_active=False)
+                user = User.objects.create_user(
+                    email=email,
+                    password=data['password'],
+                    role=rol_admin,
+                    is_active=False  # PENDIENTE DE APROBACIÓN
+                )
+                
+                # 3. Crear UserProfile local
+                UserProfile.objects.create(
+                    user=user,
+                    first_name=data['first_name'],
+                    last_name=data['last_name'],
+                    phone=data['phone'],
+                    date_of_birth=data['date_of_birth'],
+                    profile_photo_url=data.get('profile_photo_url', '')
+                )
+                
+                # Generar token interno para autorizar en el microservicio (Simulamos un login rápido interno)
+                internal_payload = {
+                    'user_id': str(user.id),
+                    'email': user.email,
+                    'role': 'Administrador',
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+                }
+                internal_token = jwt.encode(internal_payload, settings.SECRET_KEY, algorithm='HS256')
+
+                # 4. Solicitud al microservicio service-profiles
+                profiles_url = getattr(settings, 'PROFILES_SERVICE_URL', 'http://localhost:8001')
+                response = requests.post(
+                    f"{profiles_url}/api/profiles/admin-profiles/",
+                    json={
+                        "user_id": str(user.id),
+                        "employee_code": data['employee_code'],
+                        "department": data['department']
+                    },
+                    headers={"Authorization": f"Bearer {internal_token}"},
+                    timeout=5
+                )
+
+                if response.status_code not in (200, 201):
+                    raise Exception(f"Fallo al crear AdminProfile remoto: {response.text}")
+                    
+        except Exception as e:
+            return Response({"error": "Error al crear el administrador", "detalle": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({"message": "Solicitud enviada con éxito. Pendiente de aprobación."}, status=status.HTTP_201_CREATED)
+
+    # === HU-4: VER PENDIENTES (Dashboard SuperAdmin) ===
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def pending_admins(self, request):
+        if not getattr(request.user, 'is_staff', False) and not (request.user.role and request.user.role.name == 'Administrador'):
+            return Response({"error": "No tienes permisos."}, status=status.HTTP_403_FORBIDDEN)
+            
+        pendientes = User.objects.filter(role__name='Administrador', is_active=False)
+        serializer = UserSerializer(pendientes, many=True)
+        return Response(serializer.data)
+
+    # === HU-4: APROBAR ADMIN (Dashboard SuperAdmin) ===
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated])
+    def approve_admin(self, request, pk=None):
+        if not getattr(request.user, 'is_staff', False) and not (request.user.role and request.user.role.name == 'Administrador'):
+            return Response({"error": "No tienes permisos."}, status=status.HTTP_403_FORBIDDEN)
+            
+        try:
+            user = User.objects.get(pk=pk, role__name='Administrador', is_active=False)
+            user.is_active = True
+            user.save()
+            return Response({"message": "Administrador aprobado correctamente."})
+        except User.DoesNotExist:
+            return Response({"error": "Usuario pendiente no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+    # === HU-4: RECHAZAR ADMIN (Dashboard SuperAdmin) ===
+    @action(detail=True, methods=['delete'], permission_classes=[IsAuthenticated])
+    def reject_admin(self, request, pk=None):
+        if not getattr(request.user, 'is_staff', False) and not (request.user.role and request.user.role.name == 'Administrador'):
+            return Response({"error": "No tienes permisos."}, status=status.HTTP_403_FORBIDDEN)
+            
+        try:
+            user = User.objects.get(pk=pk, role__name='Administrador', is_active=False)
+            user.delete()
+            return Response({"message": "Solicitud rechazada y eliminada."})
+        except User.DoesNotExist:
+            return Response({"error": "Usuario pendiente no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+    # --- ESTRICTO LOGIN DE ADMIN ---
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def admin_login(self, request):
+        serializer = AdminLoginSerializer(data=request.data)
+        if serializer.is_valid():
+            return Response(serializer.validated_data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     # --- LOGIN con JWT ---
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])

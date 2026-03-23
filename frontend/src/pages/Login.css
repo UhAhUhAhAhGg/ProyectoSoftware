@@ -13,10 +13,9 @@
   border-radius: 20px;
   padding: 40px;
   width: 100%;
-  max-width: 450px;
+  max-width: 550px;
   box-shadow: 0 10px 40px rgba(33, 33, 33, 0.1);
   transition: all 0.3s ease;
-  position: relative;
 }
 
 .login-header {
@@ -30,35 +29,84 @@
   font-size: 28px;
 }
 
-.login-header .subtitulo {
+.subtitulo {
   color: var(--color-verde-gris);
   margin: 0;
 }
 
-/* Error de login */
-.login-error {
-  background-color: #fff5f5;
-  border: 1px solid #ffcdd2;
-  border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 20px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #d32f2f;
+/* Selector de roles estilo tarjetas */
+.role-selector {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin-bottom: 30px;
 }
 
-.error-icon {
-  font-size: 20px;
+.role-card {
+  background: var(--color-beige);
+  border-radius: 12px;
+  padding: 15px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
 }
 
-.login-error p {
+.role-card:hover {
+  transform: translateY(-3px);
+}
+
+.role-card.active {
+  border-color: var(--color-marron);
+  background: white;
+}
+
+.role-card.active.comprador {
+  border-color: #4CAF50;
+  background: linear-gradient(135deg, #fff, #e8f5e9);
+}
+
+.role-card.active.promotor {
+  border-color: #FF9800;
+  background: linear-gradient(135deg, #fff, #fff3e0);
+}
+
+.role-card.active.administrador {
+  border-color: #f44336;
+  background: linear-gradient(135deg, #fff, #ffebee);
+}
+
+.role-icon {
+  font-size: 32px;
+  margin-bottom: 10px;
+}
+
+.role-card h3 {
+  margin: 0 0 5px 0;
+  font-size: 16px;
+  color: var(--color-negro);
+}
+
+.role-card p {
   margin: 0;
-  font-size: 14px;
+  font-size: 11px;
+  color: var(--color-verde-gris);
 }
 
-/* Inputs con íconos */
-.input-with-icon {
+/* Formulario */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--color-negro);
+  font-weight: 500;
+}
+
+.input-with-icon,
+.password-input-container {
   position: relative;
   width: 100%;
 }
@@ -76,7 +124,7 @@
 .input-with-icon input,
 .password-input-container input {
   width: 100%;
-  padding: 12px 15px 12px 40px;
+  padding: 12px 15px 12px 45px !important; /* !important usado para evitar sobrescritura por estilos base (ej. Next.js Tailwind Forms) que causan superposición con los iconos flotantes */
   border: 2px solid var(--color-beige);
   border-radius: 8px;
   font-size: 14px;
@@ -86,13 +134,17 @@
   color: var(--color-negro);
 }
 
-.password-input-container {
-  position: relative;
-  width: 100%;
+.input-with-icon input:focus,
+.password-input-container input:focus {
+  outline: none;
+  border-color: var(--color-marron);
+  background-color: white;
 }
 
-.password-input-container input {
-  padding-right: 50px;
+.input-with-icon input.error,
+.password-input-container input.error {
+  border-color: #f44336;
+  background-color: #fff5f5;
 }
 
 .password-toggle {
@@ -110,102 +162,10 @@
   z-index: 1;
 }
 
-.password-toggle:hover:not(:disabled) {
-  transform: translateY(-50%) scale(1.1);
-}
-
-.input-with-icon input:focus,
-.password-input-container input:focus {
-  outline: none;
-  border-color: var(--color-marron);
-  background-color: white;
-}
-
-.input-with-icon input.error,
-.password-input-container input.error {
-  border-color: #f44336;
-  background-color: #fff5f5;
-}
-
-.input-with-icon input:disabled,
-.password-input-container input:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-/* Opciones del formulario */
-.form-options {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 20px 0;
-}
-
-.checkbox-container {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  position: relative;
-  user-select: none;
-}
-
-.checkbox-container input {
-  position: absolute;
-  opacity: 0;
-  cursor: pointer;
-  height: 0;
-  width: 0;
-}
-
-.checkbox-custom {
-  height: 18px;
-  width: 18px;
-  background-color: var(--color-beige);
-  border: 2px solid var(--color-marron);
-  border-radius: 4px;
-  position: relative;
-}
-
-.checkbox-container input:checked ~ .checkbox-custom {
-  background-color: var(--color-marron);
-}
-
-.checkbox-container input:checked ~ .checkbox-custom::after {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 1px;
-  width: 5px;
-  height: 10px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
-}
-
-.checkbox-label {
-  color: var(--color-verde-gris);
-  font-size: 14px;
-}
-
-.forgot-password {
-  color: var(--color-marron);
-  text-decoration: none;
-  font-size: 14px;
-  transition: color 0.3s ease;
-}
-
-.forgot-password:hover {
-  color: var(--color-dorado);
-  text-decoration: underline;
-}
-
-/* Botón de login */
+/* Botón de login según rol */
 .btn-login {
   width: 100%;
   padding: 14px;
-  background-color: var(--color-marron);
-  color: white;
   border: none;
   border-radius: 8px;
   font-size: 16px;
@@ -217,16 +177,34 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
+  color: white;
 }
 
-.btn-login:hover:not(:disabled) {
-  background-color: #8B6537;
+.btn-login.comprador {
+  background: linear-gradient(135deg, #4CAF50, #45a049);
+}
+
+.btn-login.comprador:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(173, 129, 73, 0.3);
+  box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
 }
 
-.btn-login:active:not(:disabled) {
-  transform: translateY(0);
+.btn-login.promotor {
+  background: linear-gradient(135deg, #FF9800, #f57c00);
+}
+
+.btn-login.promotor:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(255, 152, 0, 0.3);
+}
+
+.btn-login.administrador {
+  background: linear-gradient(135deg, #f44336, #d32f2f);
+}
+
+.btn-login.administrador:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(244, 67, 54, 0.3);
 }
 
 .btn-login:disabled {
@@ -234,21 +212,22 @@
   cursor: not-allowed;
 }
 
-/* Spinner de carga */
-.spinner {
-  width: 20px;
-  height: 20px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  border-top-color: white;
-  animation: spin 1s ease-in-out infinite;
+.login-error {
+  background-color: #fff5f5;
+  border: 1px solid #ffcdd2;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #d32f2f;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.error-icon {
+  font-size: 18px;
 }
 
-/* Footer del login */
 .login-footer {
   text-align: center;
   margin-top: 20px;
@@ -266,67 +245,59 @@
   color: var(--color-marron);
   text-decoration: none;
   font-weight: 600;
-  font-size: 14px;
   transition: color 0.3s ease;
 }
 
 .register-link:hover {
   color: var(--color-dorado);
-  text-decoration: underline;
 }
 
-/* Credenciales de demostración */
-.demo-credentials {
-  margin-top: 25px;
-  padding: 15px;
-  background-color: var(--color-beige);
-  border-radius: 8px;
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 1s ease-in-out infinite;
 }
 
-.demo-title {
-  margin: 0 0 10px 0;
-  color: var(--color-verde-gris);
-  font-size: 13px;
-  font-weight: 600;
-  text-align: center;
-}
-
-.demo-buttons {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-
-.demo-btn {
-  padding: 8px 12px;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  flex: 1;
-}
-
-.demo-btn.comprador {
-  background-color: white;
-  color: var(--color-marron);
-  border: 1px solid var(--color-marron);
-}
-
-.demo-btn.promotor {
+.back-to-home {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  padding: 10px 20px;
   background-color: var(--color-marron);
   color: white;
+  text-decoration: none;
+  border-radius: 30px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  z-index: 100;
 }
 
-.demo-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+.dark-mode-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 10px 20px;
+  background-color: var(--color-marron);
+  color: white;
+  border: none;
+  border-radius: 30px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 100;
 }
 
-.demo-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Modo oscuro */
@@ -343,65 +314,28 @@ body.dark-mode .login-header h2 {
   color: var(--dark-text);
 }
 
-body.dark-mode .login-header .subtitulo {
+body.dark-mode .subtitulo {
   color: var(--dark-text-secondary);
 }
 
-body.dark-mode .input-with-icon input,
-body.dark-mode .password-input-container input {
-  background-color: var(--dark-card);
-  border-color: var(--dark-border);
+body.dark-mode .role-card {
+  background-color: var(--dark-hover);
+}
+
+body.dark-mode .role-card h3 {
   color: var(--dark-text);
 }
 
-body.dark-mode .input-with-icon input:focus,
-body.dark-mode .password-input-container input:focus {
-  border-color: var(--color-marron);
-  background-color: var(--dark-hover);
-}
-
-body.dark-mode .input-icon {
-  color: var(--color-dorado);
-}
-
-body.dark-mode .checkbox-label {
+body.dark-mode .role-card p {
   color: var(--dark-text-secondary);
 }
 
-body.dark-mode .checkbox-custom {
+body.dark-mode .role-card.active {
   background-color: var(--dark-card);
-  border-color: var(--color-dorado);
 }
 
-body.dark-mode .forgot-password {
-  color: var(--color-dorado);
-}
-
-body.dark-mode .login-footer {
-  border-top-color: var(--dark-border);
-}
-
-body.dark-mode .login-footer p {
-  color: var(--dark-text-secondary);
-}
-
-body.dark-mode .demo-credentials {
-  background-color: var(--dark-hover);
-}
-
-body.dark-mode .demo-title {
-  color: var(--dark-text-secondary);
-}
-
-body.dark-mode .demo-btn.comprador {
-  background-color: var(--dark-card);
-  color: var(--color-dorado);
-  border-color: var(--color-dorado);
-}
-
-body.dark-mode .demo-btn.promotor {
-  background-color: var(--color-dorado);
-  color: var(--color-negro);
+body.dark-mode .form-group label {
+  color: var(--dark-text);
 }
 
 /* Responsive */
@@ -410,70 +344,35 @@ body.dark-mode .demo-btn.promotor {
     padding: 30px 20px;
   }
 
-  .form-options {
-    flex-direction: column;
+  .role-selector {
+    grid-template-columns: 1fr;
     gap: 10px;
-    align-items: flex-start;
   }
 
-  .demo-buttons {
-    flex-direction: column;
+  .role-card {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    text-align: left;
+    padding: 12px;
   }
 
+  .role-icon {
+    margin-bottom: 0;
+    font-size: 28px;
+  }
+
+  .role-card h3 {
+    margin: 0;
+  }
+
+  .role-card p {
+    font-size: 11px;
+  }
+
+  .back-to-home,
   .dark-mode-toggle {
-    top: 10px;
-    right: 10px;
     padding: 8px 16px;
-    font-size: 12px;
-  }
-}
-
-/* Botón volver al inicio */
-.back-home-btn {
-  position: fixed;
-  bottom: 20px;
-  left: 20px;
-  padding: 12px 24px;
-  background-color: var(--color-marron);
-  color: white;
-  text-decoration: none;
-  border-radius: 30px;
-  font-size: 14px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 4px 15px rgba(173, 129, 73, 0.3);
-  transition: all 0.3s ease;
-  z-index: 100;
-}
-
-.back-home-btn:hover {
-  background-color: #8B6537;
-  transform: translateX(-5px);
-}
-
-.back-icon {
-  font-size: 18px;
-}
-
-/* Modo oscuro para el botón */
-body.dark-mode .back-home-btn {
-  background-color: var(--color-dorado);
-  color: var(--color-negro);
-  box-shadow: 0 4px 15px rgba(234, 191, 11, 0.3);
-}
-
-body.dark-mode .back-home-btn:hover {
-  background-color: #c99f0a;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .back-home-btn {
-    bottom: 10px;
-    left: 10px;
-    padding: 10px 18px;
     font-size: 12px;
   }
 }

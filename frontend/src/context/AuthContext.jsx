@@ -1,3 +1,5 @@
+'use client';
+
 import { createContext, useState, useContext, useEffect } from 'react';
 
 const AuthContext = createContext();
@@ -15,11 +17,11 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(null);
 
-  // Verificar si hay sesión guardada al cargar
+  // Restaurar sesión guardada al cargar la app
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     const storedToken = localStorage.getItem('token');
-    
+
     if (storedUser && storedToken) {
       setUser(JSON.parse(storedUser));
       setToken(storedToken);
@@ -27,13 +29,14 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const login = (userData, authToken) => {
+  const login = (userData, authToken, refreshToken) => {
     setUser(userData);
     setToken(authToken);
-    
-    // Guardar en localStorage para persistencia
     localStorage.setItem('user', JSON.stringify(userData));
     localStorage.setItem('token', authToken);
+    if (refreshToken) {
+      localStorage.setItem('refresh', refreshToken);
+    }
   };
 
   const logout = () => {
@@ -41,13 +44,20 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');
+    localStorage.removeItem('refresh');
   };
 
-  // Verificar si es comprador
-  const isComprador = user?.tipoUsuario === 'comprador';
-  
-  // Verificar si es promotor
-  const isPromotor = user?.tipoUsuario === 'promotor';
+  // Helpers de rol — usan el campo 'role' que devuelve el backend
+  const isComprador = user?.role === 'Comprador';
+  const isPromotor = user?.role === 'Promotor';
+  const isAdministrador = user?.role === 'Administrador';
+
+  // Ruta de dashboard según el rol del usuario
+  const getDashboardPath = () => {
+    if (isAdministrador) return '/dashboard/admin';
+    if (isPromotor) return '/dashboard/promotor';
+    return '/dashboard/comprador';
+  };
 
   const value = {
     user,
@@ -57,7 +67,9 @@ export const AuthProvider = ({ children }) => {
     logout,
     isAuthenticated: !!user,
     isComprador,
-    isPromotor
+    isPromotor,
+    isAdministrador,
+    getDashboardPath,
   };
 
   return (

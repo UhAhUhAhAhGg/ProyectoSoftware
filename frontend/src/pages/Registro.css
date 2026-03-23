@@ -74,6 +74,32 @@
   box-shadow: 0 4px 15px rgba(173, 129, 73, 0.3);
 }
 
+/* Botón Volver al Inicio */
+.back-to-home {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  padding: 10px 20px;
+  background-color: var(--color-marron);
+  color: white;
+  text-decoration: none;
+  border-radius: 30px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  z-index: 1000;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.back-to-home:hover {
+  background-color: #8B6537;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(173, 129, 73, 0.3);
+}
+
 /* Selector de tipo de usuario */
 .tipo-usuario {
   display: grid;
@@ -391,7 +417,7 @@ body.dark-mode .dark-mode-toggle:hover {
 
 .password-input-container input {
   width: 100%;
-  padding-right: 50px;
+  padding-right: 50px !important; /* !important usado para evitar sobrescritura por estilos base (ej. Next.js Tailwind Forms) que causan superposición con el icono del ojito */
 }
 
 .password-toggle {

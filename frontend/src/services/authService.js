@@ -1,55 +1,67 @@
-// Servicio simulado - Reemplazar con llamadas reales a API
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const API_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:8000';
 
 export const authService = {
-  // Login simulado
+  // Login real contra el backend
   login: async (email, password) => {
-    await delay(1500); // Simular latencia de red
-    
-    // Simular validación
-    if (email === 'demo@ejemplo.com' && password === 'Demo123!') {
-      return {
-        success: true,
-        data: {
-          user: {
-            id: 1,
-            nombre: 'Usuario Demo',
-            email: email,
-            tipoUsuario: 'comprador',
-            avatar: null
-          },
-          token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJkZW1vQGVqZW1wbG8uY29tIiwidGlwb1VzdWFyaW8iOiJjb21wcmFkb3IifQ.example'
-        }
-      };
-    } else if (email === 'promotor@ejemplo.com' && password === 'Promo123!') {
-      return {
-        success: true,
-        data: {
-          user: {
-            id: 2,
-            nombre: 'Promotor Demo',
-            email: email,
-            tipoUsuario: 'promotor',
-            avatar: null
-          },
-          token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidGlwb1VzdWFyaW8iOiJwcm9tb3RvciJ9.example'
-        }
-      };
-    } else {
-      throw new Error('Credenciales inválidas');
+    const response = await fetch(`${API_URL}/api/v1/users/login/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      // El backend devuelve { detail: "..." } o { message: "..." } en errores
+      const msg = data.detail || data.message || 'Correo o contraseña incorrectos.';
+      throw new Error(msg);
     }
+
+    // El backend devuelve: { access, refresh, email, role }
+    return {
+      success: true,
+      data: {
+        user: {
+          email: data.email,
+          role: data.role,
+        },
+        token: data.access,
+        refresh: data.refresh,
+      },
+    };
   },
 
-  // Logout
+  // Registro de nuevo usuario
+  register: async (email, password, roleName) => {
+    const response = await fetch(`${API_URL}/api/v1/users/register/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, role: roleName }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      // El backend devuelve { message: "..." } en errores 409/400
+      const msg = data.message || data.detail || 'Error al registrarse.';
+      throw new Error(msg);
+    }
+
+    return { success: true, data };
+  },
+
+  // Logout — solo limpia localStorage (sin endpoint en el backend aún)
   logout: async () => {
-    await delay(500);
     return { success: true };
   },
 
-  // Verificar token (para rutas protegidas)
-  verifyToken: async (token) => {
-    await delay(500);
-    // Aquí iría la verificación real del token
-    return { success: true };
-  }
+  // Obtener perfil del usuario autenticado
+  getMe: async (token) => {
+    const response = await fetch(`${API_URL}/api/v1/users/me/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) throw new Error('No autorizado');
+    return response.json();
+  },
 };
