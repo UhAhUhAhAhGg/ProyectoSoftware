@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .models import User, Role, Permission
 from django.core.cache import cache
+from .models import User, AccountDeletionLog
 from .models import User, Role, Permission, UserProfile
 from .serializers import (
     UserSerializer,
@@ -33,13 +34,72 @@ class UserViewSet(viewsets.ModelViewSet):
         elif self.action in ['update', 'partial_update']:
             return UserUpdateSerializer
         return UserSerializer
-
-    # --- PERFIL DEL USUARIO AUTENTICADO ---
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
-    def me(self, request):
-        serializer = UserSerializer(request.user)
-        return Response(serializer.data)
     
+   # --- PERFIL DEL USUARIO AUTENTICADO ---
+    @action(detail=False, methods=['get', 'put', 'patch', 'delete'], permission_classes=[IsAuthenticated])
+    def me(self, request):
+        """
+        GET: Obtiene los datos del perfil.
+        PUT/PATCH: Actualiza los datos del perfil.
+        DELETE: Elimina la cuenta permanentemente.
+        """
+        user = request.user
+
+        # 1. LEER DATOS (GET)
+        if request.method == 'GET':
+            serializer = UserSerializer(user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+      # 2. ACTUALIZAR DATOS (PUT / PATCH)
+        elif request.method in ['PUT', 'PATCH']:
+            is_partial = request.method == 'PATCH'
+            serializer = UserUpdateSerializer(user, data=request.data, partial=is_partial)
+
+            if serializer.is_valid():
+                serializer.save()
+                updated_user_data = UserSerializer(user).data
+                return Response({
+                    "status": "success",
+                    "message": "Perfil actualizado correctamente.",
+                    "data": updated_user_data
+                }, status=status.HTTP_200_OK)
+                
+            return Response({
+                "status": "error",
+                "message": "Error al actualizar los datos.",
+                "details": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. ELIMINAR CUENTA (DELETE)
+        elif request.method == 'DELETE':
+            password = request.data.get('password')
+            
+            if not password:
+                return Response({
+                    "status": "error",
+                    "message": "Por tu seguridad, debes ingresar tu contraseña para confirmar la eliminación de la cuenta."
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            if not user.check_password(password):
+                return Response({
+                    "status": "error",
+                    "message": "Contraseña incorrecta. Operación cancelada."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # --- REGISTRO DE AUDITORÍA (Cumpliendo subtarea BD) ---
+            AccountDeletionLog.objects.create(
+                user_email=user.email,
+                user_role=user.role.name if user.role else 'Sin rol'
+            )
+
+            # Borrado físico del usuario (Hard Delete)
+            user.delete()
+            
+            return Response({
+                "status": "success",
+                "message": "Tu cuenta y todos tus datos personales han sido eliminados correctamente."
+            }, status=status.HTTP_200_OK)
+
     # --- REGISTRO ---
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def register(self, request):
@@ -110,7 +170,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 )
             except Exception as e:
                 # Imprimimos en consola por si estás desarrollando y no tienes SMTP configurado
-                print("⚠️ Correo no enviado. Simulación de enlace:", reset_link)
+                print(" Correo no enviado. Simulación de enlace:", reset_link)
 
         # La respuesta genérica para el usuario (Evita enumeración)
         return Response({

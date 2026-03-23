@@ -26,11 +26,41 @@ class RoleSerializer(serializers.ModelSerializer):
         perms = [rp.permission for rp in role_permissions]
         return PermissionSerializer(perms, many=True).data
 
-
 class UserProfileSerializer(serializers.ModelSerializer):
+    # 1. Validaciones estrictas: Requeridos y no vacíos
+    first_name = serializers.CharField(
+        required=True, 
+        allow_blank=False, 
+        error_messages={'required': 'El nombre es obligatorio.', 'blank': 'El nombre no puede estar vacío.'}
+    )
+    last_name = serializers.CharField(
+        required=True, 
+        allow_blank=False, 
+        error_messages={'required': 'El apellido es obligatorio.', 'blank': 'El apellido no puede estar vacío.'}
+    )
+    phone = serializers.CharField(
+        required=True, 
+        allow_blank=False, 
+        error_messages={'required': 'El número de teléfono es obligatorio.', 'blank': 'El teléfono no puede estar vacío.'}
+    )
+    profile_photo_url = serializers.URLField(
+        required=False, 
+        allow_blank=True,
+        error_messages={'invalid': 'Debe proporcionar una URL válida para la foto de perfil.'}
+    )
+
     class Meta:
         model = UserProfile
         fields = ['first_name', 'last_name', 'phone', 'date_of_birth', 'profile_photo_url']
+
+    # 2. Validación de formato de teléfono
+    def validate_phone(self, value):
+        value = value.replace(" ", "") # Quitamos espacios
+        if not value.isdigit() and not (value.startswith('+') and value[1:].isdigit()):
+            raise serializers.ValidationError("El teléfono solo debe contener números o el signo '+' al inicio.")
+        if len(value) < 8:
+            raise serializers.ValidationError("El número de teléfono es muy corto (mínimo 8 dígitos).")
+        return value
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -96,11 +126,31 @@ class LoginSerializer(serializers.Serializer):
             'refresh': str(refresh),
         }
 
-
 class UserUpdateSerializer(serializers.ModelSerializer):
+    # Incluimos el perfil para que DRF sepa validarlo al actualizar
+    profile = UserProfileSerializer(required=False)
+
     class Meta:
         model = User
-        fields = ['email', 'is_active', 'role']
+        fields = ['email', 'is_active', 'role', 'profile']
+
+    def update(self, instance, validated_data):
+        # 1. Extraemos los datos del perfil si vienen en la petición
+        profile_data = validated_data.pop('profile', None)
+        
+        # 2. Actualizamos los campos del User (ej. email)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # 3. Actualizamos los campos del UserProfile (nombre, teléfono, etc)
+        if profile_data:
+            profile = instance.profile
+            for attr, value in profile_data.items():
+                setattr(profile, attr, value)
+            profile.save()
+            
+        return instance
 
 
 # --- FORMULARIO DE APLICACIÓN DE ADMIN ---
@@ -145,4 +195,4 @@ class AdminLoginSerializer(serializers.Serializer):
             'role': user.role.name if user.role else None,
             'access': str(refresh.access_token),
             'refresh': str(refresh),
-        }
+        }
