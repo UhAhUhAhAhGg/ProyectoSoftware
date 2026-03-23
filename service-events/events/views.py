@@ -2,9 +2,10 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from .permissions import IsAdministrador, IsPromotor, IsComprador
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from .permissions import IsAdministrador, IsPromotor, IsComprador
+
 from .models import Category, Event, TicketType
 from .serializers import (
     CategorySerializer,
@@ -19,8 +20,7 @@ from .serializers import (
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.filter(is_active=True)
     serializer_class = CategorySerializer
-
-
+    
     def get_permissions(self):
         action = getattr(self, 'action', None)
         if action in ['create', 'update', 'partial_update', 'destroy']:
@@ -43,25 +43,25 @@ class EventViewSet(viewsets.ModelViewSet):
     ordering_fields = ['event_date', 'created_at']
     ordering = ['-event_date']
 
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return EventCreateSerializer
-        elif self.action == 'partial_update' or self.action == 'update':
-            return EventUpdateSerializer
-        return EventSerializer
-
     def get_permissions(self):
         action = getattr(self, 'action', None)
         if action in ['create', 'update', 'partial_update', 'destroy', 'cancel']:
             return [IsAuthenticated(), IsPromotor()]
         return [IsAuthenticated()]
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return EventCreateSerializer
+        elif self.action in ['partial_update', 'update']:
+            return EventUpdateSerializer
+        return EventSerializer
+
     def update(self, request, *args, **kwargs):
         """Editar un evento validando permisos y estado (PUT/PATCH)"""
         partial = kwargs.pop('partial', False)
-        instance = self.get_object() # Obtenemos el evento de la base de datos
+        instance = self.get_object() 
 
         # 1. Validar Permisos: ¿El usuario actual es el promotor dueño de este evento?
-        # (Convertimos a string por si acaso uno es UUID y el otro texto plano)
         if str(instance.promoter_id) != str(request.user.id):
             return Response({
                 "status": "error",
@@ -75,7 +75,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 "message": f"Acción denegada. No se puede editar un evento que ya está '{instance.status}'."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # 3. Si pasa la seguridad, guardamos los datos profesionalmente
+        # 3. Guardar datos
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         
         if serializer.is_valid():
@@ -86,7 +86,6 @@ class EventViewSet(viewsets.ModelViewSet):
                 "data": serializer.data
             }, status=status.HTTP_200_OK)
 
-        # 4. Si el usuario mandó datos malos (ej. un texto en lugar de un número)
         return Response({
             "status": "error",
             "message": "Error al validar los datos enviados.",
@@ -104,19 +103,18 @@ class EventViewSet(viewsets.ModelViewSet):
                 "message": "No tienes permisos. Solo el promotor que creó el evento puede eliminarlo."
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # 2. Validar Estado: Si ya está cancelado o completado, no hacemos nada
+        # 2. Validar Estado
         if instance.status in ['cancelled', 'completed']:
             return Response({
                 "status": "error",
                 "message": f"El evento ya se encuentra en estado '{instance.status}'."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # 3. ELIMINACIÓN LÓGICA: Cambiamos el estado en lugar de borrarlo de la BD
+        # 3. ELIMINACIÓN LÓGICA
         instance.status = 'cancelled'
         instance.save()
 
-        # 4. BONUS DE SEGURIDAD: Desactivamos todos sus tickets para congelar las ventas
-        # Así evitamos que alguien compre un ticket de un evento recién eliminado
+        # 4. Desactivamos todos sus tickets
         tickets = instance.tickettype_set.all()
         for ticket in tickets:
             ticket.status = 'inactive'
@@ -179,22 +177,21 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
     filterset_fields = ['event', 'status']
     search_fields = ['name', 'description']
 
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return TicketTypeCreateSerializer
-        return TicketTypeSerializer
-
     def get_permissions(self):
         action = getattr(self, 'action', None)
         if action in ['create', 'update', 'partial_update', 'destroy']:
             return [IsAuthenticated(), IsPromotor()]
         return [IsAuthenticated()]
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return TicketTypeCreateSerializer
+        return TicketTypeSerializer
     
     def create(self, request, *args, **kwargs):
         """Crear tipo de entrada validando propiedad del evento y capacidad máxima"""
         event_id = request.data.get('event')
         
-        # Obtenemos la capacidad que el promotor quiere para esta entrada (0 por defecto si no manda)
         try:
             new_capacity = int(request.data.get('max_capacity', 0))
         except ValueError:
@@ -206,7 +203,6 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
                 "message": "El ID del evento es requerido."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Buscamos el evento en la base de datos
         from .models import Event
         try:
             event = Event.objects.get(id=event_id)
@@ -216,20 +212,19 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
                 "message": "El evento especificado no existe."
             }, status=status.HTTP_404_NOT_FOUND)
 
-        # 1. Validar Permisos: ¿El usuario actual es el dueño de este evento?
+        # 1. Validar Permisos
         if str(event.promoter_id) != str(request.user.id):
             return Response({
                 "status": "error",
                 "message": "Acceso denegado. No puedes crear entradas para un evento que no te pertenece."
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # 2. Validar Capacidad: Que la suma de todas las entradas no supere la del evento
+        # 2. Validar Capacidad
         from django.db.models import Sum
         current_tickets = TicketType.objects.filter(event=event).aggregate(
             total=Sum('max_capacity')
         )['total'] or 0
 
-        # Si lo que ya existe + lo nuevo supera el límite del evento, lo rebotamos
         if (current_tickets + new_capacity) > event.capacity:
             capacidad_disponible = event.capacity - current_tickets
             return Response({
@@ -237,7 +232,7 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
                 "message": f"La capacidad solicitada supera el límite del evento. Solo te queda espacio para {capacidad_disponible} entradas más."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # 3. Si todo está perfecto, creamos el ticket
+        # 3. Crear el ticket
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
             self.perform_create(serializer)
@@ -247,7 +242,6 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
                 "data": serializer.data
             }, status=status.HTTP_201_CREATED)
 
-        # 4. Si faltan datos o el formato está mal (ej. precio negativo)
         return Response({
             "status": "error",
             "message": "Error al validar los datos de la entrada.",
@@ -260,14 +254,14 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
         instance = self.get_object() 
         event = instance.event 
         
-        # 1. Validar Permisos: ¿Sigue siendo el dueño?
+        # 1. Validar Permisos
         if str(event.promoter_id) != str(request.user.id):
             return Response({
                 "status": "error",
                 "message": "Acceso denegado. No puedes editar entradas de un evento que no te pertenece."
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # 2. Obtenemos la nueva capacidad que intentan poner (si no mandan nada, mantenemos la que ya tenía)
+        # 2. Obtenemos nueva capacidad
         try:
             new_capacity = request.data.get('max_capacity')
             new_capacity = int(new_capacity) if new_capacity is not None else instance.max_capacity
@@ -277,15 +271,12 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
                 "message": "La capacidad debe ser un número entero válido."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # 3. LÓGICA DE NEGOCIO: Matemática de cupos
+        # 3. Matemática de cupos
         from django.db.models import Sum
-        
-        # Sumamos todos los tickets de este evento, EXCEPTO el que estamos editando ahora mismo
         current_other_tickets = TicketType.objects.filter(event=event).exclude(id=instance.id).aggregate(
             total=Sum('max_capacity')
         )['total'] or 0
 
-        # Verificamos si las otras entradas + la nueva capacidad superan el límite del local
         if (current_other_tickets + new_capacity) > event.capacity:
             capacidad_disponible = event.capacity - current_other_tickets
             return Response({
@@ -293,7 +284,7 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
                 "message": f"Error: Superas la capacidad del evento. Solo puedes aumentar esta entrada hasta un máximo de {capacidad_disponible} cupos."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # 4. Si la matemática cuadra, guardamos la edición
+        # 4. Guardar la edición
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         if serializer.is_valid():
             self.perform_update(serializer)
