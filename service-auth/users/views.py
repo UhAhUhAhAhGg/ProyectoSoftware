@@ -68,10 +68,10 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # --- AQUÍ EMPIEZA TU TAREA DE LOGIN DE ADMINISTRADOR ---
+    # --- LOGIN DE ADMINISTRADOR (CON BLOQUEO DE SEGURIDAD) ---
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def admin_login(self, request):
-        """Inicio de sesión exclusivo para el panel de Administradores"""
+        """Inicio de sesión exclusivo para el panel de Administradores con bloqueo de seguridad"""
         email = request.data.get('email')
         password = request.data.get('password')
 
@@ -81,24 +81,46 @@ class UserViewSet(viewsets.ModelViewSet):
                 "message": "Por favor ingresa tu correo y contraseña."
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        # 1. REVISAR INTENTOS PREVIOS (Usando Caché)
+        cache_key = f"admin_login_attempts_{email}"
+        attempts = cache.get(cache_key, 0)
+
+        # Si ya falló 3 veces, lo bloqueamos sin consultar la base de datos
+        if attempts >= 3:
+            return Response({
+                "status": "error",
+                "message": "Cuenta bloqueada por múltiples intentos fallidos. Intenta de nuevo en 15 minutos."
+            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
         try:
             user = User.objects.get(email=email)
 
-            # 1. Validar la contraseña
+            # 2. Validar la contraseña
             if not user.check_password(password):
+                attempts += 1
+                cache.set(cache_key, attempts, timeout=900) # Bloqueo por 15 minutos
+                
+                intentos_restantes = 3 - attempts
+                if intentos_restantes > 0:
+                    mensaje_error = f"Correo o contraseña incorrectos. Te quedan {intentos_restantes} intento(s)."
+                else:
+                    mensaje_error = "Cuenta bloqueada por múltiples intentos fallidos. Intenta de nuevo en 15 minutos."
+
                 return Response({
                     "status": "error",
-                    "message": "Correo o contraseña incorrectos."
+                    "message": mensaje_error
                 }, status=status.HTTP_401_UNAUTHORIZED)
 
-            # 2. PRUEBA DE ACEPTACIÓN (PA): Validar el rol
+            # 3. Validar el rol
             if not user.role or user.role.name.lower() not in ['administrador', 'admin']:
                 return Response({
                     "status": "error",
                     "message": "Permisos insuficientes."
                 }, status=status.HTTP_403_FORBIDDEN)
 
-            # 3. Éxito
+            # 4. ÉXITO: Borramos el historial de fallos porque ya entró
+            cache.delete(cache_key)
+
             serializer = UserSerializer(user)
             
             return Response({
@@ -108,11 +130,14 @@ class UserViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_200_OK)
 
         except User.DoesNotExist:
+            # Táctica anti-enumeración de usuarios
+            attempts += 1
+            cache.set(cache_key, attempts, timeout=900)
+            
             return Response({
                 "status": "error",
                 "message": "Correo o contraseña incorrectos."
             }, status=status.HTTP_401_UNAUTHORIZED)
-    # --- AQUÍ TERMINA TU TAREA ---
 
     # --- CAMBIAR CONTRASEÑA ---
     @action(detail=True, methods=['post'])
