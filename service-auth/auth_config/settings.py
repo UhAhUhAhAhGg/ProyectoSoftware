@@ -139,3 +139,6 @@ SIMPLE_JWT = {
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
 }
+# --- CONFIGURACIONES DE SEGURIDAD CUSTOM ---
+# Tiempo de expiración para los enlaces de recuperación de contraseña (en minutos)
+PASSWORD_RESET_TIMEOUT_MINUTES = 60

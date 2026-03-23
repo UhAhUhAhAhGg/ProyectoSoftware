@@ -39,7 +39,7 @@ class UserViewSet(viewsets.ModelViewSet):
     def me(self, request):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
-
+    
     # --- REGISTRO ---
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def register(self, request):
@@ -65,7 +65,8 @@ class UserViewSet(viewsets.ModelViewSet):
             "message": "Error en los datos enviados.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
-# === RECUPERACIÓN DE CONTRASEÑA: SOLICITAR ENLACE ===
+
+    # === RECUPERACIÓN DE CONTRASEÑA: SOLICITAR ENLACE ===
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def password_reset_request(self, request):
         email = request.data.get('email')
@@ -79,12 +80,15 @@ class UserViewSet(viewsets.ModelViewSet):
         # Buscamos al usuario
         user = User.objects.filter(email=email).first()
         if user:
-            # 1. Generamos un token JWT válido por 1 hora
+            # Leer la configuración de expiración (por defecto 60 minutos si no existe)
+            expiration_minutes = getattr(settings, 'PASSWORD_RESET_TIMEOUT_MINUTES', 60)
+            
+            # 1. Generamos un token JWT válido por el tiempo configurado
             payload = {
                 'user_id': str(user.id),
                 'email': user.email,
                 'type': 'password_reset',
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=expiration_minutes)
             }
             token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
 
@@ -97,7 +101,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 send_mail(
                     subject='Recuperación de Contraseña - TicketProject',
                     message=f'Hola,\n\nHemos recibido una solicitud para restablecer tu contraseña.\n'
-                            f'Por favor, haz clic en el siguiente enlace para crear una nueva (es válido por 1 hora):\n\n'
+                            f'Por favor, haz clic en el siguiente enlace para crear una nueva (es válido por {expiration_minutes} minutos):\n\n'
                             f'{reset_link}\n\n'
                             f'Si no solicitaste esto, ignora este correo.',
                     from_email=getattr(settings, 'EMAIL_HOST_USER', 'noreply@ticketproject.com'),
@@ -106,13 +110,59 @@ class UserViewSet(viewsets.ModelViewSet):
                 )
             except Exception as e:
                 # Imprimimos en consola por si estás desarrollando y no tienes SMTP configurado
-                print("Correo no enviado. Simulación de enlace:", reset_link)
+                print("⚠️ Correo no enviado. Simulación de enlace:", reset_link)
 
-        # La respuesta genérica para el usuario
+        # La respuesta genérica para el usuario (Evita enumeración)
         return Response({
             "status": "success",
             "message": "Si el correo está registrado, recibirás un enlace de recuperación en breve."
         }, status=status.HTTP_200_OK)
+
+    # === RECUPERACIÓN DE CONTRASEÑA: CONFIRMAR Y CAMBIAR ===
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def password_reset_confirm(self, request):
+        """Valida la expiración del token y guarda la nueva contraseña"""
+        token = request.data.get('token')
+        new_password = request.data.get('new_password')
+
+        if not token or not new_password:
+            return Response({
+                "status": "error", 
+                "message": "Falta el token o la nueva contraseña."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # 1. Decodificar el token (valida la expiración automáticamente)
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+
+            if payload.get('type') != 'password_reset':
+                return Response({
+                    "status": "error", 
+                    "message": "Token inválido para esta acción."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # 2. Cambiar la clave
+            user = User.objects.get(id=payload['user_id'])
+            user.set_password(new_password)
+            user.save()
+
+            return Response({
+                "status": "success", 
+                "message": "Tu contraseña ha sido actualizada correctamente. Ya puedes iniciar sesión."
+            }, status=status.HTTP_200_OK)
+
+        except jwt.ExpiredSignatureError:
+            return Response({
+                "status": "error", 
+                "message": "El enlace de recuperación ha expirado. Por favor, solicita uno nuevo."
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except (jwt.InvalidTokenError, User.DoesNotExist):
+            return Response({
+                "status": "error", 
+                "message": "Enlace de recuperación inválido o corrupto."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
     # === HU-4: INVITAR ADMINISTRADOR (Solo Superadmin) ===
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def invite_admin(self, request):
@@ -375,7 +425,6 @@ class UserViewSet(viewsets.ModelViewSet):
         user.is_active = False
         user.save()
         return Response({'success': 'User deactivated'})
-
 
 class RoleViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Role.objects.all()
