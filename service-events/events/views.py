@@ -37,6 +37,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 class EventViewSet(viewsets.ModelViewSet):
 
+
     def get_queryset(self):
         """
         Lógica dinámica de consultas:
