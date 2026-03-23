@@ -129,8 +129,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
         try:
             with transaction.atomic():
-                # 2. Crear User (is_active=False)
-              # 2. Crear User (is_active=False) - Forma segura
+                # 2. Crear User (is_active=False) - Forma segura
                 user = User(
                     email=email,
                     role=rol_admin,
@@ -149,7 +148,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     profile_photo_url=data.get('profile_photo_url', '')
                 )
                 
-                # Generar token interno para autorizar en el microservicio (Simulamos un login rápido interno)
+                # Generar token interno para autorizar en el microservicio
                 internal_payload = {
                     'user_id': str(user.id),
                     'email': user.email,
@@ -279,10 +278,17 @@ class UserViewSet(viewsets.ModelViewSet):
 
             serializer = UserSerializer(user)
             
+            admin_modules = [
+                {"name": "Gestión de Usuarios", "action": "view_users"},
+                {"name": "Configuración Global", "action": "manage_settings"},
+                {"name": "Reportes", "action": "view_reports"}
+            ]
+            
             return Response({
                 "status": "success",
                 "message": "Bienvenido al panel de administración.",
-                "data": serializer.data
+                "data": serializer.data,
+                "allowed_modules": admin_modules  # Se lo pasamos al Frontend
             }, status=status.HTTP_200_OK)
 
         except User.DoesNotExist:
