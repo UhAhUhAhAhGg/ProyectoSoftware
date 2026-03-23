@@ -36,8 +36,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 
 class EventViewSet(viewsets.ModelViewSet):
-    # 👇 ELIMINAMOS la línea "queryset = Event.objects.all()" 
-    # y la reemplazamos por esta lógica dinámica:
 
     def get_queryset(self):
         """
