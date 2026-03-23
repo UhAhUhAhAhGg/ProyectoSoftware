@@ -2,7 +2,7 @@ import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 
-
+# --- ROLES Y PERMISOS ---
 class Role(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=50, unique=True)
@@ -14,7 +14,6 @@ class Role(models.Model):
     def __str__(self):
         return self.name
 
-
 class Permission(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)
@@ -25,7 +24,6 @@ class Permission(models.Model):
 
     def __str__(self):
         return self.name
-
 
 class RolePermission(models.Model):
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='role_permissions')
@@ -39,7 +37,7 @@ class RolePermission(models.Model):
     def __str__(self):
         return f"{self.role.name} - {self.permission.name}"
 
-
+# --- GESTIÓN DE USUARIOS ---
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
         if not email:
@@ -54,7 +52,6 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault('is_active', True)
         extra_fields.setdefault('is_staff', True)
         return self.create_user(email, password, **extra_fields)
-
 
 class User(AbstractBaseUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -85,7 +82,6 @@ class User(AbstractBaseUser):
     def has_module_perms(self, app_label):
         return True
 
-
 class UserProfile(models.Model):
     user = models.OneToOneField(
         User,
@@ -109,3 +105,20 @@ class UserProfile(models.Model):
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
+
+class AccountDeletionLog(models.Model):
+    """
+    Registra quién eliminó su cuenta para auditoría legal.
+    No se usa ForeignKey porque el User será borrado físicamente.
+    """
+    user_email = models.EmailField()
+    user_role = models.CharField(max_length=50, null=True, blank=True)
+    deleted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'account_deletion_logs'
+        verbose_name = 'Registro de Eliminación'
+        verbose_name_plural = 'Registros de Eliminaciones'
+
+    def __str__(self):
+        return f"{self.user_email} - {self.deleted_at}"
