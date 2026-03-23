@@ -65,7 +65,54 @@ class UserViewSet(viewsets.ModelViewSet):
             "message": "Error en los datos enviados.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+# === RECUPERACIÓN DE CONTRASEÑA: SOLICITAR ENLACE ===
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def password_reset_request(self, request):
+        email = request.data.get('email')
 
+        if not email:
+            return Response(
+                {"status": "error", "message": "El correo electrónico es requerido."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Buscamos al usuario
+        user = User.objects.filter(email=email).first()
+        if user:
+            # 1. Generamos un token JWT válido por 1 hora
+            payload = {
+                'user_id': str(user.id),
+                'email': user.email,
+                'type': 'password_reset',
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+            }
+            token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+
+            # 2. Construimos el enlace del Frontend (BFF Pattern)
+            frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+            reset_link = f"{frontend_url}/reset-password?token={token}"
+
+            # 3. Enviamos el correo
+            try:
+                send_mail(
+                    subject='Recuperación de Contraseña - TicketProject',
+                    message=f'Hola,\n\nHemos recibido una solicitud para restablecer tu contraseña.\n'
+                            f'Por favor, haz clic en el siguiente enlace para crear una nueva (es válido por 1 hora):\n\n'
+                            f'{reset_link}\n\n'
+                            f'Si no solicitaste esto, ignora este correo.',
+                    from_email=getattr(settings, 'EMAIL_HOST_USER', 'noreply@ticketproject.com'),
+                    recipient_list=[user.email],
+                    fail_silently=True,
+                )
+            except Exception as e:
+                # Imprimimos en consola por si estás desarrollando y no tienes SMTP configurado
+                print("Correo no enviado. Simulación de enlace:", reset_link)
+
+        # La respuesta genérica para el usuario
+        return Response({
+            "status": "success",
+            "message": "Si el correo está registrado, recibirás un enlace de recuperación en breve."
+        }, status=status.HTTP_200_OK)
     # === HU-4: INVITAR ADMINISTRADOR (Solo Superadmin) ===
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def invite_admin(self, request):
