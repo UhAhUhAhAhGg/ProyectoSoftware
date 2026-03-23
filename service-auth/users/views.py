@@ -130,12 +130,14 @@ class UserViewSet(viewsets.ModelViewSet):
         try:
             with transaction.atomic():
                 # 2. Crear User (is_active=False)
-                user = User.objects.create_user(
+              # 2. Crear User (is_active=False) - Forma segura
+                user = User(
                     email=email,
-                    password=data['password'],
                     role=rol_admin,
                     is_active=False  # PENDIENTE DE APROBACIÓN
                 )
+                user.set_password(data['password']) # Encripta la contraseña correctamente
+                user.save() # Guarda el usuario en la base de datos
                 
                 # 3. Crear UserProfile local
                 UserProfile.objects.create(
@@ -213,14 +215,6 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response({"message": "Solicitud rechazada y eliminada."})
         except User.DoesNotExist:
             return Response({"error": "Usuario pendiente no encontrado."}, status=status.HTTP_404_NOT_FOUND)
-
-    # --- ESTRICTO LOGIN DE ADMIN ---
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
-    def admin_login(self, request):
-        serializer = AdminLoginSerializer(data=request.data)
-        if serializer.is_valid():
-            return Response(serializer.validated_data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     # --- LOGIN con JWT ---
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
