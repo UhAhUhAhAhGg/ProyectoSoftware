@@ -33,12 +33,47 @@ class UserViewSet(viewsets.ModelViewSet):
         elif self.action in ['update', 'partial_update']:
             return UserUpdateSerializer
         return UserSerializer
-
-    # --- PERFIL DEL USUARIO AUTENTICADO ---
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+   # --- PERFIL DEL USUARIO AUTENTICADO ---
+    @action(detail=False, methods=['get', 'put', 'patch'], permission_classes=[IsAuthenticated])
     def me(self, request):
-        serializer = UserSerializer(request.user)
-        return Response(serializer.data)
+        """
+        GET: Obtiene los datos del perfil del usuario logueado.
+        PUT/PATCH: Actualiza los datos del perfil.
+        """
+        user = request.user
+
+        # Si el Frontend solo quiere LEER los datos
+        if request.method == 'GET':
+            serializer = UserSerializer(user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        # Si el Frontend quiere ACTUALIZAR los datos (Aquí cumplimos tu PA)
+        elif request.method in ['PUT', 'PATCH']:
+            # 'partial=True' permite que nos envíen solo el teléfono sin tener que enviar el nombre otra vez
+            is_partial = request.method == 'PATCH'
+            
+            # Usamos el serializer que configuramos en la tarea anterior
+            serializer = UserUpdateSerializer(user, data=request.data, partial=is_partial)
+
+            if serializer.is_valid():
+                # 👇 ¡AQUÍ SUCEDE LA MAGIA! Esto ejecuta el def update() de tu Serializer
+                serializer.save() 
+                
+                # Volvemos a consultar al usuario para devolver los datos frescos y actualizados
+                updated_user_data = UserSerializer(user).data
+                
+                return Response({
+                    "status": "success",
+                    "message": "Perfil actualizado correctamente.",
+                    "data": updated_user_data
+                }, status=status.HTTP_200_OK)
+                
+            # Si los datos no pasaron nuestras validaciones estrictas, devolvemos el error
+            return Response({
+                "status": "error",
+                "message": "Error al actualizar los datos. Revisa la información enviada.",
+                "details": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
     
     # --- REGISTRO ---
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
