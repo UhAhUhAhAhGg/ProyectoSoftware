@@ -34,47 +34,64 @@ class UserViewSet(viewsets.ModelViewSet):
             return UserUpdateSerializer
         return UserSerializer
    # --- PERFIL DEL USUARIO AUTENTICADO ---
-    @action(detail=False, methods=['get', 'put', 'patch'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['get', 'put', 'patch', 'delete'], permission_classes=[IsAuthenticated])
     def me(self, request):
         """
-        GET: Obtiene los datos del perfil del usuario logueado.
+        GET: Obtiene los datos del perfil.
         PUT/PATCH: Actualiza los datos del perfil.
+        DELETE: Elimina la cuenta permanentemente.
         """
         user = request.user
 
-        # Si el Frontend solo quiere LEER los datos
+        # 1. LEER DATOS (GET)
         if request.method == 'GET':
             serializer = UserSerializer(user)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
-        # Si el Frontend quiere ACTUALIZAR los datos (Aquí cumplimos tu PA)
+        # 2. ACTUALIZAR DATOS (PUT / PATCH)
         elif request.method in ['PUT', 'PATCH']:
-            # 'partial=True' permite que nos envíen solo el teléfono sin tener que enviar el nombre otra vez
             is_partial = request.method == 'PATCH'
-            
-            # Usamos el serializer que configuramos en la tarea anterior
             serializer = UserUpdateSerializer(user, data=request.data, partial=is_partial)
 
             if serializer.is_valid():
-                # 👇 ¡AQUÍ SUCEDE LA MAGIA! Esto ejecuta el def update() de tu Serializer
-                serializer.save() 
-                
-                # Volvemos a consultar al usuario para devolver los datos frescos y actualizados
+                serializer.save()
                 updated_user_data = UserSerializer(user).data
-                
                 return Response({
                     "status": "success",
                     "message": "Perfil actualizado correctamente.",
                     "data": updated_user_data
                 }, status=status.HTTP_200_OK)
                 
-            # Si los datos no pasaron nuestras validaciones estrictas, devolvemos el error
             return Response({
                 "status": "error",
-                "message": "Error al actualizar los datos. Revisa la información enviada.",
+                "message": "Error al actualizar los datos.",
                 "details": serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
-    
+        elif request.method == 'DELETE':
+            password = request.data.get('password')
+            
+            # Validamos que nos envíe la contraseña
+            if not password:
+                return Response({
+                    "status": "error",
+                    "message": "Por tu seguridad, debes ingresar tu contraseña para confirmar la eliminación de la cuenta."
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            # Validamos que la contraseña sea correcta
+            if not user.check_password(password):
+                return Response({
+                    "status": "error",
+                    "message": "Contraseña incorrecta. Operación cancelada."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Si todo está bien, procedemos con el Hard Delete (Borrado físico)
+            # Esto eliminará el User y en cascada su UserProfile
+            user.delete()
+            
+            return Response({
+                "status": "success",
+                "message": "Tu cuenta y todos tus datos personales han sido eliminados permanentemente de la plataforma."
+            }, status=status.HTTP_200_OK)
     # --- REGISTRO ---
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def register(self, request):
