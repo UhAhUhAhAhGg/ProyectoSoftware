@@ -6,11 +6,30 @@ export default function PerfilPage() {
   const [telefono, setTelefono] = useState("");
   const [mensaje, setMensaje] = useState("");
 
+  // GUARDAR DATOS
   const handleSubmit = (e) => {
     e.preventDefault();
-
-    // aquí luego irá backend, por ahora solo mostramos mensaje
     setMensaje("✅ Datos actualizados correctamente");
+  };
+
+  // ELIMINAR CUENTA
+  const handleEliminar = (e) => {
+    e.preventDefault();
+
+    const confirmacion = window.confirm(
+      "⚠️ ¿Estás seguro de que deseas eliminar tu cuenta? Esta acción no se puede deshacer."
+    );
+
+    if (confirmacion) {
+      setMensaje("❌ Cuenta eliminada correctamente");
+
+      // conectar con backend
+      // fetch('/api/delete-user', { method: 'DELETE' })
+
+      // (Opcional futuro)
+      // redirigir al login
+      // window.location.href = "/login";
+    }
   };
 
   return (
@@ -47,7 +66,12 @@ export default function PerfilPage() {
 
         </form>
 
-        {/* 🔥 MENSAJE */}
+        {/*BOTÓN ELIMINAR (FUERA DEL FORM para evitar conflictos) */}
+        <button className="btn-eliminar" onClick={handleEliminar}>
+          Eliminar cuenta
+        </button>
+
+        {/*MENSAJE */}
         {mensaje && <p className="mensaje">{mensaje}</p>}
 
       </div>

@@ -61,3 +61,19 @@ body {
   color: #22c55e;
   font-weight: bold;
 }
+
+.btn-eliminar {
+  width: 100%;
+  padding: 12px;
+  margin-top: 15px;
+  border: none;
+  background: #ef4444;
+  color: white;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.btn-eliminar:hover {
+  background: #dc2626;
+}
+
