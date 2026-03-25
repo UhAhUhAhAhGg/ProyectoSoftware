@@ -5,11 +5,20 @@ export default function PerfilPage() {
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
   const [mensaje, setMensaje] = useState("");
+  const [foto, setFoto] = useState(null);
 
   // GUARDAR DATOS
   const handleSubmit = (e) => {
     e.preventDefault();
     setMensaje("✅ Datos actualizados correctamente");
+  };
+
+  // SUBIR FOTO
+  const handleFotoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setFoto(URL.createObjectURL(file));
+    }
   };
 
   // ELIMINAR CUENTA
@@ -23,12 +32,10 @@ export default function PerfilPage() {
     if (confirmacion) {
       setMensaje("❌ Cuenta eliminada correctamente");
 
-      // conectar con backend
-      // fetch('/api/delete-user', { method: 'DELETE' })
-
-      // (Opcional futuro)
-      // redirigir al login
-      // window.location.href = "/login";
+      // Simulación de espera antes de redirigir
+      setTimeout(() => {
+        window.location.href = "/login";
+      }, 1500);
     }
   };
 
@@ -38,6 +45,26 @@ export default function PerfilPage() {
 
         <h1>Mi Perfil</h1>
 
+        {/* 🖼 FOTO DE PERFIL */}
+        <div className="foto-container">
+          <label htmlFor="fotoInput">
+            <img
+              src={foto || "https://via.placeholder.com/150"}
+              alt="Foto de perfil"
+              className="foto-perfil"
+            />
+          </label>
+          <input
+            id="fotoInput"
+            type="file"
+            accept="image/*"
+            onChange={handleFotoChange}
+            hidden
+          />
+          <p className="foto-texto">Haz clic para cambiar tu foto</p>
+        </div>
+
+        {/* FORMULARIO */}
         <form onSubmit={handleSubmit}>
 
           <label>Nombre</label>
@@ -56,22 +83,27 @@ export default function PerfilPage() {
             onChange={(e) => setTelefono(e.target.value)}
           />
 
-          <label>Foto (URL)</label>
-          <input
-            type="text"
-            placeholder="URL de tu foto"
-          />
-
           <button type="submit">Guardar cambios</button>
 
         </form>
 
-        {/*BOTÓN ELIMINAR (FUERA DEL FORM para evitar conflictos) */}
-        <button className="btn-eliminar" onClick={handleEliminar}>
-          Eliminar cuenta
-        </button>
+        {/* 🔥 ZONA PELIGROSA */}
+        <div className="danger-zone">
 
-        {/*MENSAJE */}
+          <h3>⚠ Zona de riesgo</h3>
+
+          <p>
+            Si eliminas tu cuenta, perderás todos tus datos, eventos y accesos.
+            Esta acción no se puede deshacer.
+          </p>
+
+          <button className="btn-eliminar" onClick={handleEliminar}>
+            Eliminar cuenta
+          </button>
+
+        </div>
+
+        {/* MENSAJE */}
         {mensaje && <p className="mensaje">{mensaje}</p>}
 
       </div>
