@@ -30,19 +30,35 @@ const eventos = [
 
 export default function EventosPage() {
 
-  // 🔥 USAMOS LOS EVENTOS DIRECTAMENTE
-  const imagenesCarrusel = eventos.map(e => e.imagen);
+  // 🔥 CARRUSEL INDEPENDIENTE
+  const carrusel = [
+    {
+      imagen: "/eventos/bannertres.jpeg",
+      titulo: "EX EMPLOYEE EXPERIENCE",
+      descripcion: "La Paz - Palacio Portales"
+    },
+    {
+      imagen: "/eventos/gmbanner.jpeg",
+      titulo: "GRUPO FIRME",
+      descripcion: "Santa Cruz - Estadio Real Santa Cruz"
+    },
+    {
+      imagen: "/eventos/an banner.jpeg",
+      titulo: "ALADDIN EL MUSICAL",
+      descripcion: "Cochabamba - Teatro Acha"
+    }
+  ];
 
   const [index, setIndex] = useState(0);
 
   // 🔁 AUTO PLAY
   useEffect(() => {
     const intervalo = setInterval(() => {
-      setIndex((prev) => (prev + 1) % imagenesCarrusel.length);
+      setIndex((prev) => (prev + 1) % carrusel.length);
     }, 3000);
 
     return () => clearInterval(intervalo);
-  }, [imagenesCarrusel.length]);
+  }, [carrusel.length]);
 
   return (
     <div className="container">
@@ -51,8 +67,8 @@ export default function EventosPage() {
       <div className="carrusel">
 
         <img
-          src={imagenesCarrusel[index]}
-          alt={eventos[index].titulo}
+          src={carrusel[index].imagen}
+          alt={carrusel[index].titulo}
           className="carrusel-img fade"
         />
 
@@ -61,15 +77,15 @@ export default function EventosPage() {
 
         {/* 📝 TEXTO DINÁMICO */}
         <div className="carrusel-texto">
-          <h2>{eventos[index].titulo}</h2>
-          <p>{eventos[index].lugar}</p>
+          <h2>{carrusel[index].titulo}</h2>
+          <p>{carrusel[index].descripcion}</p>
         </div>
 
         {/* BOTONES */}
         <button
           className="prev"
           onClick={() =>
-            setIndex((index - 1 + imagenesCarrusel.length) % imagenesCarrusel.length)
+            setIndex((index - 1 + carrusel.length) % carrusel.length)
           }
         >
           ❮
@@ -78,7 +94,7 @@ export default function EventosPage() {
         <button
           className="next"
           onClick={() =>
-            setIndex((index + 1) % imagenesCarrusel.length)
+            setIndex((index + 1) % carrusel.length)
           }
         >
           ❯
@@ -86,7 +102,7 @@ export default function EventosPage() {
 
         {/* ⚪ DOTS */}
         <div className="dots">
-          {imagenesCarrusel.map((_, i) => (
+          {carrusel.map((_, i) => (
             <span
               key={i}
               className={i === index ? "dot active" : "dot"}
