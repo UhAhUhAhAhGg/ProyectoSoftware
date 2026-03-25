@@ -4,12 +4,8 @@ import Home from './pages/Home';
 import Registro from './pages/Registro';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import AdminLogin from './pages/AdminLogin';
-import AdminDashboard from './pages/AdminDashboard';
 import ListaEventos from './components/dashboard/eventos/ListaEventos';
 import FormularioEvento from './components/dashboard/eventos/FormularioEvento';
-import ExplorarEventos from './components/dashboard/eventos/ExplorarEventos';
-import PerfilUsuario from './components/dashboard/PerfilUsuario';
 
 function App() {
   return (
@@ -17,21 +13,10 @@ function App() {
       <Router>
         <div className="App">
           <Routes>
-            {/* Rutas públicas */}
             <Route path="/" element={<Home />} />
             <Route path="/registro" element={<Registro />} />
             <Route path="/login" element={<Login />} />
-            
-            {/* Rutas de administrador */}
-            <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            <Route path="/admin" element={<AdminDashboard />} />
-            
-            {/* Rutas de usuario */}
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/dashboard/explorar" element={<ExplorarEventos />} />
-            <Route path="/dashboard/explorar/:id" element={<ExplorarEventos />} />
-            <Route path="/dashboard/perfil" element={<PerfilUsuario />} />
             <Route path="/dashboard/mis-eventos" element={<ListaEventos />} />
             <Route path="/dashboard/crear-evento" element={<FormularioEvento />} />
             <Route path="/dashboard/evento/:id/editar" element={<FormularioEvento />} />

@@ -1,0 +1,31 @@
+.admin-module {
+  background: white;
+  border-radius: 12px;
+  padding: 25px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.admin-module h2 {
+  color: var(--admin-text);
+  margin: 0 0 15px 0;
+  font-size: 22px;
+}
+
+.admin-module p {
+  color: var(--admin-text-light);
+  margin: 0;
+  font-size: 15px;
+}
+
+/* Modo oscuro */
+body.dark-mode .admin-module {
+  background: var(--dark-card);
+}
+
+body.dark-mode .admin-module h2 {
+  color: var(--dark-text);
+}
+
+body.dark-mode .admin-module p {
+  color: var(--dark-text-secondary);
+}
