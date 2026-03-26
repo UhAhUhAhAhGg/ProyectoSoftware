@@ -65,3 +65,11 @@ docker-compose.override.yml
 
 # Project specific
 .pytest_cache
+# Next.js (frontend)
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+
+# Turbopack cache (MUY IMPORTANTE)
+frontend/.next/cache/
+frontend/.next/dev/

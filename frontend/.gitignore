@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+.next/cache/
+.next/dev/
+node_modules/
 # production
 /build
 
