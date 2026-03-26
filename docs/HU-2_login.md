@@ -90,18 +90,19 @@ Debes ver la página de login con el selector de 3 roles.
 
 ---
 
-**2. Probar login como Administrador:**
+**2. Probar login como Administrador (App Router Exclusivo):**
 
-Seleccionar la tarjeta **Administrador** (el formulario se pre-llena automáticamente).
+Esta ruta es **privada** y ha sido retirada del selector público.
+Navegar a: `http://localhost:3000/admin/login`
 
 | Campo | Valor |
 |---|---|
-| Email | `admin@ticketproject.com` |
-| Contraseña | `Admin1234!` |
+| Email | `admin@ticketproject.com` (o el creado vía CLI) |
+| Contraseña | `Admin123!` |
 
-Clic en **"Iniciar sesión como Administrador"**.
+Clic en **"Acceder al Panel Admin"**.
 
-✅ **Resultado esperado:** Redirige a `http://localhost:3000/dashboard/admin`
+✅ **Resultado esperado:** Redirige exclusivamente a `http://localhost:3000/admin/dashboard`
 
 ---
 

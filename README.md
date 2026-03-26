@@ -196,6 +196,40 @@ ProyectoSoftware/
 
 ---
 
+## 🧪 Cómo probar los Flujos de Usuario y Administrador (HU-4 y HU-5)
+
+Una vez que tengas los contenedores corriendo (`docker compose up`), sigue estos pasos para probar el ecosistema de roles:
+
+### Flujo 1: Crear el SuperAdmin inicial (Vía Docker)
+Dado que la plataforma requiere extrema seguridad, el primer administrador general debe crearse desde la consola de comandos del servidor backend:
+
+```bash
+docker compose exec service-auth python manage.py create_superadmin --email superadmin@ticketgo.com --password admin123
+```
+*Si omites los parámetros `--email` o `--password`, el script te los pedirá de forma interactiva en la consola.*
+
+### Flujo 2: Invitar a un Nuevo Administrador
+1. Ve a la **página de Login Privado**: [http://localhost:3000/admin/login](http://localhost:3000/admin/login)
+2. Inicia sesión con el email y contraseña del **SuperAdmin** que acabas de crear.
+3. Serás redirigido al `Dashboard`. En la barra lateral, haz click en **⚙️ Administradores**.
+4. En el módulo superior verás **✉️ Invitar Nuevo Administrador**. Escribe el correo de tu colega (ej. `segundo@admin.com`) y genera el enlace.
+5. El sistema mostrará un mensaje verde con un Link Secreto. **Cópialo**.
+
+### Flujo 3: Registro y Aprobación de Seguridad
+1. Abre una **ventana de incógnito** y pega el Link Secreto (`http://localhost:3000/admin/register?token=...`).
+2. Llena el formulario de seguridad (Código de Empleado y Departamento). Al enviarlo, la cuenta quedará como "Pendiente".
+3. Vuelve a tu ventana normal (la del SuperAdmin) y actualiza la tabla de **⏳ Solicitudes Pendientes de Aprobación**.
+4. Encontrarás la solicitud en rojo. Haz click en el botón **Aprobar**.
+5. ¡Listo! El nuevo colega ya puede iniciar sesión libremente en `/admin/login`.
+
+### Flujo 4: Usuarios Públicos (Compradores y Promotores)
+1. Para los clientes normales, ve a la ruta raíz: [http://localhost:3000](http://localhost:3000) y pulsa "Acceder" (o directamente ve a `/login`).
+2. Si intentas poner las credenciales del SuperAdmin aquí, el sistema **te rechazará o redirigirá** a los modulos equivocados para forzarte a usar el portal privado de la empresa.
+3. En la página de Login o `/registro`, pulsa "¿No tienes una cuenta? Regístrate aquí".
+4. Podrás elegir entre el perfil de **Comprador** o **Promotor**. Tras el registro, podrás iniciar sesión normalmente.
+
+---
+
 ## 🛠️ Comandos útiles de Django (dentro de Docker)
 
 ### Crear un superusuario para el admin de Django

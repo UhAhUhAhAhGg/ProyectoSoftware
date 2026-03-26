@@ -54,7 +54,7 @@ export const AuthProvider = ({ children }) => {
 
   // Ruta de dashboard según el rol del usuario
   const getDashboardPath = () => {
-    if (isAdministrador) return '/dashboard/admin';
+    if (isAdministrador) return '/admin/dashboard';
     if (isPromotor) return '/dashboard/promotor';
     return '/dashboard/comprador';
   };

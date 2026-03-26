@@ -1,7 +1,7 @@
 const API_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:8000';
 
 export const authService = {
-  // Login real contra el backend
+  // Login general para Compradores y Promotores
   login: async (email, password) => {
     const response = await fetch(`${API_URL}/api/v1/users/login/`, {
       method: 'POST',
@@ -12,7 +12,6 @@ export const authService = {
     const data = await response.json();
 
     if (!response.ok) {
-      // El backend devuelve { detail: "..." } o { message: "..." } en errores
       const msg = data.detail || data.message || 'Correo o contraseña incorrectos.';
       throw new Error(msg);
     }
@@ -31,7 +30,35 @@ export const authService = {
     };
   },
 
-  // Registro de nuevo usuario
+  // Login exclusivo para Administradores — rechaza otros roles con 401
+  adminLogin: async (email, password) => {
+    const response = await fetch(`${API_URL}/api/v1/users/admin_login/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const msg = data.detail || data.message || 'Credenciales inválidas o permisos insuficientes.';
+      throw new Error(msg);
+    }
+
+    return {
+      success: true,
+      data: {
+        user: {
+          email: data.data.email,
+          role: data.data.role,
+        },
+        token: data.access,
+        refresh: data.refresh,
+      },
+    };
+  },
+
+  // Registro de nuevo usuario (Comprador / Promotor)
   register: async (email, password, roleName) => {
     const response = await fetch(`${API_URL}/api/v1/users/register/`, {
       method: 'POST',
@@ -42,7 +69,6 @@ export const authService = {
     const data = await response.json();
 
     if (!response.ok) {
-      // El backend devuelve { message: "..." } en errores 409/400
       const msg = data.message || data.detail || 'Error al registrarse.';
       throw new Error(msg);
     }
@@ -50,7 +76,25 @@ export const authService = {
     return { success: true, data };
   },
 
-  // Logout — solo limpia localStorage (sin endpoint en el backend aún)
+  // Registro de Administrador mediante token de invitación
+  applyAdmin: async ({ email, password, employee_code, department, token }) => {
+    const response = await fetch(`${API_URL}/api/v1/users/apply_admin/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, employee_code, department, token }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const msg = data.detail || data.message || 'Error al enviar la solicitud.';
+      throw new Error(msg);
+    }
+
+    return { success: true, data };
+  },
+
+  // Logout — limpia localStorage
   logout: async () => {
     return { success: true };
   },

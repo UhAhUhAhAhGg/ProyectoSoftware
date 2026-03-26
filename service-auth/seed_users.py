@@ -1,6 +1,6 @@
 import django
 import os
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'auth_config.settings')
 django.setup()
 
 from users.models import User, Role
@@ -13,18 +13,32 @@ if not roles:
     exit(1)
 
 users_to_create = [
-    {'email': 'admin@ticketproject.com',     'password': 'Admin1234!',      'role': 'Administrador'},
-    {'email': 'comprador@ticketproject.com', 'password': 'Comprador1234!',  'role': 'Comprador'},
-    {'email': 'promotor@ticketproject.com',  'password': 'Promotor1234!',   'role': 'Promotor'},
+    {'email': 'admin@ticketproject.com',     'password': 'Admin1234!',      'role': 'Administrador', 'is_staff': True},
+    {'email': 'comprador@ticketproject.com', 'password': 'Comprador1234!',  'role': 'Comprador',     'is_staff': False},
+    {'email': 'promotor@ticketproject.com',  'password': 'Promotor1234!',   'role': 'Promotor',      'is_staff': False},
 ]
 
 for u in users_to_create:
-    if not User.objects.filter(email=u['email']).exists():
-        user = User(email=u['email'], role=roles[u['role']])
+    user = User.objects.filter(email=u['email']).first()
+    if not user:
+        user = User(email=u['email'], role=roles[u['role']], is_staff=u['is_staff'])
         user.set_password(u['password'])
         user.save()
-        print(f"  CREADO: {u['email']}  ({u['role']})")
+        print(f"  CREADO: {u['email']}  ({u['role']}) - Staff: {u['is_staff']}")
     else:
-        print(f"  OK (ya existe): {u['email']}")
+        # Actualizar permisos si es necesario
+        updated = False
+        if user.is_staff != u['is_staff']:
+            user.is_staff = u['is_staff']
+            updated = True
+        if user.role != roles[u['role']]:
+            user.role = roles[u['role']]
+            updated = True
+        
+        if updated:
+            user.save()
+            print(f"  ACTUALIZADO: {u['email']} - Staff: {user.is_staff}")
+        else:
+            print(f"  OK (ya existe): {u['email']}")
 
 print(f"\nTotal usuarios en BD: {User.objects.count()}")

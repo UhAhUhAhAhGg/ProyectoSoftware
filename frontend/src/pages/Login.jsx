@@ -66,8 +66,7 @@ function Login() {
   const handleRoleChange = (role) => {
     const credentials = {
       comprador: { email: 'comprador@ticketgo.com', password: 'Comprador123!' },
-      promotor: { email: 'promotor@ticketgo.com', password: 'Promotor123!' },
-      administrador: { email: 'admin@ticketgo.com', password: 'Admin2024!' }
+      promotor: { email: 'promotor@ticketgo.com', password: 'Promotor123!' }
     };
 
     setFormData({
@@ -130,7 +129,6 @@ function Login() {
     if (formData.role === role) {
       if (role === 'comprador') return 'active comprador';
       if (role === 'promotor') return 'active promotor';
-      if (role === 'administrador') return 'active administrador';
     }
     return '';
   };
@@ -173,14 +171,6 @@ function Login() {
             <p>Crea y gestiona eventos</p>
           </div>
 
-          <div
-            className={`role-card administrador ${getRoleStyle('administrador')}`}
-            onClick={() => handleRoleChange('administrador')}
-          >
-            <div className="role-icon">⚙️</div>
-            <h3>Administrador</h3>
-            <p>Gestión y control de la plataforma</p>
-          </div>
         </div>
 
         {loginError && (
@@ -244,7 +234,7 @@ function Login() {
                 Iniciando sesión...
               </>
             ) : (
-              `Iniciar sesión como ${formData.role === 'comprador' ? 'Comprador' : formData.role === 'promotor' ? 'Promotor' : 'Administrador'}`
+              `Iniciar sesión como ${formData.role === 'comprador' ? 'Comprador' : 'Promotor'}`
             )}
           </button>
 

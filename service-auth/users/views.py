@@ -22,6 +22,7 @@ import requests
 from django.conf import settings
 from django.db import transaction
 from django.core.mail import send_mail
+from rest_framework_simplejwt.tokens import RefreshToken
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -441,11 +442,15 @@ class UserViewSet(viewsets.ModelViewSet):
                 {"name": "Reportes", "action": "view_reports"}
             ]
             
+            refresh = RefreshToken.for_user(user)
+            
             return Response({
                 "status": "success",
                 "message": "Bienvenido al panel de administración.",
                 "data": serializer.data,
-                "allowed_modules": admin_modules  # Se lo pasamos al Frontend
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "allowed_modules": admin_modules
             }, status=status.HTTP_200_OK)
 
         except User.DoesNotExist:

@@ -17,6 +17,6 @@ class BuyerProfileAdmin(admin.ModelAdmin):
 
 @admin.register(PromotorProfile)
 class PromotorProfileAdmin(admin.ModelAdmin):
-    list_display = ('user_id', 'company_name', 'comercial_nit')
+    list_display = ('user_id', 'company_name', 'comercial_nit', 'bank_account')
     search_fields = ('company_name', 'comercial_nit')
     ordering = ('company_name',)

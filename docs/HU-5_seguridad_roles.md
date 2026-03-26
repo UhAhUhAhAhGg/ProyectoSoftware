@@ -1,8 +1,8 @@
 # Informe Técnico: HU-5 (Seguridad y Permisos de Administrador)
 
 ## Estado General
-*   **Backend (HU-5 - Seguridad):** Completado (Tareas TIC-118 y TIC-120).
-*   **Frontend (HU-5 - Diseño y Módulos):** Pendiente de desarrollo.
+*   **Backend (HU-5 - Seguridad):** 100% Completado.
+*   **Frontend (HU-5 - Diseño y Módulos):** 100% Completado.
 
 ---
 
@@ -37,15 +37,14 @@ Al momento de registrar un administrador (`apply_admin`), el `service-auth` deb�
 
 ---
 
-## 3. Instrucciones y Tareas para el Frontend
+## 3. Implementación Frontend Realizada
 
-Para el desarrollador Frontend que arme las pantallas de la HU-5:
+Las siguientes características fueron agregadas para blindar visualmente al usuario y reflejar los bloqueos de API:
 
 1.  **Manejo Categórico de Errores (HTTP 403):** 
-    *   Si por accidente en la interfaz se habilita un botón de "Crear Evento" en el Dashboard del Administrador, al enviarse la petición, el backend devolverá el código **HTTP 403 Forbidden**. 
-    *   *Tarea Frontend:* Capturar errores 403 en los *interceptors* de Axios o Fetch y mostrar un `Toast` o Modal elegante que diga: *"Permisos insuficientes para esta acción. Esta ruta es exclusiva para Promotores"*.
-2.  **Menú de Navegación Exclusivo (TIC-117):**
-    *   Evalúa el rol guardado en tu estado global (Redux/Context). Si es Administrador, escóndele inmediatamente los links de comprar entradas o crear eventos. 
-    *   Diseña una Sidebar lateral (Dashboard) con "Gestión de Módulos" que será la futura HU.
-3.  **Seguridad en el Auth Token:**
-    *   No te preocupes por validar los permisos manuales al hacer peticiones complejas REST. Solo asegúrate de enviar el header `Authorization: Bearer <TOKEN>` en cada petición de los módulos de gestión (TIC-119). El backend y las nuevas clases `permissions.py` se encargarán de rechazar a intrusos.
+    *   Se configuró un `Interceptor` global en `api.js` que captura cualquier código HTTP 403.
+    *   Se construyó el componente `ForbiddenToast.jsx` que escucha un evento personalizado y levanta un popup bloqueante en la esquina de la pantalla advirtiendo la violación de rol, antes de expulsar al usuario si fuera necesario.
+2.  **Protección de Rutas Híbrido App Router (TIC-117):**
+    *   Se forzó a `/admin/dashboard` a requerir explícitamente el rol de "Administrador" validando los tokens JWT recuperados en tiempo de ejecución.
+3.  **Prefijos /v1/:**
+    *   Se unificaron absolutamente todas las peticiones con prefijo de versionado `api/v1/` para estandarizar la entrada del LoadBalancer en el futuro Docker Swarm.
