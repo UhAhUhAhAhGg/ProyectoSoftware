@@ -94,9 +94,66 @@ export const authService = {
     return { success: true, data };
   },
 
-  // Logout — limpia localStorage
+  // Solicitar enlace de recuperación de contraseña
+  requestPasswordReset: async (email) => {
+    const response = await fetch(`${API_URL}/api/v1/users/password_reset_request/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const msg = data.message || data.detail || 'No se pudo solicitar la recuperación de contraseña.';
+      throw new Error(msg);
+    }
+
+    return { success: true, data };
+  },
+
+  // Confirmar cambio de contraseña con token
+  confirmPasswordReset: async (token, newPassword) => {
+    const response = await fetch(`${API_URL}/api/v1/users/password_reset_confirm/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, new_password: newPassword }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const msg = data.message || data.detail || 'No se pudo restablecer la contraseña.';
+      throw new Error(msg);
+    }
+
+    return { success: true, data };
+  },
+
+  // Logout — solo limpia localStorage (sin endpoint en el backend aún)
   logout: async () => {
     return { success: true };
+  },
+
+  // Eliminar cuenta del usuario autenticado
+  deleteAccount: async (token, password) => {
+    const response = await fetch(`${API_URL}/api/v1/users/me/`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ password }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const msg = data.message || data.detail || 'No se pudo eliminar la cuenta.';
+      throw new Error(msg);
+    }
+
+    return { success: true, data };
   },
 
   // Obtener perfil del usuario autenticado

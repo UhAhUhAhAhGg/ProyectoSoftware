@@ -109,6 +109,12 @@ const inicializarEventos = () => {
 inicializarEventos();
 
 export const eventosService = {
+  // Obtener eventos disponibles para compradores
+  getEventosDisponibles: () => {
+    const eventos = getEventosStorage();
+    return eventos.filter((e) => e.estado === 'activo');
+  },
+
   // Obtener todos los eventos del promotor
   getEventosByPromotor: (promotorId) => {
     const eventos = getEventosStorage();

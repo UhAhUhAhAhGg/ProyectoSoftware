@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import OpcionesComprador from '../components/dashboard/OpcionesComprador';
 import OpcionesPromotor from '../components/dashboard/OpcionesPromotor';
 import './Dashboard.css';
@@ -110,6 +111,7 @@ function Dashboard() {
         <nav className="sidebar-nav">
           <h4>Accesos rápidos</h4>
           <ul>
+            <li><Link to="/dashboard/perfil">👤 Mi Perfil</Link></li>
             {isComprador ? (
               // Enlaces rápidos para comprador
               <>

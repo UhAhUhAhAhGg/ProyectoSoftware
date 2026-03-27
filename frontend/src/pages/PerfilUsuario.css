@@ -1,0 +1,203 @@
+.perfil-page {
+  min-height: 100vh;
+  background: linear-gradient(160deg, #f8f6f2 0%, #f1e8da 100%);
+  padding: 1.2rem;
+}
+
+.perfil-card {
+  max-width: 780px;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid #e7dccd;
+  border-radius: 16px;
+  padding: 1.4rem;
+}
+
+.perfil-header h2 {
+  margin: 0;
+}
+
+.perfil-header p {
+  margin-top: 0.3rem;
+  color: #625b4f;
+}
+
+.perfil-top {
+  margin-top: 1rem;
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.avatar-box {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: center;
+}
+
+.avatar-img,
+.avatar-placeholder {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #d8c5a8;
+}
+
+.avatar-placeholder {
+  display: grid;
+  place-items: center;
+  background: #f4ede1;
+  color: #4f422e;
+  font-weight: 700;
+  font-size: 1.5rem;
+}
+
+.btn-avatar {
+  border: none;
+  background: #debf90;
+  color: #2f2518;
+  border-radius: 8px;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.perfil-resumen {
+  color: #514839;
+}
+
+.perfil-form {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.perfil-form label {
+  font-weight: 600;
+  color: #473e32;
+}
+
+.perfil-form input {
+  border: 1px solid #dbcdb8;
+  border-radius: 10px;
+  padding: 0.68rem 0.75rem;
+}
+
+.estado {
+  margin: 0.3rem 0 0;
+}
+
+.estado.error {
+  color: #9a2d2d;
+}
+
+.estado.success {
+  color: #21693b;
+}
+
+.acciones {
+  margin-top: 0.7rem;
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.btn-principal,
+.btn-secundario {
+  border: none;
+  border-radius: 9px;
+  padding: 0.65rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-principal {
+  background: #ad8149;
+  color: #fff;
+}
+
+.btn-secundario {
+  background: #efe7da;
+  color: #4b3f2d;
+}
+
+.btn-link {
+  color: #4e3f28;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.danger-zone {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eadfcc;
+}
+
+.danger-zone h3 {
+  margin: 0;
+  color: #7c2f2f;
+}
+
+.danger-zone p {
+  color: #604646;
+}
+
+.btn-eliminar {
+  border: none;
+  border-radius: 9px;
+  padding: 0.65rem 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: #b33a3a;
+  color: #fff;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 15, 10, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modal-contenido {
+  width: 100%;
+  max-width: 500px;
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e6dbc9;
+  padding: 1rem;
+}
+
+.modal-contenido h3 {
+  margin: 0 0 0.4rem;
+}
+
+.modal-contenido p {
+  color: #5d5345;
+}
+
+.modal-contenido input {
+  width: 100%;
+  border: 1px solid #d7cab5;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+}
+
+.modal-acciones {
+  margin-top: 0.8rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .perfil-card {
+    padding: 1rem;
+  }
+}

@@ -16,7 +16,7 @@ function Login() {
   const [loginError, setLoginError] = useState('');
   const [darkMode, setDarkMode] = useState(false);
 
-  const { login, isAuthenticated, isComprador, isPromotor, isAdmin } = useAuth();
+  const { login, isAuthenticated, isComprador, isPromotor, isAdministrador } = useAuth();
   const navigate = useNavigate();
 
   // Verificar preferencia del sistema para modo oscuro
@@ -28,7 +28,7 @@ function Login() {
   // Redirigir según el rol
   useEffect(() => {
     if (isAuthenticated) {
-      if (isAdmin) {
+      if (isAdministrador) {
         navigate('/admin/dashboard');
       } else if (isPromotor) {
         navigate('/dashboard');
@@ -36,7 +36,7 @@ function Login() {
         navigate('/dashboard');
       }
     }
-  }, [isAuthenticated, isAdmin, isPromotor, isComprador, navigate]);
+  }, [isAuthenticated, isAdministrador, isPromotor, isComprador, navigate]);
 
   // Aplicar modo oscuro
   useEffect(() => {
@@ -242,6 +242,9 @@ function Login() {
             <p>¿No tienes cuenta?</p>
             <Link to="/registro" className="register-link">
               Regístrate aquí
+            </Link>
+            <Link to="/recuperar-password" className="register-link" style={{ marginTop: '0.6rem' }}>
+              ¿Olvidaste tu contraseña?
             </Link>
           </div>
         </form>

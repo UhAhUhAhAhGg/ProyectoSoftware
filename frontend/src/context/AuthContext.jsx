@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useState, useContext, useEffect } from 'react';
+import { authService } from '../services/authService';
 
 const AuthContext = createContext();
 
@@ -47,6 +48,27 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('refresh');
   };
 
+  const updateUserProfile = (updatedData) => {
+    const updatedUser = { ...user, ...updatedData };
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+    return updatedUser;
+  };
+
+  const deleteAccount = async (password) => {
+    if (!token) {
+      throw new Error('No hay sesión activa para eliminar la cuenta.');
+    }
+
+    await authService.deleteAccount(token, password);
+
+    setUser(null);
+    setToken(null);
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    localStorage.removeItem('refresh');
+  };
+
   // Helpers de rol — usan el campo 'role' que devuelve el backend
   const isComprador = user?.role === 'Comprador';
   const isPromotor = user?.role === 'Promotor';
@@ -65,6 +87,8 @@ export const AuthProvider = ({ children }) => {
     loading,
     login,
     logout,
+    updateUserProfile,
+    deleteAccount,
     isAuthenticated: !!user,
     isComprador,
     isPromotor,
