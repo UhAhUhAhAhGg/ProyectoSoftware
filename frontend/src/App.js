@@ -10,8 +10,9 @@ import Dashboard from './pages/Dashboard';
 import PerfilUsuario from './pages/PerfilUsuario';
 import ListaEventos from './components/dashboard/eventos/ListaEventos';
 import FormularioEvento from './components/dashboard/eventos/FormularioEvento';
-import ExplorarEventos from './components/dashboard/eventos/ExplorarEventos';
-import DetalleEvento from './components/dashboard/eventos/DetalleEvento';
+import Eventos from './pages/Eventos';
+import Eventos from './pages/Recuperar';
+import PerfilPage from "./pages/perfil";
 
 function App() {
   return (
@@ -32,6 +33,9 @@ function App() {
             <Route path="/dashboard/mis-eventos" element={<ListaEventos />} />
             <Route path="/dashboard/crear-evento" element={<FormularioEvento />} />
             <Route path="/dashboard/evento/:id/editar" element={<FormularioEvento />} />
+            <Route path="/Eventos" element={<Eventos />} />
+            <Route path="/Recuperar" element={<Recuperar />} />
+            <Route path="/perfil" element={<PerfilPage />} />
           </Routes>
         </div>
       </Router>

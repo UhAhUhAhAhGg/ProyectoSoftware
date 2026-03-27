@@ -205,7 +205,7 @@ function Registro() {
 
       <div className="registro-card">
         <h2>Crear Cuenta</h2>
-        <p className="subtitulo">Elige tu tipo de perfil</p>
+        <p className="subtitulo">Selecciona si deseas registrarte como Comprador o Promotor</p>
 
         <form onSubmit={handleSubmit}>
           <div className="tipo-usuario">
@@ -436,3 +436,4 @@ function Registro() {
 }
 
 export default Registro;
+
