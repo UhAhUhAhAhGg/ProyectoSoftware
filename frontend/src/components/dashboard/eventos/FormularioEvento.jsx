@@ -14,19 +14,39 @@ function FormularioEvento() {
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
+    categoria: '',
     fecha: '',
     hora: '',
     ubicacion: '',
     direccion: '',
     ciudad: '',
     capacidad: '',
-    precio: '',
-    imagen: 'https://via.placeholder.com/300x200?text=Evento'
+    imagen: null
   });
 
   const [errores, setErrores] = useState({});
   const [cargando, setCargando] = useState(false);
   const [mostrarPreview, setMostrarPreview] = useState(false);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState('https://via.placeholder.com/300x200?text=Evento');
+  const [previewTickets, setPreviewTickets] = useState([]);
+  const [nuevosTiposEntrada, setNuevosTiposEntrada] = useState([]);
+
+  // Cargar preview cuando la imagen cambia
+  useEffect(() => {
+    if (!formData.imagen) {
+        setImagePreviewUrl('https://via.placeholder.com/300x200?text=Evento');
+        return;
+    }
+    if (typeof formData.imagen === 'string') {
+        setImagePreviewUrl(formData.imagen);
+        return;
+    }
+    if (formData.imagen instanceof File) {
+        const objectUrl = URL.createObjectURL(formData.imagen);
+        setImagePreviewUrl(objectUrl);
+        return () => URL.revokeObjectURL(objectUrl);
+    }
+  }, [formData.imagen]);
 
   // Cargar datos si es edición
   useEffect(() => {
@@ -41,11 +61,18 @@ function FormularioEvento() {
   }, [id, isEditing, navigate]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
+    const { name, value, type, files } = e.target;
+    if (type === 'file') {
+      setFormData({
+        ...formData,
+        [name]: files[0]
+      });
+    } else {
+      setFormData({
+        ...formData,
+        [name]: value
+      });
+    }
     // Limpiar error del campo
     if (errores[name]) {
       setErrores({
@@ -85,6 +112,11 @@ function FormularioEvento() {
       }
     }
 
+    // Validar categoria
+    if (!formData.categoria) {
+      nuevosErrores.categoria = 'La categoría es requerida';
+    }
+
     // Validar hora
     if (!formData.hora) {
       nuevosErrores.hora = 'La hora es requerida';
@@ -114,16 +146,16 @@ function FormularioEvento() {
       nuevosErrores.capacidad = 'La capacidad máxima es 10,000 personas';
     }
 
-    // Validar precio
-    if (!formData.precio) {
-      nuevosErrores.precio = 'El precio es requerido';
-    } else if (parseInt(formData.precio) < 0) {
-      nuevosErrores.precio = 'El precio no puede ser negativo';
-    } else if (parseInt(formData.precio) > 100000) {
-      nuevosErrores.precio = 'El precio máximo es $100,000';
-    }
-
     return nuevosErrores;
+  };
+
+  const getBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = error => reject(error);
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -134,23 +166,40 @@ function FormularioEvento() {
     if (Object.keys(nuevosErrores).length === 0) {
       setCargando(true);
       
-      // Simular envío
-      setTimeout(() => {
-        try {
-          if (isEditing) {
-            eventosService.actualizarEvento(id, formData);
-            alert('✅ Evento actualizado exitosamente');
-          } else {
-            eventosService.crearEvento(formData, user.id);
-            alert('✅ Evento creado exitosamente');
-          }
-          navigate('/dashboard/mis-eventos');
-        } catch (error) {
-          alert('Error al guardar el evento');
-        } finally {
-          setCargando(false);
+      try {
+        let datosAGuardar = { ...formData };
+        if (formData.imagen instanceof File) {
+            datosAGuardar.imagen = await getBase64(formData.imagen);
         }
-      }, 1000);
+        delete datosAGuardar.tiposEntrada; // Evitar sobreescribir entradas creadas independientemente
+
+        // Simular envío
+        setTimeout(() => {
+          try {
+            if (isEditing) {
+              eventosService.actualizarEvento(id, datosAGuardar);
+              alert('✅ Evento actualizado exitosamente');
+            } else {
+              const eventoCreado = eventosService.crearEvento(datosAGuardar, user.id);
+              nuevosTiposEntrada.forEach(tipo => {
+                const tipoLimpio = { ...tipo };
+                delete tipoLimpio.id; // Remover ID temporal simulado
+                eventosService.crearTipoEntrada(eventoCreado.id, tipoLimpio);
+              });
+              alert('✅ Evento creado exitosamente');
+            }
+            navigate('/dashboard/mis-eventos');
+          } catch (error) {
+            alert('Error al guardar el evento');
+          } finally {
+            setCargando(false);
+          }
+        }, 1000);
+      } catch (err) {
+        console.error('Error convirtiendo imagen:', err);
+        alert('Error procesando la imagen');
+        setCargando(false);
+      }
     } else {
       setErrores(nuevosErrores);
       // Scroll al primer error
@@ -249,10 +298,48 @@ function FormularioEvento() {
                 {errores.hora && <span className="error-mensaje">{errores.hora}</span>}
               </div>
             </div>
+
+            <div className="form-group">
+              <label htmlFor="imagen">
+                Imagen del Evento (Opcional)
+              </label>
+              <input
+                type="file"
+                id="imagen"
+                name="imagen"
+                onChange={handleChange}
+                accept="image/*"
+              />
+            </div>
           </div>
 
           {/* Columna derecha */}
           <div className="form-columna">
+            <div className="form-group">
+              <label htmlFor="categoria">
+                Categoría <span className="required">*</span>
+              </label>
+              <select
+                id="categoria"
+                name="categoria"
+                value={formData.categoria}
+                onChange={handleChange}
+                className={errores.categoria ? 'error' : ''}
+                style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', background: '#f9f9f9', color: '#555' }}
+              >
+                <option value="">Selecciona una categoría</option>
+                <option value="Música">Música y Conciertos</option>
+                <option value="Teatro">Teatro y Artes Escénicas</option>
+                <option value="Deportes">Deportes</option>
+                <option value="Conferencias">Conferencias y Seminarios</option>
+                <option value="Festivales">Festivales</option>
+                <option value="Familia">Familia y Niños</option>
+                <option value="Arte">Arte y Exposiciones</option>
+                <option value="Otros">Otros</option>
+              </select>
+              {errores.categoria && <span className="error-mensaje">{errores.categoria}</span>}
+            </div>
+
             <div className="form-group">
               <label htmlFor="ubicacion">
                 Ubicación <span className="required">*</span>
@@ -319,24 +406,6 @@ function FormularioEvento() {
                 />
                 {errores.capacidad && <span className="error-mensaje">{errores.capacidad}</span>}
               </div>
-
-              <div className="form-group">
-                <label htmlFor="precio">
-                  Precio ($) <span className="required">*</span>
-                </label>
-                <input
-                  type="number"
-                  id="precio"
-                  name="precio"
-                  value={formData.precio}
-                  onChange={handleChange}
-                  placeholder="Ej: 2500"
-                  min="0"
-                  max="100000"
-                  className={errores.precio ? 'error' : ''}
-                />
-                {errores.precio && <span className="error-mensaje">{errores.precio}</span>}
-              </div>
             </div>
           </div>
         </div>
@@ -346,7 +415,12 @@ function FormularioEvento() {
           <button 
             type="button"
             className="btn-preview"
-            onClick={() => setMostrarPreview(!mostrarPreview)}
+            onClick={() => {
+              setMostrarPreview(!mostrarPreview);
+              if (!mostrarPreview && isEditing) {
+                setPreviewTickets(eventosService.getTiposEntradaByEvento(id).filter(t => t.estado === 'activo') || []);
+              }
+            }}
           >
             {mostrarPreview ? '👁️ Ocultar vista previa' : '👁️ Ver vista previa'}
           </button>
@@ -355,10 +429,22 @@ function FormularioEvento() {
             <div className="preview-card">
               <h3>Vista previa del evento</h3>
               <div className="preview-content">
+                <div style={{ marginBottom: '15px' }}>
+                  <img 
+                    src={imagePreviewUrl} 
+                    alt={formData.nombre || 'Vista previa'} 
+                    style={{ width: '100%', height: '350px', objectFit: 'cover', borderRadius: '8px' }} 
+                  />
+                </div>
                 <div className="preview-header">
                   <h4>{formData.nombre || 'Nombre del evento'}</h4>
                   <span className="preview-badge">Próximo</span>
                 </div>
+                {formData.categoria && (
+                  <div style={{ display: 'inline-block', background: '#e0e0e0', color: '#333', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', marginBottom: '10px' }}>
+                    🏷️ {formData.categoria}
+                  </div>
+                )}
                 <p className="preview-descripcion">
                   {formData.descripcion || 'Descripción del evento...'}
                 </p>
@@ -368,9 +454,21 @@ function FormularioEvento() {
                   <p>📍 {formData.ubicacion || 'Ubicación'}</p>
                   <p>🏙️ {formData.ciudad || 'Ciudad'}</p>
                 </div>
-                <div className="preview-footer">
-                  <span className="preview-precio">${formData.precio || '0'}</span>
-                  <span className="preview-capacidad">Capacidad: {formData.capacidad || '0'}</span>
+                <div className="preview-footer" style={{ borderTop: "1px solid #eee", paddingTop: "15px", marginTop: "15px" }}>
+                  <div className="preview-capacidad" style={{ textAlign: "right", color: "gray", fontSize: "14px", marginBottom: "10px" }}>Capacidad: {formData.capacidad || '0'}</div>
+                  {previewTickets.length > 0 ? (
+                    <div className="preview-tickets-list">
+                      <h5 style={{ margin: "0 0 10px 0", color: "#666" }}>Tipos de Entrada</h5>
+                      {previewTickets.map(t => (
+                        <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', background: '#f9f9f9', borderRadius: '4px', marginBottom: '5px' }}>
+                          <span style={{ fontWeight: 'bold' }}>{t.nombre}</span>
+                          <span style={{ color: "var(--color-marron)", fontWeight: 'bold' }}>${t.precio}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontStyle: "italic", color: "#999", fontSize: "14px" }}>No hay entradas definidas aún. Guarda el evento para agregarlas.</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -408,6 +506,24 @@ function FormularioEvento() {
           </button>
         </div>
       </form>
+
+      {/* Render GestionTiposEntrada siempre */}
+      <div style={{ marginTop: '40px' }}>
+        <hr />
+        <h2 style={{ padding: '20px 0' }}>Gestión de Tipos de Entradas</h2>
+        <GestionTiposEntrada 
+           eventoId={isEditing ? id : null} 
+           evento={formData} 
+           onChange={(tipos) => {
+             if (!isEditing) {
+               setNuevosTiposEntrada(tipos);
+             }
+             if (mostrarPreview) {
+               setPreviewTickets(tipos.filter(t => t.estado === 'activo'));
+             }
+           }}
+        />
+      </div>
     </div>
   );
 }

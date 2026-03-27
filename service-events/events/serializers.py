@@ -30,6 +30,7 @@ class EventSerializer(serializers.ModelSerializer):
             'event_time',
             'location',       # PA: Lugar
             'capacity',
+            'image',
             'status',
             'created_at',
             'category_name',
@@ -62,6 +63,7 @@ class EventCreateSerializer(serializers.ModelSerializer):
             'event_time',
             'location',
             'capacity',
+            'image',
             'status',
             'category'
         ]
@@ -77,6 +79,7 @@ class EventUpdateSerializer(serializers.ModelSerializer):
             'event_time',
             'location',
             'capacity',
+            'image',
             'status',
             'category'
         ]

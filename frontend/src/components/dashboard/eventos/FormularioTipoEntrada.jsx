@@ -15,11 +15,11 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, onGuardado, onC
   const [errorGeneral, setErrorGeneral] = useState('');
 
   // Calcular cupo disponible
-  const tiposActivos = eventosService.getTiposEntradaByEvento(eventoId)
-    .filter(t => t.estado === 'activo' && (!tipoEditando || t.id !== tipoEditando.id));
+  const tiposActivos = eventoId ? eventosService.getTiposEntradaByEvento(eventoId)
+    .filter(t => t.estado === 'activo' && (!tipoEditando || t.id !== tipoEditando.id)) : [];
   
-  const cupoAsignado = tiposActivos.reduce((sum, t) => sum + t.cupoMaximo, 0);
-  const cupoDisponible = evento.capacidad - cupoAsignado;
+  const cupoAsignado = tiposActivos.reduce((sum, t) => sum + (parseInt(t.cupoMaximo) || 0), 0);
+  const cupoDisponible = (parseInt(evento?.capacidad) || 0) - cupoAsignado;
 
   useEffect(() => {
     if (tipoEditando) {
@@ -124,11 +124,13 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, onGuardado, onC
       setTimeout(() => {
         try {
           if (tipoEditando) {
-            eventosService.actualizarTipoEntrada(eventoId, tipoEditando.id, formData);
+            if (eventoId) eventosService.actualizarTipoEntrada(eventoId, tipoEditando.id, formData);
+            onGuardado({ ...formData, id: tipoEditando.id, estado: 'activo', cupoVendido: tipoEditando.cupoVendido || 0 });
           } else {
-            eventosService.crearTipoEntrada(eventoId, formData);
+            const nuevoId = Date.now();
+            if (eventoId) eventosService.crearTipoEntrada(eventoId, formData);
+            onGuardado({ ...formData, id: nuevoId, estado: 'activo', cupoVendido: 0 });
           }
-          onGuardado();
         } catch (error) {
           setErrorGeneral(error.message);
         } finally {

@@ -196,6 +196,29 @@ ProyectoSoftware/
 
 ---
 
+## 🌱 Semillas de Base de Datos Básico (Seeds)
+
+Para que el proyecto funcione correctamente (tanto en Back como en Front) sin que tengas que crearlo todo desde cero a mano, incluimos scripts "Seed" que inyectan los datos primordiales.
+
+Debes ejecutar estos comandos **inmediatamente después de hacer `docker compose up` por primera vez**, en otra terminal:
+
+### 1. Semilla de Usuarios Básica (`service-auth`)
+Pre-carga roles y 3 usuarios de prueba con la contraseña `*Password1234!*`:
+* Administrador (`admin@ticketproject.com`)
+* Promotor (`promotor@ticketproject.com`)
+* Comprador (`comprador@ticketproject.com`)
+```bash
+docker compose exec service-auth python seed_users.py
+```
+
+### 2. Semilla de Categorías de Eventos (`service-events`)
+Pre-carga las 8 categorías oficiales de eventos para que el Frontend y el Backend hablen el mismo idioma al crear funciones (Música, Deportes, Festivales, etc.).
+```bash
+docker compose exec service-events python seed_categories.py
+```
+
+---
+
 ## 🧪 Cómo probar los Flujos de Usuario y Administrador (HU-4 y HU-5)
 
 Una vez que tengas los contenedores corriendo (`docker compose up`), sigue estos pasos para probar el ecosistema de roles:

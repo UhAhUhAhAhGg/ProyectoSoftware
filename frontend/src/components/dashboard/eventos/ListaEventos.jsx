@@ -12,6 +12,7 @@ function ListaEventos() {
   const [eventoAEliminar, setEventoAEliminar] = useState(null);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [cargando, setCargando] = useState(true);
+  const [eventoDetalle, setEventoDetalle] = useState(null);
 
   useEffect(() => {
     cargarEventos();
@@ -82,6 +83,17 @@ function ListaEventos() {
 
   const getProgresoVentas = (vendidos, capacidad) => {
     return Math.round((vendidos / capacidad) * 100);
+  };
+
+  const getRangoPrecios = (evento) => {
+    if (!evento.tiposEntrada || evento.tiposEntrada.length === 0) return 'Por definir';
+    const activos = evento.tiposEntrada.filter(t => t.estado === 'activo');
+    if (activos.length === 0) return 'Por definir';
+    
+    if (activos.length === 1) return `$${activos[0].precio}`;
+    
+    const minPrecio = Math.min(...activos.map(t => parseFloat(t.precio) || 0));
+    return `Desde $${minPrecio}`;
   };
 
   if (cargando) {
@@ -165,7 +177,11 @@ function ListaEventos() {
           {eventosFiltrados.map(evento => (
             <div key={evento.id} className={`evento-card ${evento.estado}`}>
               <div className="evento-imagen">
-                <img src={evento.imagen} alt={evento.nombre} />
+                <img 
+                  src={typeof evento.imagen === 'string' ? evento.imagen : 'https://via.placeholder.com/300x200?text=Sin+Imagen'} 
+                  alt={evento.nombre} 
+                  onError={(e) => { e.target.onerror = null; e.target.src = "https://via.placeholder.com/300x200?text=Sin+Imagen" }}
+                />
                 <div className="evento-estado-badge">
                   {getEstadoBadge(evento.estado)}
                 </div>
@@ -173,6 +189,11 @@ function ListaEventos() {
 
               <div className="evento-info">
                 <h3>{evento.nombre}</h3>
+                {evento.categoria && (
+                  <div style={{ display: 'inline-block', background: '#e0e0e0', color: '#333', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', marginBottom: '10px' }}>
+                    🏷️ {evento.categoria}
+                  </div>
+                )}
                 
                 <div className="evento-detalles">
                   <p className="evento-fecha">
@@ -207,20 +228,20 @@ function ListaEventos() {
                     </div>
                   </div>
                   <div className="stat-precio">
-                    <span className="precio-label">Precio</span>
-                    <span className="precio-valor">${evento.precio}</span>
+                    <span className="precio-label">Entradas</span>
+                    <span className="precio-valor">{getRangoPrecios(evento)}</span>
                   </div>
                 </div>
               </div>
 
               <div className="evento-acciones">
-                <Link 
-                  to={`/dashboard/evento/${evento.id}`} 
+                <button 
+                  onClick={() => setEventoDetalle(evento)} 
                   className="btn-accion ver"
                   title="Ver detalles"
                 >
                   👁️
-                </Link>
+                </button>
                 <Link 
                   to={`/dashboard/evento/${evento.id}/editar`} 
                   className="btn-accion editar"
@@ -274,6 +295,75 @@ function ListaEventos() {
           </div>
         </div>
       )}
+
+      {/* Modal Detalles del Evento (Miniventana) */}
+      {eventoDetalle && (
+        <DetalleEventoModal 
+          evento={eventoDetalle} 
+          onClose={() => setEventoDetalle(null)}
+          getRangoPrecios={getRangoPrecios}
+        />
+      )}
+    </div>
+  );
+}
+
+function DetalleEventoModal({ evento, onClose, getRangoPrecios }) {
+  const activos = evento.tiposEntrada?.filter(t => t.estado === 'activo') || [];
+  
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-confirmar" style={{ maxWidth: '600px', textAlign: 'left' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
+          <div>
+            <h2 style={{ margin: '0 0 5px 0', color: 'var(--color-marron)' }}>{evento.nombre}</h2>
+            {evento.categoria && (
+              <span style={{ display: 'inline-block', background: '#e0e0e0', color: '#333', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85rem' }}>
+                🏷️ {evento.categoria}
+              </span>
+            )}
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#999', marginTop: '-5px' }}>&times;</button>
+        </div>
+        
+        <div style={{ marginBottom: '20px' }}>
+            <img 
+              src={typeof evento.imagen === 'string' ? evento.imagen : 'https://via.placeholder.com/600x300?text=Sin+Imagen'} 
+              alt={evento.nombre} 
+              style={{ width: '100%', height: '250px', objectFit: 'cover', borderRadius: '8px' }}
+              onError={(e) => { e.target.onerror = null; e.target.src = "https://via.placeholder.com/600x300?text=Sin+Imagen" }}
+            />
+        </div>
+
+        <div style={{ display: 'flex', gap: '20px', marginBottom: '15px', color: 'var(--color-verde-gris)' }}>
+          <div>📅 {new Date(evento.fecha).toLocaleDateString('es-ES')} - {evento.hora}</div>
+          <div>📍 {evento.ubicacion}, {evento.ciudad}</div>
+        </div>
+        
+        <p style={{ lineHeight: '1.6', color: 'var(--color-negro)', marginBottom: '20px' }}>
+          {evento.descripcion}
+        </p>
+        
+        <div style={{ background: '#f5f5f5', padding: '15px', borderRadius: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <h4 style={{ margin: 0 }}>Tipos de Entrada</h4>
+            <span style={{ fontWeight: 'bold', color: 'var(--color-marron)' }}>{getRangoPrecios(evento)}</span>
+          </div>
+          
+          {activos.length > 0 ? (
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {activos.map(t => (
+                <li key={t.id} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ddd', padding: '8px 0' }}>
+                  <span>{t.nombre} <small style={{ color: '#888' }}>({t.cupoVendido || 0}/{t.cupoMaximo} vendidos)</small></span>
+                  <span style={{ fontWeight: 'bold' }}>${t.precio}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p style={{ margin: '10px 0 0', fontStyle: 'italic', color: '#888' }}>No hay entradas creadas.</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

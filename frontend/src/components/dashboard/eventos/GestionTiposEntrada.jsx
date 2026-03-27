@@ -3,7 +3,7 @@ import { eventosService } from '../../../services/eventosService';
 import FormularioTipoEntrada from './FormularioTipoEntrada';
 import './GestionTiposEntrada.css';
 
-function GestionTiposEntrada({ eventoId, evento }) {
+function GestionTiposEntrada({ eventoId, evento, onChange }) {
   const [tiposEntrada, setTiposEntrada] = useState([]);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [tipoEditando, setTipoEditando] = useState(null);
@@ -13,23 +13,29 @@ function GestionTiposEntrada({ eventoId, evento }) {
   const [capacidadDisponible, setCapacidadDisponible] = useState(0);
 
   useEffect(() => {
-    cargarTiposEntrada();
+    if (eventoId) {
+      cargarTiposEntrada();
+    } else {
+      setCargando(false);
+    }
   }, [eventoId]);
 
   useEffect(() => {
     if (evento && tiposEntrada) {
       const sumaCupos = tiposEntrada
         .filter(t => t.estado === 'activo')
-        .reduce((sum, t) => sum + t.cupoMaximo, 0);
-      setCapacidadDisponible(evento.capacidad - sumaCupos);
+        .reduce((sum, t) => sum + (parseInt(t.cupoMaximo) || 0), 0);
+      setCapacidadDisponible((parseInt(evento.capacidad) || 0) - sumaCupos);
     }
   }, [evento, tiposEntrada]);
 
   const cargarTiposEntrada = () => {
+    if (!eventoId) return;
     setCargando(true);
     setTimeout(() => {
       const tipos = eventosService.getTiposEntradaByEvento(eventoId);
       setTiposEntrada(tipos);
+      if (onChange) onChange(tipos);
       setCargando(false);
     }, 500);
   };
@@ -46,25 +52,44 @@ function GestionTiposEntrada({ eventoId, evento }) {
 
   const handleEliminar = async (tipo) => {
     if (window.confirm(`¿Estás seguro de eliminar el tipo de entrada "${tipo.nombre}"?`)) {
-      try {
-        await eventosService.eliminarTipoEntrada(eventoId, tipo.id);
-        cargarTiposEntrada();
-        setError('');
-      } catch (error) {
-        setError(error.message);
+      if (eventoId) {
+        try {
+          await eventosService.eliminarTipoEntrada(eventoId, tipo.id);
+          cargarTiposEntrada();
+          setError('');
+        } catch (error) {
+          setError(error.message);
+        }
+      } else {
+        const nuevos = tiposEntrada.filter(t => t.id !== tipo.id);
+        setTiposEntrada(nuevos);
+        if (onChange) onChange(nuevos);
       }
     }
   };
 
   const handleRestaurar = (tipoId) => {
-    eventosService.restaurarTipoEntrada(eventoId, tipoId);
-    cargarTiposEntrada();
+    if (eventoId) {
+      eventosService.restaurarTipoEntrada(eventoId, tipoId);
+      cargarTiposEntrada();
+    }
   };
 
-  const handleGuardado = () => {
+  const handleGuardado = (tipoGuardado) => {
     setMostrarFormulario(false);
     setTipoEditando(null);
-    cargarTiposEntrada();
+    if (eventoId) {
+      cargarTiposEntrada();
+    } else {
+      let nuevosTipos;
+      if (tipoEditando) {
+        nuevosTipos = tiposEntrada.map(t => t.id === tipoGuardado.id ? tipoGuardado : t);
+      } else {
+        nuevosTipos = [...tiposEntrada, tipoGuardado];
+      }
+      setTiposEntrada(nuevosTipos);
+      if (onChange) onChange(nuevosTipos);
+    }
   };
 
   const handleCancelar = () => {
@@ -81,11 +106,11 @@ function GestionTiposEntrada({ eventoId, evento }) {
 
   const totalVendidos = tiposEntrada
     .filter(t => t.estado === 'activo')
-    .reduce((sum, t) => sum + (t.cupoVendido || 0), 0);
+    .reduce((sum, t) => sum + (parseInt(t.cupoVendido) || 0), 0);
 
   const totalCupo = tiposEntrada
     .filter(t => t.estado === 'activo')
-    .reduce((sum, t) => sum + t.cupoMaximo, 0);
+    .reduce((sum, t) => sum + (parseInt(t.cupoMaximo) || 0), 0);
 
   if (cargando) {
     return (

@@ -33,6 +33,7 @@ class Event(models.Model):
     event_time = models.TimeField()
     location = models.CharField(max_length=255)
     capacity = models.IntegerField()
+    image = models.ImageField(upload_to='events/images/', null=True, blank=True)
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='draft')
     created_at = models.DateTimeField(auto_now_add=True)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
