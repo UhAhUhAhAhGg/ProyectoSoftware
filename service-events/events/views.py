@@ -147,7 +147,7 @@ class EventViewSet(viewsets.ModelViewSet):
         """Obtener eventos próximos (no pasados)"""
         from django.utils import timezone
         upcoming = Event.objects.filter(event_date__gte=timezone.now().date())
-        serializer = EventSerializer(upcoming, many=True)
+        serializer = EventSerializer(upcoming, many=True, context={'request': request})
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
@@ -160,7 +160,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         events = Event.objects.filter(promoter_id=promoter_id)
-        serializer = EventSerializer(events, many=True)
+        serializer = EventSerializer(events, many=True, context={'request': request})
         return Response(serializer.data)
 
     @action(detail=True, methods=['get'])

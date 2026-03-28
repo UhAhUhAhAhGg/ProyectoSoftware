@@ -142,3 +142,9 @@ SIMPLE_JWT = {
 # --- CONFIGURACIONES DE SEGURIDAD CUSTOM ---
 # Tiempo de expiración para los enlaces de recuperación de contraseña (en minutos)
 PASSWORD_RESET_TIMEOUT_MINUTES = 60
+
+# --- CONFIGURACIÓN DE EMAIL ---
+# Console backend: imprime el correo en los logs de Docker (sin SMTP real)
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_HOST_USER = 'noreply@ticketproject.com'
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')

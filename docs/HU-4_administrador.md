@@ -34,7 +34,73 @@ Se integraron las siguientes vistas utilizando el **App Router** (`src/app/admin
 2.  **Login Aislado y Seguro (`/admin/login`):** 
     *   Se extirpó cualquier vinculación de administradores del login público (`Login.jsx`), delegando todo el tráfico a este puerto exclusivo protegido por JWT y diseño encriptado.
 3.  **Módulo de Aprobaciones (`AdminUsuarios.jsx`):**
-    *   Dentro del dashboard (`/admin/dashboard`), se consumió `pending_admins` creando una tabla dinámica que permite emitir rechazos o aprobaciones instantáneas contra la API de Node.
+    *   Dentro del dashboard (`/admin/dashboard`), se consumio `pending_admins` creando una tabla dinamica que permite emitir rechazos o aprobaciones instantaneas contra la API de Django REST Framework.
+4.  **Configuracion Global (`AdminConfiguracion.jsx`):**
+    *   Panel para configurar timeout de inactividad (1-60 min) con botones de acceso rapido.
+    *   Muestra informacion del sistema: version, tiempos de JWT, timeout actual.
 
-## 4. Tareas Restantes del Backlog General
-Todas las Historias de Usuario principales asociadas a la gestión base de Administradores se dan por concluidas en su arquitectura core.
+## 4. Seguridad: Bloqueo por intentos fallidos (TIC-114)
+
+El endpoint `admin_login` implementa **proteccion contra fuerza bruta** usando Django Cache:
+
+- Clave de cache: `admin_login_attempts_{email}`
+- **3 intentos maximos** antes de bloquear
+- Bloqueo por **15 minutos** (900 segundos)
+- Cada intento fallido incrementa el contador y muestra intentos restantes
+- Anti-enumeracion: si el email no existe, tambien incrementa el contador
+- Login exitoso resetea el contador a 0
+
+**Prueba de aceptacion (TIC-114):**
+1. Ir a `/admin/login`
+2. Ingresar `admin@ticketproject.com` con password incorrecta 3 veces
+3. **Verificar:** Mensaje "Cuenta bloqueada por multiples intentos fallidos. Intenta de nuevo en 15 minutos."
+4. Esperar 15 minutos o reiniciar el servicio para desbloquear
+
+## 5. Redireccion post-login (TIC-115)
+
+Tras login exitoso como admin:
+- `AdminLogin.jsx` redirige a `/admin/dashboard` usando `window.location.href`
+- Si un admin accede a `/dashboard` (ruta de promotor/comprador), `Dashboard.jsx` lo redirige automaticamente a `/admin/dashboard`
+- Se usa `window.location.href` en lugar de `navigate()` de React Router porque `/admin/dashboard` es una ruta del App Router de Next.js
+
+## 6. Timeout de inactividad (TIC-116)
+
+Configuracion de sesion por inactividad desde el panel de administracion:
+
+- **AdminConfiguracion.jsx** permite configurar el timeout (1-60 minutos)
+- Botones de acceso rapido: 1, 5, 15, 30 minutos
+- Se persiste en `localStorage` como `inactivity_timeout_minutes`
+- **AuthContext.jsx** maneja el timer:
+  - Eventos monitoreados: `mousedown`, `keydown`, `scroll`, `touchstart`
+  - Cualquier actividad reinicia el timer
+  - Al expirar: cierra sesion y marca `sessionExpired = true`
+  - Login.jsx y AdminLogin.jsx muestran banner amarillo de sesion expirada
+
+**Prueba de aceptacion (TIC-116):**
+1. Login como admin -> ir a Configuracion
+2. Cambiar timeout a 1 minuto -> Guardar
+3. No tocar nada durante 1 minuto
+4. **Verificar:** Sesion se cierra, redirige a login con mensaje "Tu sesion ha expirado por inactividad"
+
+## 7. Pruebas de aceptacion completas (HU-4)
+
+### TIC-112: Solo admins pueden ingresar
+```bash
+curl -X POST http://localhost:8000/api/v1/users/admin_login/ -H "Content-Type: application/json" -d "{\"email\": \"admin@ticketproject.com\", \"password\": \"Admin1234!\"}"
+```
+**Verificar:** Respuesta con `"status": "success"` y tokens JWT
+
+### TIC-113: Comprador/Promotor denegados
+```bash
+curl -X POST http://localhost:8000/api/v1/users/admin_login/ -H "Content-Type: application/json" -d "{\"email\": \"comprador@ticketproject.com\", \"password\": \"Comprador1234!\"}"
+```
+**Verificar:** Respuesta con `"message": "Permisos insuficientes."` (HTTP 403)
+
+### TIC-114: Bloqueo por intentos fallidos
+Ingresar password incorrecta 3 veces en `/admin/login` -> verificar bloqueo de 15 minutos
+
+### TIC-115: Redireccion a /admin/dashboard
+Login exitoso como admin -> verificar URL es `/admin/dashboard`
+
+### TIC-116: Timeout de inactividad
+Configurar timeout a 1 min -> esperar -> verificar cierre de sesion

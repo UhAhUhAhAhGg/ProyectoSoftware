@@ -161,6 +161,30 @@
   font-weight: 600;
 }
 
+/* ===== BOTÓN PERFIL ===== */
+.btn-perfil {
+  padding: 8px 16px;
+  background: var(--color-marron);
+  color: white;
+  border: 2px solid var(--color-marron);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.btn-perfil:hover {
+  background: transparent;
+  color: var(--color-marron);
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(173, 129, 73, 0.3);
+}
+
 /* ===== BOTÓN LOGOUT ===== */
 .btn-logout {
   padding: 8px 16px;

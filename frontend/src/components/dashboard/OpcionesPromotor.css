@@ -50,18 +50,18 @@
   margin-right: 20px;
 }
 
-.btn-texto {
+.btn-crear-evento .btn-texto {
   flex: 1;
   display: flex;
   flex-direction: column;
 }
 
-.btn-texto strong {
+.btn-crear-evento .btn-texto strong {
   font-size: 24px;
   margin-bottom: 5px;
 }
 
-.btn-texto small {
+.btn-crear-evento .btn-texto small {
   font-size: 14px;
   opacity: 0.9;
 }
@@ -453,7 +453,7 @@ body.dark-mode .btn-accion.secundario {
     margin-top: 15px;
   }
   
-  .btn-texto strong {
+  .btn-crear-evento .btn-texto strong {
     font-size: 20px;
   }
   

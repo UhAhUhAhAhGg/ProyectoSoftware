@@ -1,9 +1,19 @@
 'use client';
 
-import { createContext, useState, useContext, useEffect } from 'react';
+import { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { authService } from '../services/authService';
+import { apiFetch } from '../services/apiHelper';
 
 const AuthContext = createContext();
+
+// Valor por defecto: 15 minutos (en ms)
+const DEFAULT_INACTIVITY_TIMEOUT = 15 * 60 * 1000;
+
+const getInactivityTimeout = () => {
+  const stored = localStorage.getItem('inactivity_timeout_minutes');
+  if (stored) return parseInt(stored, 10) * 60 * 1000;
+  return DEFAULT_INACTIVITY_TIMEOUT;
+};
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -17,20 +27,78 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [inactivityMinutes, setInactivityMinutes] = useState(15);
+  const inactivityTimer = useRef(null);
+  const timeoutRef = useRef(getInactivityTimeout());
+
+  const logout = useCallback(() => {
+    setUser(null);
+    setToken(null);
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    localStorage.removeItem('refresh');
+    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+  }, []);
+
+  // --- Cierre automático por inactividad ---
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+    inactivityTimer.current = setTimeout(() => {
+      if (localStorage.getItem('token')) {
+        setSessionExpired(true);
+        logout();
+      }
+    }, timeoutRef.current);
+  }, [logout]);
+
+  // Permitir al admin cambiar el timeout desde Configuración Global
+  const updateInactivityTimeout = useCallback((minutes) => {
+    const mins = Math.max(1, Math.min(60, minutes)); // entre 1 y 60 min
+    localStorage.setItem('inactivity_timeout_minutes', String(mins));
+    timeoutRef.current = mins * 60 * 1000;
+    setInactivityMinutes(mins);
+    // Reiniciar el timer con el nuevo valor
+    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+    inactivityTimer.current = setTimeout(() => {
+      if (localStorage.getItem('token')) {
+        setSessionExpired(true);
+        logout();
+      }
+    }, timeoutRef.current);
+  }, [logout]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    const handleActivity = () => resetInactivityTimer();
+
+    events.forEach((e) => window.addEventListener(e, handleActivity));
+    resetInactivityTimer(); // iniciar el timer al montar
+
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, handleActivity));
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+    };
+  }, [user, resetInactivityTimer]);
 
   // Restaurar sesión guardada al cargar la app
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     const storedToken = localStorage.getItem('token');
+    const storedTimeout = localStorage.getItem('inactivity_timeout_minutes');
 
     if (storedUser && storedToken) {
       setUser(JSON.parse(storedUser));
       setToken(storedToken);
     }
+    if (storedTimeout) setInactivityMinutes(parseInt(storedTimeout, 10));
     setLoading(false);
   }, []);
 
   const login = (userData, authToken, refreshToken) => {
+    setSessionExpired(false);
     setUser(userData);
     setToken(authToken);
     localStorage.setItem('user', JSON.stringify(userData));
@@ -40,16 +108,35 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    localStorage.removeItem('refresh');
-  };
+  const updateUserProfile = async (updatedData) => {
+    if (!token) throw new Error('No hay sesión activa.');
 
-  const updateUserProfile = (updatedData) => {
-    const updatedUser = { ...user, ...updatedData };
+    const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:8000';
+    const response = await apiFetch(`${AUTH_URL}/api/v1/users/me/`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        first_name: updatedData.first_name || '',
+        last_name: updatedData.last_name || '',
+        phone: updatedData.phone || '',
+        profile_photo_url: updatedData.profile_photo_url || null,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || err.detail || 'Error al actualizar el perfil.');
+    }
+
+    const updatedUser = {
+      ...user,
+      nombre: `${updatedData.first_name} ${updatedData.last_name}`.trim(),
+      first_name: updatedData.first_name,
+      last_name: updatedData.last_name,
+      phone: updatedData.phone,
+      telefono: updatedData.phone,
+      profile_photo_url: updatedData.profile_photo_url,
+      avatar: updatedData.profile_photo_url,
+    };
     setUser(updatedUser);
     localStorage.setItem('user', JSON.stringify(updatedUser));
     return updatedUser;
@@ -81,6 +168,8 @@ export const AuthProvider = ({ children }) => {
     return '/dashboard/comprador';
   };
 
+  const clearSessionExpired = () => setSessionExpired(false);
+
   const value = {
     user,
     token,
@@ -94,6 +183,10 @@ export const AuthProvider = ({ children }) => {
     isPromotor,
     isAdministrador,
     getDashboardPath,
+    sessionExpired,
+    clearSessionExpired,
+    inactivityMinutes,
+    updateInactivityTimeout,
   };
 
   return (

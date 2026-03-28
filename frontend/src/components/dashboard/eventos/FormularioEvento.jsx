@@ -48,16 +48,30 @@ function FormularioEvento() {
     }
   }, [formData.imagen]);
 
-  // Cargar datos si es edición
+  const [categorias, setCategorias] = useState([]);
+
+  // Cargar datos iniciales
   useEffect(() => {
-    if (isEditing) {
-      const evento = eventosService.getEventoById(id);
-      if (evento) {
-        setFormData(evento);
-      } else {
-        navigate('/dashboard/mis-eventos');
+    const cargarDatos = async () => {
+      try {
+        const cats = await eventosService.getCategorias();
+        setCategorias(cats || []);
+      } catch (error) {
+        console.error("Error al cargar categorías:", error);
       }
-    }
+
+      if (isEditing) {
+        const evento = await eventosService.getEventoById(id);
+        if (evento) {
+          // Asegurarnos de que el select apunte al ID correcto si el backend devuelve un objeto
+          const catId = typeof evento.categoria === 'object' && evento.categoria !== null ? evento.categoria.id : evento.categoria;
+          setFormData(prev => ({ ...prev, ...evento, categoria: catId || '' }));
+        } else {
+          navigate('/dashboard/mis-eventos');
+        }
+      }
+    };
+    cargarDatos();
   }, [id, isEditing, navigate]);
 
   const handleChange = (e) => {
@@ -165,44 +179,34 @@ function FormularioEvento() {
     
     if (Object.keys(nuevosErrores).length === 0) {
       setCargando(true);
-      
       try {
         let datosAGuardar = { ...formData };
         if (formData.imagen instanceof File) {
-            datosAGuardar.imagen = await getBase64(formData.imagen);
+          datosAGuardar.imagen = await getBase64(formData.imagen);
         }
-        delete datosAGuardar.tiposEntrada; // Evitar sobreescribir entradas creadas independientemente
+        delete datosAGuardar.tiposEntrada;
 
-        // Simular envío
-        setTimeout(() => {
-          try {
-            if (isEditing) {
-              eventosService.actualizarEvento(id, datosAGuardar);
-              alert('✅ Evento actualizado exitosamente');
-            } else {
-              const eventoCreado = eventosService.crearEvento(datosAGuardar, user.id);
-              nuevosTiposEntrada.forEach(tipo => {
-                const tipoLimpio = { ...tipo };
-                delete tipoLimpio.id; // Remover ID temporal simulado
-                eventosService.crearTipoEntrada(eventoCreado.id, tipoLimpio);
-              });
-              alert('✅ Evento creado exitosamente');
-            }
-            navigate('/dashboard/mis-eventos');
-          } catch (error) {
-            alert('Error al guardar el evento');
-          } finally {
-            setCargando(false);
+        if (isEditing) {
+          await eventosService.actualizarEvento(id, datosAGuardar);
+          alert('✅ Evento actualizado exitosamente');
+        } else {
+          const eventoCreado = await eventosService.crearEvento(datosAGuardar, user.id);
+          // Crear tipos de entrada asociados
+          for (const tipo of nuevosTiposEntrada) {
+            const tipoLimpio = { ...tipo };
+            delete tipoLimpio.id;
+            await eventosService.crearTipoEntrada(eventoCreado.id, tipoLimpio);
           }
-        }, 1000);
-      } catch (err) {
-        console.error('Error convirtiendo imagen:', err);
-        alert('Error procesando la imagen');
+          alert('✅ Evento creado exitosamente');
+        }
+        navigate('/dashboard/mis-eventos');
+      } catch (error) {
+        alert('Error al guardar el evento: ' + (error.message || ''));
+      } finally {
         setCargando(false);
       }
     } else {
       setErrores(nuevosErrores);
-      // Scroll al primer error
       const primerError = document.querySelector('.error-mensaje');
       if (primerError) {
         primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -328,14 +332,9 @@ function FormularioEvento() {
                 style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', background: '#f9f9f9', color: '#555' }}
               >
                 <option value="">Selecciona una categoría</option>
-                <option value="Música">Música y Conciertos</option>
-                <option value="Teatro">Teatro y Artes Escénicas</option>
-                <option value="Deportes">Deportes</option>
-                <option value="Conferencias">Conferencias y Seminarios</option>
-                <option value="Festivales">Festivales</option>
-                <option value="Familia">Familia y Niños</option>
-                <option value="Arte">Arte y Exposiciones</option>
-                <option value="Otros">Otros</option>
+                {categorias.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
               </select>
               {errores.categoria && <span className="error-mensaje">{errores.categoria}</span>}
             </div>
@@ -415,10 +414,11 @@ function FormularioEvento() {
           <button 
             type="button"
             className="btn-preview"
-            onClick={() => {
+            onClick={async () => {
               setMostrarPreview(!mostrarPreview);
               if (!mostrarPreview && isEditing) {
-                setPreviewTickets(eventosService.getTiposEntradaByEvento(id).filter(t => t.estado === 'activo') || []);
+                const tipos = await eventosService.getTiposEntradaByEvento(id);
+                setPreviewTickets(tipos.filter(t => t.estado === 'activo') || []);
               }
             }}
           >

@@ -16,13 +16,31 @@ export const authService = {
       throw new Error(msg);
     }
 
-    // El backend devuelve: { access, refresh, email, role }
+    // El backend devuelve: { id, access, refresh, email, role }
+    // Obtener datos del perfil para mostrar el nombre en el dashboard
+    let profileData = {};
+    try {
+      const profileRes = await fetch(`${API_URL}/api/v1/users/me/`, {
+        headers: { Authorization: `Bearer ${data.access}` },
+      });
+      if (profileRes.ok) profileData = await profileRes.json();
+    } catch {}
+
+    const nombre = [profileData.first_name, profileData.last_name].filter(Boolean).join(' ');
+
     return {
       success: true,
       data: {
         user: {
+          id: data.id,
           email: data.email,
           role: data.role,
+          nombre: nombre || '',
+          first_name: profileData.first_name || '',
+          last_name: profileData.last_name || '',
+          phone: profileData.phone || '',
+          profile_photo_url: profileData.profile_photo_url || null,
+          avatar: profileData.profile_photo_url || null,
         },
         token: data.access,
         refresh: data.refresh,
@@ -45,12 +63,16 @@ export const authService = {
       throw new Error(msg);
     }
 
+    // El backend devuelve: { status, data: { id, email, role, ... }, access, refresh }
+    const userData = data.data || {};
+
     return {
       success: true,
       data: {
         user: {
-          email: data.data.email,
-          role: data.data.role,
+          id: userData.id,
+          email: userData.email,
+          role: userData.role,
         },
         token: data.access,
         refresh: data.refresh,

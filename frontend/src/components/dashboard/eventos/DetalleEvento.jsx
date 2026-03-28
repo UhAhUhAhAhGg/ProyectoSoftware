@@ -1,10 +1,35 @@
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
 import './DetalleEvento.css';
 
 function DetalleEvento() {
   const { id } = useParams();
-  const evento = eventosService.getEventoById(id);
+  const [evento, setEvento] = useState(null);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    const cargar = async () => {
+      try {
+        const data = await eventosService.getEventoById(id);
+        setEvento(data);
+      } catch {
+        setEvento(null);
+      } finally {
+        setCargando(false);
+      }
+    };
+    cargar();
+  }, [id]);
+
+  if (cargando) {
+    return (
+      <section className="detalle-evento estado-vacio">
+        <div className="spinner"></div>
+        <p>Cargando evento...</p>
+      </section>
+    );
+  }
 
   if (!evento || evento.estado !== 'activo') {
     return (
@@ -18,14 +43,16 @@ function DetalleEvento() {
     );
   }
 
-  const porcentaje = Math.round((evento.boletosVendidos / evento.capacidad) * 100);
+  const porcentaje = evento.capacidad > 0
+    ? Math.round((evento.boletosVendidos / evento.capacidad) * 100)
+    : 0;
 
   return (
     <section className="detalle-evento">
       <Link className="volver-link" to="/dashboard/eventos">← Volver a eventos</Link>
 
       <div className="detalle-card">
-        <img src={evento.imagen} alt={evento.nombre} />
+        {evento.imagen && <img src={evento.imagen} alt={evento.nombre} />}
 
         <div className="detalle-contenido">
           <h2>{evento.nombre}</h2>
@@ -35,10 +62,20 @@ function DetalleEvento() {
             <p><strong>Fecha:</strong> {new Date(evento.fecha).toLocaleDateString('es-ES')}</p>
             <p><strong>Hora:</strong> {evento.hora}</p>
             <p><strong>Lugar:</strong> {evento.ubicacion}</p>
-            <p><strong>Ciudad:</strong> {evento.ciudad}</p>
-            <p><strong>Dirección:</strong> {evento.direccion}</p>
-            <p><strong>Precio base:</strong> ${evento.precio}</p>
           </div>
+
+          {evento.tiposEntrada.length > 0 && (
+            <div className="tipos-entrada">
+              <h3>Tipos de entrada</h3>
+              {evento.tiposEntrada.map((t) => (
+                <div key={t.id} className="tipo-entrada-item">
+                  <span className="tipo-nombre">{t.nombre}</span>
+                  <span className="tipo-precio">Bs. {t.precio}</span>
+                  <span className="tipo-disponible">{t.disponibles} disponibles</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="disponibilidad">
             <div className="fila">

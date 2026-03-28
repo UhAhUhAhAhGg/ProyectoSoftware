@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../services/apiHelper';
 import './PerfilUsuario.css';
 
 function PerfilUsuario() {
@@ -8,14 +9,23 @@ function PerfilUsuario() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
+  const [profileData, setProfileData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
   const initialData = useMemo(() => {
-    return {
-      nombre: user?.nombre || '',
-      telefono: user?.telefono || '',
-      avatar: user?.avatar || '',
+    if (!profileData) return {
+      nombre: user?.nombre || user?.first_name || '',
+      telefono: user?.telefono || user?.phone || '',
+      avatar: user?.avatar || user?.profile_photo_url || '',
       email: user?.email || '',
     };
-  }, [user]);
+    return {
+      nombre: `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim(),
+      telefono: profileData.phone || '',
+      avatar: profileData.profile_photo_url || '',
+      email: profileData.email || user?.email || '',
+    };
+  }, [profileData, user]);
 
   const [formData, setFormData] = useState(initialData);
   const [editando, setEditando] = useState(false);
@@ -28,14 +38,33 @@ function PerfilUsuario() {
   useEffect(() => {
     if (!isAuthenticated || !user) {
       navigate('/login');
+      return;
     }
+
+    // Cargar datos completos del perfil desde el backend
+    const cargarPerfil = async () => {
+      try {
+        const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:8000';
+        const res = await apiFetch(`${AUTH_URL}/api/v1/users/me/`);
+        if (res.ok) {
+          const data = await res.json();
+          setProfileData(data);
+        }
+      } catch (err) {
+        console.error('Error loading profile:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    cargarPerfil();
   }, [isAuthenticated, user, navigate]);
 
   useEffect(() => {
     setFormData(initialData);
   }, [initialData]);
 
-  if (!isAuthenticated || !user) {
+  if (!isAuthenticated || !user || loading) {
     return null;
   }
 
@@ -62,7 +91,7 @@ function PerfilUsuario() {
     setMensaje('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setMensaje('');
     setError('');
@@ -77,14 +106,30 @@ function PerfilUsuario() {
       return;
     }
 
-    updateUserProfile({
-      nombre: formData.nombre.trim(),
-      telefono: formData.telefono.trim(),
-      avatar: formData.avatar || null,
-    });
+    try {
+      const [firstName, ...lastNameParts] = formData.nombre.trim().split(' ');
+      const lastName = lastNameParts.join(' ');
 
-    setMensaje('Tus datos se actualizaron correctamente.');
-    setEditando(false);
+      const updatedUser = await updateUserProfile({
+        first_name: firstName,
+        last_name: lastName,
+        phone: formData.telefono.trim(),
+        profile_photo_url: formData.avatar || null,
+      });
+
+      // Actualizar formData con los nuevos valores
+      setFormData({
+        nombre: formData.nombre.trim(),
+        telefono: formData.telefono.trim(),
+        avatar: formData.avatar,
+        email: formData.email,
+      });
+
+      setMensaje('Tus datos se actualizaron correctamente.');
+      setEditando(false);
+    } catch (err) {
+      setError(err.message || 'No fue posible actualizar tus datos.');
+    }
   };
 
   const handleDeleteAccount = async () => {
@@ -206,10 +251,15 @@ function PerfilUsuario() {
         {showDeleteModal && (
           <div className="modal-overlay" onClick={() => !deleteLoading && setShowDeleteModal(false)}>
             <div className="modal-contenido" onClick={(e) => e.stopPropagation()}>
-              <h3>Confirmar eliminación de cuenta</h3>
-              <p>
-                Esta acción es permanente. Ingresa tu contraseña para confirmar.
-              </p>
+              <h3>¿Seguro que quieres eliminar tu cuenta?</h3>
+              <p>Esta acción es <strong>permanente e irreversible</strong>. Al confirmar:</p>
+              <ul className="consecuencias-lista">
+                <li>Perderás acceso a tu cuenta inmediatamente.</li>
+                <li>Todos tus datos personales serán retirados de la plataforma.</li>
+                <li>No podrás recuperar tu historial, boletos ni favoritos.</li>
+                <li>Necesitarás registrarte nuevamente si deseas usar la plataforma.</li>
+              </ul>
+              <p>Ingresa tu contraseña para confirmar:</p>
               <input
                 type="password"
                 value={deletePassword}

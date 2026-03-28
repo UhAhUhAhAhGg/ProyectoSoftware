@@ -120,6 +120,7 @@ class LoginSerializer(serializers.Serializer):
         refresh['role'] = user.role.name if user.role else None
 
         return {
+            'id': str(user.id),
             'email': user.email,
             'role': user.role.name if user.role else None,
             'access': str(refresh.access_token),
@@ -150,6 +151,58 @@ class UserUpdateSerializer(serializers.ModelSerializer):
                 setattr(profile, attr, value)
             profile.save()
             
+        return instance
+
+
+class UserMeSerializer(serializers.ModelSerializer):
+    """Serializer para el endpoint /users/me/ (obtener/actualizar perfil del usuario autenticado)"""
+    first_name = serializers.SerializerMethodField()
+    last_name = serializers.SerializerMethodField()
+    phone = serializers.SerializerMethodField()
+    profile_photo_url = serializers.SerializerMethodField()
+    role = serializers.CharField(source='role.name', read_only=True)
+
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'role', 'first_name', 'last_name', 'phone', 'profile_photo_url']
+        read_only_fields = ['id', 'email', 'role']
+
+    def get_first_name(self, obj):
+        return getattr(obj.profile, 'first_name', '') if hasattr(obj, 'profile') else ''
+
+    def get_last_name(self, obj):
+        return getattr(obj.profile, 'last_name', '') if hasattr(obj, 'profile') else ''
+
+    def get_phone(self, obj):
+        return getattr(obj.profile, 'phone', '') if hasattr(obj, 'profile') else ''
+
+    def get_profile_photo_url(self, obj):
+        return getattr(obj.profile, 'profile_photo_url', '') if hasattr(obj, 'profile') else ''
+
+    def update(self, instance, validated_data):
+        from datetime import date as today
+        profile_data = validated_data.pop('profile', {})
+
+        # Buscar campos planos que el frontend envía directamente
+        direct_fields = ['first_name', 'last_name', 'phone', 'profile_photo_url']
+        for field in direct_fields:
+            if field in validated_data:
+                profile_data[field] = validated_data.pop(field)
+
+        if profile_data:
+            profile, _ = UserProfile.objects.get_or_create(
+                user=instance,
+                defaults={
+                    'first_name': '',
+                    'last_name': '',
+                    'phone': '',
+                    'date_of_birth': today.today(),
+                }
+            )
+            for attr, value in profile_data.items():
+                setattr(profile, attr, value)
+            profile.save()
+
         return instance
 
 
@@ -191,6 +244,7 @@ class AdminLoginSerializer(serializers.Serializer):
         refresh['role'] = user.role.name if user.role else None
 
         return {
+            'id': str(user.id),
             'email': user.email,
             'role': user.role.name if user.role else None,
             'access': str(refresh.access_token),

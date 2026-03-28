@@ -9,10 +9,18 @@ function ExplorarEventos() {
   const [busqueda, setBusqueda] = useState('');
 
   useEffect(() => {
-    setCargando(true);
-    const disponibles = eventosService.getEventosDisponibles();
-    setEventos(disponibles);
-    setCargando(false);
+    const cargar = async () => {
+      setCargando(true);
+      try {
+        const disponibles = await eventosService.getEventosDisponibles();
+        setEventos(disponibles);
+      } catch {
+        setEventos([]);
+      } finally {
+        setCargando(false);
+      }
+    };
+    cargar();
   }, []);
 
   const eventosFiltrados = useMemo(() => {

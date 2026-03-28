@@ -93,7 +93,7 @@ class UserProfile(models.Model):
     last_name = models.CharField(max_length=100)
     phone = models.CharField(max_length=50)
     date_of_birth = models.DateField()
-    profile_photo_url = models.CharField(max_length=255, blank=True, null=True)
+    profile_photo_url = models.TextField(blank=True, null=True)  # TextField para soportar base64 largo
 
     class Meta:
         verbose_name = 'User Profile'

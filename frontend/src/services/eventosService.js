@@ -1,306 +1,283 @@
-// Simulación de base de datos local
-const EVENTOS_STORAGE_KEY = 'ticketgo_eventos';
+import { apiFetch } from './apiHelper';
 
-// Obtener eventos del localStorage
-const getEventosStorage = () => {
-  const eventos = localStorage.getItem(EVENTOS_STORAGE_KEY);
-  return eventos ? JSON.parse(eventos) : [];
+const EVENTS_URL = process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002';
+
+const STATUS_MAP = {
+  draft: 'borrador',
+  published: 'activo',
+  cancelled: 'cancelado',
+  completed: 'finalizado',
 };
 
-// Guardar eventos en localStorage
-const guardarEventosStorage = (eventos) => {
-  localStorage.setItem(EVENTOS_STORAGE_KEY, JSON.stringify(eventos));
+const mapEvento = (e) => {
+  const tiposEntrada = (e.tickets ?? []).map(t => ({
+    id: t.id,
+    nombre: t.name,
+    descripcion: t.description,
+    precio: parseFloat(t.price),
+    cupoMaximo: t.max_capacity,
+    cupoVendido: t.current_sold ?? 0,
+    estado: TICKET_STATUS_MAP[t.status] ?? t.status,
+    disponibles: t.available_capacity ?? (t.max_capacity - (t.current_sold ?? 0)),
+  }));
+  const activos = tiposEntrada.filter(t => t.estado === 'activo');
+  const precio = activos.length > 0 ? Math.min(...activos.map(t => t.precio)) : 0;
+  return {
+    id: e.id,
+    nombre: e.name,
+    descripcion: e.description,
+    fecha: e.event_date,
+    hora: e.event_time,
+    ubicacion: e.location,
+    ciudad: e.location,
+    direccion: e.location,
+    capacidad: e.capacity,
+    boletosVendidos: 0,
+    precio,
+    imagen: e.image || null,
+    estado: STATUS_MAP[e.status] ?? e.status,
+    promotorId: e.promoter_id,
+    categoria: e.category ?? null,
+    categoriaNombre: e.category_name ?? null,
+    tiposEntrada,
+  };
 };
 
-// Datos de ejemplo con tipos de entrada
-const eventosEjemplo = [
-  {
-    id: 1,
-    nombre: 'Concierto de Rock',
-    descripcion: 'La mejor banda de rock en vivo',
-    fecha: '2024-04-15',
-    hora: '20:00',
-    ubicacion: 'Estadio Centenario',
-    direccion: 'Av. Siempre Viva 123',
-    ciudad: 'Buenos Aires',
-    capacidad: 1000,
-    boletosVendidos: 450,
-    precio: 2500,
-    imagen: 'https://via.placeholder.com/300x200?text=Rock',
-    estado: 'activo',
-    promotorId: 2,
-    fechaCreacion: '2024-01-10',
-    tiposEntrada: [
-      {
-        id: 101,
-        nombre: 'General',
-        descripcion: 'Acceso general al evento',
-        precio: 2500,
-        cupoMaximo: 600,
-        cupoVendido: 300,
-        estado: 'activo'
-      },
-      {
-        id: 102,
-        nombre: 'VIP',
-        descripcion: 'Acceso preferencial con bebida incluida',
-        precio: 5000,
-        cupoMaximo: 200,
-        cupoVendido: 80,
-        estado: 'activo'
-      },
-      {
-        id: 103,
-        nombre: 'Platea',
-        descripcion: 'Asiento numerado en platea',
-        precio: 3500,
-        cupoMaximo: 200,
-        cupoVendido: 70,
-        estado: 'activo'
-      }
-    ]
-  },
-  {
-    id: 2,
-    nombre: 'Festival de Jazz',
-    descripcion: 'Noches de jazz al aire libre',
-    fecha: '2024-05-20',
-    hora: '19:30',
-    ubicacion: 'Teatro Colón',
-    direccion: 'Cerrito 628',
-    ciudad: 'Buenos Aires',
-    capacidad: 800,
-    boletosVendidos: 120,
-    precio: 1800,
-    imagen: 'https://via.placeholder.com/300x200?text=Jazz',
-    estado: 'activo',
-    promotorId: 2,
-    fechaCreacion: '2024-01-15',
-    tiposEntrada: [
-      {
-        id: 201,
-        nombre: 'General',
-        descripcion: 'Acceso general',
-        precio: 1800,
-        cupoMaximo: 500,
-        cupoVendido: 80,
-        estado: 'activo'
-      },
-      {
-        id: 202,
-        nombre: 'Palco',
-        descripcion: 'Palco con vista preferencial',
-        precio: 3500,
-        cupoMaximo: 300,
-        cupoVendido: 40,
-        estado: 'activo'
-      }
-    ]
-  }
-];
-
-// Inicializar eventos si no existen
-const inicializarEventos = () => {
-  const eventos = getEventosStorage();
-  if (eventos.length === 0) {
-    guardarEventosStorage(eventosEjemplo);
-  }
+const TICKET_STATUS_MAP = {
+  active: 'activo',
+  inactive: 'eliminado',
+  sold_out: 'agotado',
 };
-inicializarEventos();
+
+const mapTipoEntrada = (t) => ({
+  id: t.id,
+  nombre: t.name,
+  descripcion: t.description,
+  precio: parseFloat(t.price),
+  cupoMaximo: t.max_capacity,
+  cupoVendido: t.current_sold ?? 0,
+  estado: TICKET_STATUS_MAP[t.status] ?? t.status,
+  disponibles: t.available_capacity ?? (t.max_capacity - (t.current_sold ?? 0)),
+});
 
 export const eventosService = {
-  // Obtener eventos disponibles para compradores
-  getEventosDisponibles: () => {
-    const eventos = getEventosStorage();
-    return eventos.filter((e) => e.estado === 'activo');
+  getCategorias: async () => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/categories/`);
+    if (!res.ok) throw new Error('No se pudieron cargar las categorías.');
+    const data = await res.json();
+    return data.results ?? data;
   },
 
-  // Obtener todos los eventos del promotor
-  getEventosByPromotor: (promotorId) => {
-    const eventos = getEventosStorage();
-    return eventos.filter(e => e.promotorId === promotorId);
+  getEventosDisponibles: async () => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/events/?status=published`);
+    if (!res.ok) throw new Error('No se pudieron cargar los eventos.');
+    const data = await res.json();
+    return (data.results ?? data).map(mapEvento);
   },
 
-  // Obtener un evento por ID
-  getEventoById: (id) => {
-    const eventos = getEventosStorage();
-    return eventos.find(e => e.id === parseInt(id));
+  getEventosByPromotor: async (promotorId) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/events/by_promoter/?promoter_id=${promotorId}`);
+    if (!res.ok) throw new Error('No se pudieron cargar tus eventos.');
+    const data = await res.json();
+    return (data.results ?? data).map(mapEvento);
   },
 
-  // Crear nuevo evento
-  crearEvento: (eventoData, promotorId) => {
-    const eventos = getEventosStorage();
-    const nuevoEvento = {
-      ...eventoData,
-      id: Date.now(),
-      promotorId,
-      boletosVendidos: 0,
-      estado: 'activo',
-      fechaCreacion: new Date().toISOString().split('T')[0],
-      tiposEntrada: [] // Inicializar sin tipos de entrada
-    };
-    eventos.push(nuevoEvento);
-    guardarEventosStorage(eventos);
-    return nuevoEvento;
-  },
+  getEventoById: async (id) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/events/${id}/`);
+    if (!res.ok) return null;
+    const e = await res.json();
+    const mapped = mapEvento(e);
 
-  // Actualizar evento
-  actualizarEvento: (id, eventoData) => {
-    const eventos = getEventosStorage();
-    const index = eventos.findIndex(e => e.id === parseInt(id));
-    if (index !== -1) {
-      eventos[index] = { ...eventos[index], ...eventoData };
-      guardarEventosStorage(eventos);
-      return eventos[index];
-    }
-    return null;
-  },
-
-  // Eliminar evento (baja lógica)
-  eliminarEvento: (id) => {
-    const eventos = getEventosStorage();
-    const index = eventos.findIndex(e => e.id === parseInt(id));
-    if (index !== -1) {
-      eventos[index].estado = 'cancelado';
-      guardarEventosStorage(eventos);
-      return true;
-    }
-    return false;
-  },
-
-  // Restaurar evento
-  restaurarEvento: (id) => {
-    const eventos = getEventosStorage();
-    const index = eventos.findIndex(e => e.id === parseInt(id));
-    if (index !== -1) {
-      eventos[index].estado = 'activo';
-      guardarEventosStorage(eventos);
-      return true;
-    }
-    return false;
-  },
-
-  // ===== MÉTODOS PARA TIPOS DE ENTRADA =====
-
-  // Obtener todos los tipos de entrada de un evento
-  getTiposEntradaByEvento: (eventoId) => {
-    const evento = eventosService.getEventoById(eventoId);
-    return evento?.tiposEntrada || [];
-  },
-
-  // Obtener un tipo de entrada por ID
-  getTipoEntradaById: (eventoId, tipoId) => {
-    const evento = eventosService.getEventoById(eventoId);
-    return evento?.tiposEntrada?.find(t => t.id === parseInt(tipoId));
-  },
-
-  // Crear nuevo tipo de entrada
-  crearTipoEntrada: (eventoId, tipoData) => {
-    const eventos = getEventosStorage();
-    const eventoIndex = eventos.findIndex(e => e.id === parseInt(eventoId));
-    
-    if (eventoIndex !== -1) {
-      if (!eventos[eventoIndex].tiposEntrada) {
-        eventos[eventoIndex].tiposEntrada = [];
+    const ticketsRes = await apiFetch(`${EVENTS_URL}/api/v1/events/${id}/tickets/`);
+    if (ticketsRes.ok) {
+      const tickets = await ticketsRes.json();
+      mapped.tiposEntrada = (tickets.results ?? tickets).map(mapTipoEntrada);
+      if (mapped.tiposEntrada.length > 0) {
+        mapped.precio = Math.min(...mapped.tiposEntrada.map((t) => t.precio));
       }
+    }
+    return mapped;
+  },
 
-      // Validar que no exceda la capacidad total del evento
-      const sumaCuposActual = eventos[eventoIndex].tiposEntrada
-        .filter(t => t.estado === 'activo')
-        .reduce((sum, t) => sum + t.cupoMaximo, 0);
+  crearEvento: async (eventoData, promotorId) => {
+    let res;
+    if (eventoData.imagen) {
+      // Usar FormData para enviar archivos e información
+      const formData = new FormData();
+      formData.append('name', eventoData.nombre);
+      formData.append('description', eventoData.descripcion);
+      formData.append('event_date', eventoData.fecha);
+      formData.append('event_time', eventoData.hora);
+      formData.append('location', eventoData.ubicacion);
+      formData.append('capacity', parseInt(eventoData.capacidad));
+      formData.append('promoter_id', promotorId);
+      formData.append('status', 'published');
+      if (eventoData.categoria) formData.append('category', eventoData.categoria);
       
-      if (sumaCuposActual + parseInt(tipoData.cupoMaximo) > eventos[eventoIndex].capacidad) {
-        throw new Error('El cupo total de entradas no puede exceder la capacidad del evento');
+      // Convert base64 to Blob
+      if (typeof eventoData.imagen === 'string' && eventoData.imagen.startsWith('data:image')) {
+        const resBlob = await fetch(eventoData.imagen);
+        const blob = await resBlob.blob();
+        formData.append('image', blob, 'image.jpg');
       }
 
-      const nuevoTipo = {
-        ...tipoData,
-        id: Date.now() + Math.floor(Math.random() * 1000),
-        cupoVendido: 0,
-        estado: 'activo'
-      };
-
-      eventos[eventoIndex].tiposEntrada.push(nuevoTipo);
-      guardarEventosStorage(eventos);
-      return nuevoTipo;
+      res = await apiFetch(`${EVENTS_URL}/api/v1/events/`, {
+        method: 'POST',
+        headers: {
+          // No setear Content-Type, fetch lo hará automáticamente con el boundary para FormData
+        },
+        body: formData,
+      });
+    } else {
+      res = await apiFetch(`${EVENTS_URL}/api/v1/events/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: eventoData.nombre,
+          description: eventoData.descripcion,
+          event_date: eventoData.fecha,
+          event_time: eventoData.hora,
+          location: eventoData.ubicacion,
+          capacity: parseInt(eventoData.capacidad),
+          promoter_id: promotorId,
+          category: eventoData.categoria || null,
+          status: 'published',
+        }),
+      });
     }
-    return null;
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error("DRF Error en crearEvento:", err);
+      const strErr = typeof err === 'object' ? JSON.stringify(err) : err;
+      throw new Error(err.detail || err.message || `No se pudo crear el evento. Detalles: ${strErr}`);
+    }
+    return mapEvento(await res.json());
   },
 
-  // Actualizar tipo de entrada
-  actualizarTipoEntrada: (eventoId, tipoId, tipoData) => {
-    const eventos = getEventosStorage();
-    const eventoIndex = eventos.findIndex(e => e.id === parseInt(eventoId));
-    
-    if (eventoIndex !== -1) {
-      const tipoIndex = eventos[eventoIndex].tiposEntrada?.findIndex(t => t.id === parseInt(tipoId));
+  actualizarEvento: async (id, eventoData) => {
+    let res;
+    if (eventoData.imagen && typeof eventoData.imagen === 'string' && eventoData.imagen.startsWith('data:image')) {
+      // Necesita FormData para nueva imagen
+      const formData = new FormData();
+      if (eventoData.nombre) formData.append('name', eventoData.nombre);
+      if (eventoData.descripcion) formData.append('description', eventoData.descripcion);
+      if (eventoData.fecha) formData.append('event_date', eventoData.fecha);
+      if (eventoData.hora) formData.append('event_time', eventoData.hora);
+      if (eventoData.ubicacion) formData.append('location', eventoData.ubicacion);
+      if (eventoData.capacidad) formData.append('capacity', parseInt(eventoData.capacidad));
+      if (eventoData.status) formData.append('status', eventoData.status);
+      if (eventoData.categoria) formData.append('category', eventoData.categoria);
       
-      if (tipoIndex !== -1 && tipoIndex !== undefined) {
-        const tipoActual = eventos[eventoIndex].tiposEntrada[tipoIndex];
-        
-        // Validar que no exceda la capacidad total (excepto para el mismo tipo)
-        const otrosTipos = eventos[eventoIndex].tiposEntrada
-          .filter((t, i) => i !== tipoIndex && t.estado === 'activo');
-        
-        const sumaOtrosCupos = otrosTipos.reduce((sum, t) => sum + t.cupoMaximo, 0);
-        
-        if (sumaOtrosCupos + parseInt(tipoData.cupoMaximo) > eventos[eventoIndex].capacidad) {
-          throw new Error('El cupo total de entradas no puede exceder la capacidad del evento');
-        }
+      const resBlob = await fetch(eventoData.imagen);
+      const blob = await resBlob.blob();
+      formData.append('image', blob, 'image.jpg');
 
-        // No permitir reducir el cupo por debajo de lo ya vendido
-        if (parseInt(tipoData.cupoMaximo) < tipoActual.cupoVendido) {
-          throw new Error(`No puedes reducir el cupo por debajo de los boletos ya vendidos (${tipoActual.cupoVendido})`);
-        }
+      res = await apiFetch(`${EVENTS_URL}/api/v1/events/${id}/`, {
+        method: 'PATCH',
+        body: formData,
+      });
+    } else {
+      // Solo texto, JSON normal
+      const body = {};
+      if (eventoData.nombre) body.name = eventoData.nombre;
+      if (eventoData.descripcion) body.description = eventoData.descripcion;
+      if (eventoData.fecha) body.event_date = eventoData.fecha;
+      if (eventoData.hora) body.event_time = eventoData.hora;
+      if (eventoData.ubicacion) body.location = eventoData.ubicacion;
+      if (eventoData.capacidad) body.capacity = parseInt(eventoData.capacidad);
+      if (eventoData.status) body.status = eventoData.status;
+      if (eventoData.categoria) body.category = eventoData.categoria;
 
-        eventos[eventoIndex].tiposEntrada[tipoIndex] = {
-          ...tipoActual,
-          ...tipoData
-        };
-        
-        guardarEventosStorage(eventos);
-        return eventos[eventoIndex].tiposEntrada[tipoIndex];
-      }
+      res = await apiFetch(`${EVENTS_URL}/api/v1/events/${id}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
     }
-    return null;
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'No se pudo actualizar el evento.');
+    }
+    return mapEvento(await res.json());
   },
 
-  // Eliminar tipo de entrada (baja lógica)
-  eliminarTipoEntrada: (eventoId, tipoId) => {
-    const eventos = getEventosStorage();
-    const eventoIndex = eventos.findIndex(e => e.id === parseInt(eventoId));
-    
-    if (eventoIndex !== -1) {
-      const tipoIndex = eventos[eventoIndex].tiposEntrada?.findIndex(t => t.id === parseInt(tipoId));
-      
-      if (tipoIndex !== -1 && tipoIndex !== undefined) {
-        // No permitir eliminar si ya tiene ventas
-        if (eventos[eventoIndex].tiposEntrada[tipoIndex].cupoVendido > 0) {
-          throw new Error('No se puede eliminar un tipo de entrada que ya tiene ventas');
-        }
-
-        eventos[eventoIndex].tiposEntrada[tipoIndex].estado = 'eliminado';
-        guardarEventosStorage(eventos);
-        return true;
-      }
+  eliminarEvento: async (id) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/events/${id}/`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'No se pudo eliminar el evento.');
     }
-    return false;
+    return true;
   },
 
-  // Restaurar tipo de entrada
-  restaurarTipoEntrada: (eventoId, tipoId) => {
-    const eventos = getEventosStorage();
-    const eventoIndex = eventos.findIndex(e => e.id === parseInt(eventoId));
-    
-    if (eventoIndex !== -1) {
-      const tipoIndex = eventos[eventoIndex].tiposEntrada?.findIndex(t => t.id === parseInt(tipoId));
-      
-      if (tipoIndex !== -1 && tipoIndex !== undefined) {
-        eventos[eventoIndex].tiposEntrada[tipoIndex].estado = 'activo';
-        guardarEventosStorage(eventos);
-        return true;
-      }
+  // ===== TIPOS DE ENTRADA =====
+
+  getTiposEntradaByEvento: async (eventoId) => {
+    const res = await apiFetch(
+      `${EVENTS_URL}/api/v1/ticket-types/by_event/?event_id=${eventoId}`
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.results ?? data).map(mapTipoEntrada);
+  },
+
+  crearTipoEntrada: async (eventoId, tipoData) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/ticket-types/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: eventoId,
+        name: tipoData.nombre,
+        description: tipoData.descripcion || '',
+        price: parseFloat(tipoData.precio),
+        max_capacity: parseInt(tipoData.cupoMaximo),
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error("DRF Error en crearTipoEntrada:", err);
+      const detalles = err.details || err.detail || '';
+      const strDetalles = typeof detalles === 'object' ? JSON.stringify(detalles) : detalles;
+      throw new Error(`${err.message || 'No se pudo crear el tipo de entrada.'} Detalles: ${strDetalles}`);
     }
-    return false;
-  }
+    return mapTipoEntrada(await res.json());
+  },
+
+  actualizarTipoEntrada: async (eventoId, tipoId, tipoData) => {
+    const body = {};
+    if (tipoData.nombre) body.name = tipoData.nombre;
+    if (tipoData.descripcion !== undefined) body.description = tipoData.descripcion;
+    if (tipoData.precio !== undefined) body.price = parseFloat(tipoData.precio);
+    if (tipoData.cupoMaximo !== undefined) body.max_capacity = parseInt(tipoData.cupoMaximo);
+    if (tipoData.estado !== undefined) {
+      const statusMap = { activo: 'active', eliminado: 'inactive', inactivo: 'inactive' };
+      body.status = statusMap[tipoData.estado] || tipoData.estado;
+    }
+
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/ticket-types/${tipoId}/`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'No se pudo actualizar el tipo de entrada.');
+    }
+    return mapTipoEntrada(await res.json());
+  },
+
+  eliminarTipoEntrada: async (eventoId, tipoId) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/ticket-types/${tipoId}/`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'No se pudo eliminar el tipo de entrada.');
+    }
+    return true;
+  },
 };
