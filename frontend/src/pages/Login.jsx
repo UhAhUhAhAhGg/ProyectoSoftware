@@ -16,7 +16,7 @@ function Login() {
   const [loginError, setLoginError] = useState('');
   const [darkMode, setDarkMode] = useState(false);
 
-  const { login, isAuthenticated, isComprador, isPromotor, isAdministrador } = useAuth();
+  const { login, isAuthenticated, isComprador, isPromotor, isAdministrador, sessionExpired, clearSessionExpired } = useAuth();
   const navigate = useNavigate();
 
   // Verificar preferencia del sistema para modo oscuro
@@ -29,7 +29,8 @@ function Login() {
   useEffect(() => {
     if (isAuthenticated) {
       if (isAdministrador) {
-        navigate('/admin/dashboard');
+        // /admin/dashboard es una ruta de Next.js App Router, no de React Router
+        window.location.href = '/admin/dashboard';
       } else if (isPromotor) {
         navigate('/dashboard');
       } else if (isComprador) {
@@ -100,6 +101,7 @@ function Login() {
       setLoginError('');
 
       try {
+        if (sessionExpired) clearSessionExpired();
         const response = await authService.login(formData.email, formData.password);
         
         // Verificar si el rol del backend coincide con la pestaña seleccionada
@@ -172,6 +174,13 @@ function Login() {
           </div>
 
         </div>
+
+        {sessionExpired && (
+          <div className="login-error" style={{ background: '#fff3cd', borderColor: '#e6c96b' }}>
+            <span className="error-icon">🔒</span>
+            <p style={{ color: '#856404' }}>Tu sesión se cerró automáticamente por inactividad. Inicia sesión nuevamente.</p>
+          </div>
+        )}
 
         {loginError && (
           <div className="login-error">

@@ -18,14 +18,16 @@ function ListaEventos() {
     cargarEventos();
   }, [user]);
 
-  const cargarEventos = () => {
+  const cargarEventos = async () => {
     setCargando(true);
-    // Simular carga
-    setTimeout(() => {
-      const eventosData = eventosService.getEventosByPromotor(user?.id);
+    try {
+      const eventosData = await eventosService.getEventosByPromotor(user?.id);
       setEventos(eventosData);
+    } catch {
+      setEventos([]);
+    } finally {
       setCargando(false);
-    }, 500);
+    }
   };
 
   const handleEliminarClick = (evento) => {
@@ -33,9 +35,13 @@ function ListaEventos() {
     setMostrarModal(true);
   };
 
-  const confirmarEliminar = () => {
+  const confirmarEliminar = async () => {
     if (eventoAEliminar) {
-      eventosService.eliminarEvento(eventoAEliminar.id);
+      try {
+        await eventosService.eliminarEvento(eventoAEliminar.id);
+      } catch (err) {
+        alert(err.message || 'No se pudo cancelar el evento.');
+      }
       cargarEventos();
       setMostrarModal(false);
       setEventoAEliminar(null);
@@ -47,8 +53,12 @@ function ListaEventos() {
     setEventoAEliminar(null);
   };
 
-  const handleRestaurar = (id) => {
-    eventosService.restaurarEvento(id);
+  const handleRestaurar = async (id) => {
+    try {
+      await eventosService.actualizarEvento(id, { status: 'published' });
+    } catch (err) {
+      alert(err.message || 'No se pudo restaurar el evento.');
+    }
     cargarEventos();
   };
 
@@ -86,14 +96,13 @@ function ListaEventos() {
   };
 
   const getRangoPrecios = (evento) => {
-    if (!evento.tiposEntrada || evento.tiposEntrada.length === 0) return 'Por definir';
+    if (!evento.tiposEntrada || evento.tiposEntrada.length === 0) return 'Sin entradas';
     const activos = evento.tiposEntrada.filter(t => t.estado === 'activo');
-    if (activos.length === 0) return 'Por definir';
-    
-    if (activos.length === 1) return `$${activos[0].precio}`;
-    
-    const minPrecio = Math.min(...activos.map(t => parseFloat(t.precio) || 0));
-    return `Desde $${minPrecio}`;
+    if (activos.length === 0) return 'Sin entradas activas';
+    const precios = activos.map(t => t.precio);
+    const min = Math.min(...precios);
+    const max = Math.max(...precios);
+    return min === max ? `Desde $${min}` : `$${min} - $${max}`;
   };
 
   if (cargando) {
@@ -189,9 +198,9 @@ function ListaEventos() {
 
               <div className="evento-info">
                 <h3>{evento.nombre}</h3>
-                {evento.categoria && (
+                {evento.categoriaNombre && (
                   <div style={{ display: 'inline-block', background: '#e0e0e0', color: '#333', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', marginBottom: '10px' }}>
-                    🏷️ {evento.categoria}
+                    🏷️ {evento.categoriaNombre}
                   </div>
                 )}
                 
@@ -317,9 +326,9 @@ function DetalleEventoModal({ evento, onClose, getRangoPrecios }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
           <div>
             <h2 style={{ margin: '0 0 5px 0', color: 'var(--color-marron)' }}>{evento.nombre}</h2>
-            {evento.categoria && (
+            {evento.categoriaNombre && (
               <span style={{ display: 'inline-block', background: '#e0e0e0', color: '#333', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85rem' }}>
-                🏷️ {evento.categoria}
+                🏷️ {evento.categoriaNombre}
               </span>
             )}
           </div>

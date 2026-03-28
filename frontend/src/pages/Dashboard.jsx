@@ -7,7 +7,7 @@ import OpcionesPromotor from '../components/dashboard/OpcionesPromotor';
 import './Dashboard.css';
 
 function Dashboard() {
-  const { user, isAuthenticated, isComprador, isPromotor, logout } = useAuth();
+  const { user, isAuthenticated, isComprador, isPromotor, isAdministrador, logout } = useAuth();
   const navigate = useNavigate();
   const [sidebarAbierto, setSidebarAbierto] = useState(false);
   const [notificaciones, setNotificaciones] = useState([
@@ -15,12 +15,15 @@ function Dashboard() {
     { id: 2, mensaje: 'Completa tu perfil para mejores recomendaciones', leida: false }
   ]);
 
-  // Redirigir si no está autenticado
+  // Redirigir si no está autenticado o si es admin (debe ir a /admin/dashboard)
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/login');
+    } else if (isAdministrador) {
+      // /admin/dashboard es una ruta de Next.js App Router, no de React Router
+      window.location.href = '/admin/dashboard';
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, isAdministrador, navigate]);
 
   // Marcar notificaciones como leídas
   const marcarComoLeidas = () => {
@@ -79,10 +82,15 @@ function Dashboard() {
             </div>
           </div>
 
+          <Link to="/dashboard/perfil" className="btn-perfil" title="Mi Perfil">
+            <span className="btn-icono">👤</span>
+            <span className="btn-texto">Mi Perfil</span>
+          </Link>
+
           <span className="user-badge">
             {isComprador ? '🛍️ Comprador' : '📢 Promotor'}
           </span>
-          
+
           <button onClick={logout} className="btn-logout" title="Cerrar sesión">
             <span className="btn-icono">🚪</span>
             <span className="btn-texto">Salir</span>

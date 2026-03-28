@@ -8,11 +8,13 @@ function RecuperarPassword() {
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState('');
   const [error, setError] = useState('');
+  const [mockLink, setMockLink] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setMensaje('');
+    setMockLink('');
 
     if (!email.trim()) {
       setError('Debes ingresar un correo electrónico.');
@@ -26,6 +28,9 @@ function RecuperarPassword() {
         response.data?.message ||
           'Si el correo está registrado, recibirás un enlace de recuperación en breve.'
       );
+      if (response.data?.mock_link) {
+        setMockLink(response.data.mock_link);
+      }
       setEmail('');
     } catch (err) {
       setError(err.message || 'No fue posible solicitar la recuperación.');
@@ -56,6 +61,15 @@ function RecuperarPassword() {
 
           {error && <p className="estado error">{error}</p>}
           {mensaje && <p className="estado success">{mensaje}</p>}
+
+          {mockLink && (
+            <div className="mock-link-box">
+              <p className="mock-link-label">Enlace de recuperación (modo desarrollo):</p>
+              <a href={mockLink} className="mock-link">
+                Haz clic aquí para restablecer tu contraseña
+              </a>
+            </div>
+          )}
 
           <button type="submit" disabled={loading}>
             {loading ? 'Enviando...' : 'Enviar enlace de recuperación'}

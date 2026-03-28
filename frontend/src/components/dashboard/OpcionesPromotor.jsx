@@ -42,6 +42,13 @@ function OpcionesPromotor() {
 
   const opcionesGestion = [
     {
+      id: 'perfil',
+      icono: '👤',
+      titulo: 'Mi Perfil',
+      descripcion: 'Edita tus datos personales',
+      link: '/dashboard/perfil'
+    },
+    {
       id: 'boletos-vendidos',
       icono: '🎟️',
       titulo: 'Boletos Vendidos',

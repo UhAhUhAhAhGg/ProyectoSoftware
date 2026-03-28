@@ -3,6 +3,12 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
 import './ResetPassword.css';
 
+const passwordRules = [
+  { id: 'length', label: 'Mínimo 8 caracteres', test: (p) => p.length >= 8 },
+  { id: 'upper', label: 'Al menos una letra mayúscula', test: (p) => /[A-Z]/.test(p) },
+  { id: 'number', label: 'Al menos un número', test: (p) => /\d/.test(p) },
+];
+
 function ResetPassword() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -18,6 +24,13 @@ function ResetPassword() {
   const [mensaje, setMensaje] = useState('');
   const [error, setError] = useState('');
 
+  const validatePassword = (pwd) => {
+    if (pwd.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
+    if (!/[A-Z]/.test(pwd)) return 'La contraseña debe tener al menos una letra mayúscula.';
+    if (!/\d/.test(pwd)) return 'La contraseña debe tener al menos un número.';
+    return null;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -28,10 +41,8 @@ function ResetPassword() {
       return;
     }
 
-    if (!password || password.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres.');
-      return;
-    }
+    const ruleError = validatePassword(password);
+    if (ruleError) { setError(ruleError); return; }
 
     if (password !== confirmPassword) {
       setError('Las contraseñas no coinciden.');
@@ -69,6 +80,16 @@ function ResetPassword() {
             placeholder="Mínimo 8 caracteres"
             disabled={loading}
           />
+
+          {password && (
+            <ul className="password-rules">
+              {passwordRules.map((rule) => (
+                <li key={rule.id} className={rule.test(password) ? 'rule-ok' : 'rule-fail'}>
+                  {rule.test(password) ? '✓' : '✗'} {rule.label}
+                </li>
+              ))}
+            </ul>
+          )}
 
           <label htmlFor="confirmPassword">Confirmar contraseña</label>
           <input

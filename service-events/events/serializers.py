@@ -9,9 +9,11 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class TicketTypeSerializer(serializers.ModelSerializer):
+    available_capacity = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = TicketType
-        fields = ['id', 'event_id', 'name', 'description', 'price', 'max_capacity', 'status']
+        fields = ['id', 'event', 'name', 'description', 'price', 'max_capacity', 'current_sold', 'available_capacity', 'status']
 
 
 class EventSerializer(serializers.ModelSerializer):
@@ -33,9 +35,10 @@ class EventSerializer(serializers.ModelSerializer):
             'image',
             'status',
             'created_at',
+            'category',
             'category_name',
             'tickets',
-            'disponibilidad' 
+            'disponibilidad'
         ]
         read_only_fields = ['id', 'created_at']
 
@@ -56,6 +59,7 @@ class EventCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
         fields = [
+            'id',
             'promoter_id',
             'name',
             'description',
@@ -67,6 +71,7 @@ class EventCreateSerializer(serializers.ModelSerializer):
             'status',
             'category'
         ]
+        read_only_fields = ['id']
 
 
 class EventUpdateSerializer(serializers.ModelSerializer):
@@ -86,6 +91,8 @@ class EventUpdateSerializer(serializers.ModelSerializer):
 
 
 class TicketTypeCreateSerializer(serializers.ModelSerializer):
+    description = serializers.CharField(required=False, allow_blank=True)
+
     class Meta:
         model = TicketType
         fields = ['event', 'name', 'description', 'price', 'max_capacity', 'status']

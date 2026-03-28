@@ -29,15 +29,18 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
     }
   }, [evento, tiposEntrada]);
 
-  const cargarTiposEntrada = () => {
+  const cargarTiposEntrada = async () => {
     if (!eventoId) return;
     setCargando(true);
-    setTimeout(() => {
-      const tipos = eventosService.getTiposEntradaByEvento(eventoId);
+    try {
+      const tipos = await eventosService.getTiposEntradaByEvento(eventoId);
       setTiposEntrada(tipos);
       if (onChange) onChange(tipos);
+    } catch {
+      setTiposEntrada([]);
+    } finally {
       setCargando(false);
-    }, 500);
+    }
   };
 
   const handleCrear = () => {
@@ -68,9 +71,13 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
     }
   };
 
-  const handleRestaurar = (tipoId) => {
+  const handleRestaurar = async (tipoId) => {
     if (eventoId) {
-      eventosService.restaurarTipoEntrada(eventoId, tipoId);
+      try {
+        await eventosService.actualizarTipoEntrada(eventoId, tipoId, { estado: 'activo' });
+      } catch (err) {
+        setError(err.message || 'No se pudo restaurar.');
+      }
       cargarTiposEntrada();
     }
   };
@@ -279,6 +286,7 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
           eventoId={eventoId}
           evento={evento}
           tipoEditando={tipoEditando}
+          capacidadDisponible={capacidadDisponible}
           onGuardado={handleGuardado}
           onCancelar={handleCancelar}
         />

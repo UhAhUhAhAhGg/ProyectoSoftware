@@ -48,3 +48,25 @@ Las siguientes características fueron agregadas para blindar visualmente al usu
     *   Se forzó a `/admin/dashboard` a requerir explícitamente el rol de "Administrador" validando los tokens JWT recuperados en tiempo de ejecución.
 3.  **Prefijos /v1/:**
     *   Se unificaron absolutamente todas las peticiones con prefijo de versionado `api/v1/` para estandarizar la entrada del LoadBalancer en el futuro Docker Swarm.
+
+---
+
+## 4. Archivos adicionales implementados
+
+### service-events/events/authentication.py [NUEVO]
+Autenticador personalizado para validar JWT de `service-auth` en el microservicio de eventos. Decodifica el token, extrae `user_id` y `role` de los claims, y construye un objeto usuario virtual para el sistema de permisos de DRF.
+
+### frontend/src/services/apiHelper.js [NUEVO]
+Helper que envuelve `fetch` con inyeccion automatica del token JWT desde localStorage. Usado por `AuthContext` y `eventosService` para requests autenticados.
+
+## 5. Pruebas de aceptacion
+
+### PA: Administrador no puede crear eventos
+1. Obtener token de admin via `/api/v1/users/admin_login/`
+2. Intentar `POST /api/v1/events/` con ese token
+3. **Verificar:** HTTP 403 Forbidden
+
+### PA: Promotor no puede acceder al panel admin
+1. Login como `promotor@ticketproject.com` en `/login`
+2. Intentar navegar a `/admin/dashboard`
+3. **Verificar:** Acceso denegado o redireccion

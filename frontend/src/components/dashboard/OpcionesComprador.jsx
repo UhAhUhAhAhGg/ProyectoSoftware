@@ -55,6 +55,14 @@ function OpcionesComprador() {
       link: '/dashboard/recomendados',
       color: '#EABF0B',
       destacado: true
+    },
+    {
+      id: 'perfil',
+      icono: '👤',
+      titulo: 'Mi Perfil',
+      descripcion: 'Edita tus datos personales',
+      link: '/dashboard/perfil',
+      color: '#AD8149'
     }
   ];
 
@@ -73,6 +81,10 @@ function OpcionesComprador() {
         <Link to="/dashboard/proximos" className="accion-rapida secundaria">
           <span className="accion-icono">📅</span>
           <span className="accion-texto">Mis Próximos</span>
+        </Link>
+        <Link to="/dashboard/perfil" className="accion-rapida secundaria">
+          <span className="accion-icono">👤</span>
+          <span className="accion-texto">Mi Perfil</span>
         </Link>
       </div>
 

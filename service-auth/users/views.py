@@ -10,6 +10,7 @@ from .serializers import (
     UserSerializer,
     UserCreateSerializer,
     UserUpdateSerializer,
+    UserMeSerializer,
     RoleSerializer,
     PermissionSerializer,
     LoginSerializer,
@@ -48,39 +49,55 @@ class UserViewSet(viewsets.ModelViewSet):
 
         # 1. LEER DATOS (GET)
         if request.method == 'GET':
-            serializer = UserSerializer(user)
+            serializer = UserMeSerializer(user)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
       # 2. ACTUALIZAR DATOS (PUT / PATCH)
         elif request.method in ['PUT', 'PATCH']:
-            is_partial = request.method == 'PATCH'
-            serializer = UserUpdateSerializer(user, data=request.data, partial=is_partial)
+            from datetime import date as today
+            # Extraer campos del perfil del request
+            first_name = request.data.get('first_name', None)
+            last_name = request.data.get('last_name', None)
+            phone = request.data.get('phone', None)
+            profile_photo_url = request.data.get('profile_photo_url', None)
 
-            if serializer.is_valid():
-                serializer.save()
-                updated_user_data = UserSerializer(user).data
-                return Response({
-                    "status": "success",
-                    "message": "Perfil actualizado correctamente.",
-                    "data": updated_user_data
-                }, status=status.HTTP_200_OK)
-                
+            # Crear o actualizar el UserProfile
+            profile, _ = UserProfile.objects.get_or_create(
+                user=user,
+                defaults={
+                    'first_name': '',
+                    'last_name': '',
+                    'phone': '',
+                    'date_of_birth': today.today(),
+                }
+            )
+            if first_name is not None:
+                profile.first_name = first_name
+            if last_name is not None:
+                profile.last_name = last_name
+            if phone is not None:
+                profile.phone = phone
+            if profile_photo_url is not None:
+                profile.profile_photo_url = profile_photo_url
+            profile.save()
+
+            serializer = UserMeSerializer(user)
             return Response({
-                "status": "error",
-                "message": "Error al actualizar los datos.",
-                "details": serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
+                "status": "success",
+                "message": "Perfil actualizado correctamente.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
 
         # 3. ELIMINAR CUENTA (DELETE)
         elif request.method == 'DELETE':
             password = request.data.get('password')
-            
+
             if not password:
                 return Response({
                     "status": "error",
                     "message": "Por tu seguridad, debes ingresar tu contraseña para confirmar la eliminación de la cuenta."
                 }, status=status.HTTP_400_BAD_REQUEST)
-                
+
             if not user.check_password(password):
                 return Response({
                     "status": "error",
@@ -95,7 +112,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
             # Borrado físico del usuario (Hard Delete)
             user.delete()
-            
+
             return Response({
                 "status": "success",
                 "message": "Tu cuenta y todos tus datos personales han sido eliminados correctamente."
@@ -138,13 +155,12 @@ class UserViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Buscamos al usuario
         user = User.objects.filter(email=email).first()
+        mock_link = None
+
         if user:
-            # Leer la configuración de expiración (por defecto 60 minutos si no existe)
             expiration_minutes = getattr(settings, 'PASSWORD_RESET_TIMEOUT_MINUTES', 60)
-            
-            # 1. Generamos un token JWT válido por el tiempo configurado
+
             payload = {
                 'user_id': str(user.id),
                 'email': user.email,
@@ -153,31 +169,33 @@ class UserViewSet(viewsets.ModelViewSet):
             }
             token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
 
-            # 2. Construimos el enlace del Frontend (BFF Pattern)
             frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
             reset_link = f"{frontend_url}/reset-password?token={token}"
+            mock_link = reset_link
 
-            # 3. Enviamos el correo
-            try:
-                send_mail(
-                    subject='Recuperación de Contraseña - TicketProject',
-                    message=f'Hola,\n\nHemos recibido una solicitud para restablecer tu contraseña.\n'
-                            f'Por favor, haz clic en el siguiente enlace para crear una nueva (es válido por {expiration_minutes} minutos):\n\n'
-                            f'{reset_link}\n\n'
-                            f'Si no solicitaste esto, ignora este correo.',
-                    from_email=getattr(settings, 'EMAIL_HOST_USER', 'noreply@ticketproject.com'),
-                    recipient_list=[user.email],
-                    fail_silently=True,
-                )
-            except Exception as e:
-                # Imprimimos en consola por si estás desarrollando y no tienes SMTP configurado
-                print(" Correo no enviado. Simulación de enlace:", reset_link)
+            # Enviar correo (console backend en dev → imprime en docker logs)
+            send_mail(
+                subject='Recuperación de Contraseña - TicketProject',
+                message=(
+                    f'Hola,\n\n'
+                    f'Recibimos una solicitud para restablecer tu contraseña.\n'
+                    f'Usa este enlace (válido por {expiration_minutes} minutos):\n\n'
+                    f'{reset_link}\n\n'
+                    f'Si no solicitaste esto, ignora este correo.'
+                ),
+                from_email=getattr(settings, 'EMAIL_HOST_USER', 'noreply@ticketproject.com'),
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
 
-        # La respuesta genérica para el usuario (Evita enumeración)
-        return Response({
+        response_data = {
             "status": "success",
-            "message": "Si el correo está registrado, recibirás un enlace de recuperación en breve."
-        }, status=status.HTTP_200_OK)
+            "message": "Si el correo está registrado, recibirás un enlace de recuperación en breve.",
+        }
+        if mock_link:
+            response_data["mock_link"] = mock_link
+
+        return Response(response_data, status=status.HTTP_200_OK)
 
     # === RECUPERACIÓN DE CONTRASEÑA: CONFIRMAR Y CAMBIAR ===
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
@@ -204,6 +222,20 @@ class UserViewSet(viewsets.ModelViewSet):
 
             # 2. Cambiar la clave
             user = User.objects.get(id=payload['user_id'])
+
+            # TIC-194: Validar reglas de seguridad
+            import re
+            if len(new_password) < 8:
+                return Response({"status": "error", "message": "La contraseña debe tener al menos 8 caracteres."}, status=status.HTTP_400_BAD_REQUEST)
+            if not re.search(r'[A-Z]', new_password):
+                return Response({"status": "error", "message": "La contraseña debe contener al menos una letra mayúscula."}, status=status.HTTP_400_BAD_REQUEST)
+            if not re.search(r'\d', new_password):
+                return Response({"status": "error", "message": "La contraseña debe contener al menos un número."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # TIC-193: No permitir la misma contraseña que la actual
+            if user.check_password(new_password):
+                return Response({"status": "error", "message": "La nueva contraseña no puede ser igual a la contraseña actual."}, status=status.HTTP_400_BAD_REQUEST)
+
             user.set_password(new_password)
             user.save()
 

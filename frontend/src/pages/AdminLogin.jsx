@@ -15,7 +15,7 @@ function AdminLogin() {
   const [loginError, setLoginError] = useState('');
   const [darkMode, setDarkMode] = useState(false);
 
-  const { login, isAuthenticated, isAdministrador } = useAuth();
+  const { login, isAuthenticated, isAdministrador, sessionExpired, clearSessionExpired } = useAuth();
   const router = useRouter();
 
   // Detectar preferencia de modo oscuro del sistema
@@ -69,6 +69,7 @@ function AdminLogin() {
       setLoginError('');
 
       try {
+        if (sessionExpired) clearSessionExpired();
         // Llama al endpoint exclusivo de admin — rechaza roles distintos con 401
         const result = await authService.adminLogin(formData.email, formData.password);
         login(result.data.user, result.data.token, result.data.refresh);
@@ -100,6 +101,13 @@ function AdminLogin() {
           <h2>Panel de Administración</h2>
           <p className="admin-subtitulo">Acceso exclusivo para administradores de TicketGo</p>
         </div>
+
+        {sessionExpired && (
+          <div className="admin-login-error" style={{ background: '#fff3cd', borderColor: '#e6c96b' }}>
+            <span className="error-icon">🔒</span>
+            <p style={{ color: '#856404' }}>Tu sesión se cerró automáticamente por inactividad. Inicia sesión nuevamente.</p>
+          </div>
+        )}
 
         {loginError && (
           <div className="admin-login-error">
