@@ -72,12 +72,24 @@ class TicketType(models.Model):
         ('sold_out', 'Sold Out'),
     ]
 
+    ZONE_TYPE_CHOICES = [
+        ('general', 'General'),
+        ('platea', 'Platea'),
+        ('preferencial', 'Preferencial'),
+        ('vip', 'VIP'),
+        ('palco', 'Palco'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     event = models.ForeignKey(Event, on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
     description = models.TextField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
     max_capacity = models.IntegerField()
+    zone_type = models.CharField(max_length=30, choices=ZONE_TYPE_CHOICES, default='general')
+    is_vip = models.BooleanField(default=False)
+    seat_rows = models.PositiveIntegerField(null=True, blank=True)
+    seats_per_row = models.PositiveIntegerField(null=True, blank=True)
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='active')
     current_sold = models.IntegerField(default=0)
 
@@ -97,6 +109,12 @@ class TicketType(models.Model):
     @property
     def available_capacity(self):
         return self.max_capacity - self.current_sold
+
+    @property
+    def configured_seats(self):
+        if self.seat_rows and self.seats_per_row:
+            return self.seat_rows * self.seats_per_row
+        return None
 
     @property
     def is_available(self):

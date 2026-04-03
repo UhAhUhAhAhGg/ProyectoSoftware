@@ -2,15 +2,14 @@ import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import './Home.css';
 
-function Home() {
-  const [darkMode, setDarkMode] = useState(false);
-  const [menuAbierto, setMenuAbierto] = useState(false);
+const getInitialDarkMode = () => {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+};
 
-  // Verificar preferencia del sistema para modo oscuro
-  useEffect(() => {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setDarkMode(prefersDark);
-  }, []);
+function Home() {
+  const [darkMode, setDarkMode] = useState(getInitialDarkMode);
+  const [menuAbierto, setMenuAbierto] = useState(false);
 
   // Aplicar modo oscuro
   useEffect(() => {

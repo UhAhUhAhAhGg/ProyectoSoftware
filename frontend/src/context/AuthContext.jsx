@@ -9,10 +9,33 @@ const AuthContext = createContext();
 // Valor por defecto: 15 minutos (en ms)
 const DEFAULT_INACTIVITY_TIMEOUT = 15 * 60 * 1000;
 
+const isBrowser = typeof window !== 'undefined';
+
 const getInactivityTimeout = () => {
+  if (!isBrowser) return DEFAULT_INACTIVITY_TIMEOUT;
   const stored = localStorage.getItem('inactivity_timeout_minutes');
   if (stored) return parseInt(stored, 10) * 60 * 1000;
   return DEFAULT_INACTIVITY_TIMEOUT;
+};
+
+const getStoredSession = () => {
+  if (!isBrowser) {
+    return {
+      user: null,
+      token: null,
+      inactivityMinutes: 15,
+    };
+  }
+
+  const storedUser = localStorage.getItem('user');
+  const storedToken = localStorage.getItem('token');
+  const storedTimeout = localStorage.getItem('inactivity_timeout_minutes');
+
+  return {
+    user: storedUser && storedToken ? JSON.parse(storedUser) : null,
+    token: storedToken,
+    inactivityMinutes: storedTimeout ? parseInt(storedTimeout, 10) : 15,
+  };
 };
 
 export const useAuth = () => {
@@ -24,11 +47,12 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState(null);
+  const storedSession = getStoredSession();
+  const [user, setUser] = useState(storedSession.user);
+  const [loading, setLoading] = useState(false);
+  const [token, setToken] = useState(storedSession.token);
   const [sessionExpired, setSessionExpired] = useState(false);
-  const [inactivityMinutes, setInactivityMinutes] = useState(15);
+  const [inactivityMinutes, setInactivityMinutes] = useState(storedSession.inactivityMinutes);
   const inactivityTimer = useRef(null);
   const timeoutRef = useRef(getInactivityTimeout());
 
@@ -82,20 +106,6 @@ export const AuthProvider = ({ children }) => {
       if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     };
   }, [user, resetInactivityTimer]);
-
-  // Restaurar sesión guardada al cargar la app
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const storedToken = localStorage.getItem('token');
-    const storedTimeout = localStorage.getItem('inactivity_timeout_minutes');
-
-    if (storedUser && storedToken) {
-      setUser(JSON.parse(storedUser));
-      setToken(storedToken);
-    }
-    if (storedTimeout) setInactivityMinutes(parseInt(storedTimeout, 10));
-    setLoading(false);
-  }, []);
 
   const login = (userData, authToken, refreshToken) => {
     setSessionExpired(false);

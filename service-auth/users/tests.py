@@ -5,9 +5,9 @@ from users.models import User, Role
 class AuthTests(APITestCase):
 
     def setUp(self):
-        # Crear roles necesarios para los tests
-        self.role_buyer = Role.objects.create(name="Comprador")
-        self.role_promoter = Role.objects.create(name="Promotor")
+        # Reutilizar roles semilla si ya fueron creados por migraciones de datos
+        self.role_buyer, _ = Role.objects.get_or_create(name="Comprador")
+        self.role_promoter, _ = Role.objects.get_or_create(name="Promotor")
 
         # Crear usuario de prueba
         self.user = User.objects.create_user(

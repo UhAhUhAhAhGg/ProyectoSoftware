@@ -103,7 +103,8 @@
 }
 
 .form-group input,
-.form-group textarea {
+.form-group textarea,
+.form-group select {
   padding: 12px 15px;
   border: 2px solid var(--color-beige);
   border-radius: 8px;
@@ -119,16 +120,149 @@
 }
 
 .form-group input:focus,
-.form-group textarea:focus {
+.form-group textarea:focus,
+.form-group select:focus {
   outline: none;
   border-color: var(--color-marron);
   background-color: white;
 }
 
 .form-group input.error,
-.form-group textarea.error {
+.form-group textarea.error,
+.form-group select.error {
   border-color: #f44336;
   background-color: #fff5f5;
+}
+
+.form-group-checkbox {
+  justify-content: flex-end;
+}
+
+.checkbox-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 15px;
+  border: 2px solid var(--color-beige);
+  border-radius: 8px;
+  background-color: var(--color-beige);
+  cursor: pointer;
+}
+
+.checkbox-card input {
+  width: 18px;
+  height: 18px;
+}
+
+.checkbox-card span {
+  color: var(--color-negro);
+  font-size: 14px;
+}
+
+.seat-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 48px;
+  padding: 12px 15px;
+  border: 2px solid var(--color-beige);
+  border-radius: 8px;
+  background: linear-gradient(135deg, #fff8ef, #f7ead8);
+}
+
+.seat-summary-card strong {
+  color: var(--color-marron);
+  font-size: 18px;
+}
+
+.seat-summary-card span,
+.seat-summary-card small {
+  color: var(--color-verde-gris);
+}
+
+.seat-preview {
+  padding: 16px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f7f3ec, #fff);
+  border: 1px solid rgba(173, 129, 73, 0.18);
+}
+
+.seat-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.seat-preview-header h4 {
+  margin: 0;
+  color: var(--color-marron);
+  font-size: 15px;
+}
+
+.seat-preview-header span {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background-color: rgba(173, 129, 73, 0.14);
+  color: var(--color-marron);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.seat-preview-stage {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--color-marron), #8B6537);
+  color: white;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+.seat-preview-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.seat-row-label {
+  width: 18px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-verde-gris);
+}
+
+.seat-row-seats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.seat-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #d4c4ae, #ad8149);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.seat-dot.vip {
+  background: linear-gradient(135deg, #f8d66d, #d6a807);
+}
+
+.seat-preview-empty,
+.seat-preview-note {
+  margin: 0;
+  color: var(--color-verde-gris);
+  font-size: 12px;
 }
 
 .form-row {
@@ -301,16 +435,34 @@ body.dark-mode .form-group label {
 }
 
 body.dark-mode .form-group input,
-body.dark-mode .form-group textarea {
+body.dark-mode .form-group textarea,
+body.dark-mode .form-group select {
   background-color: var(--dark-hover);
   border-color: var(--dark-border);
   color: var(--dark-text);
 }
 
 body.dark-mode .form-group input:focus,
-body.dark-mode .form-group textarea:focus {
+body.dark-mode .form-group textarea:focus,
+body.dark-mode .form-group select:focus {
   background-color: var(--dark-card);
   border-color: var(--color-dorado);
+}
+
+body.dark-mode .checkbox-card,
+body.dark-mode .seat-summary-card,
+body.dark-mode .seat-preview {
+  background: var(--dark-hover);
+  border-color: var(--dark-border);
+}
+
+body.dark-mode .checkbox-card span,
+body.dark-mode .seat-summary-card span,
+body.dark-mode .seat-summary-card small,
+body.dark-mode .seat-preview-empty,
+body.dark-mode .seat-preview-note,
+body.dark-mode .seat-row-label {
+  color: var(--dark-text-secondary);
 }
 
 body.dark-mode .campo-ayuda {

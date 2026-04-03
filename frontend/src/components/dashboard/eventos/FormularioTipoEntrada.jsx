@@ -2,6 +2,24 @@ import { useState, useEffect } from 'react';
 import { eventosService } from '../../../services/eventosService';
 import './FormularioTipoEntrada.css';
 
+const ZONE_OPTIONS = [
+  { value: 'general', label: 'General' },
+  { value: 'platea', label: 'Platea' },
+  { value: 'preferencial', label: 'Preferencial' },
+  { value: 'vip', label: 'VIP' },
+  { value: 'palco', label: 'Palco' },
+];
+
+const getSeatRowsPreview = (rows, seatsPerRow) => {
+  const totalRows = Math.min(rows || 0, 6);
+  const totalSeats = Math.min(seatsPerRow || 0, 10);
+
+  return Array.from({ length: totalRows }, (_, rowIndex) => ({
+    label: String.fromCharCode(65 + rowIndex),
+    seats: Array.from({ length: totalSeats }, (_, seatIndex) => `${rowIndex + 1}-${seatIndex + 1}`),
+  }));
+};
+
 /**
  * FormularioTipoEntrada
  * Props:
@@ -15,9 +33,12 @@ import './FormularioTipoEntrada.css';
 function FormularioTipoEntrada({ eventoId, evento, tipoEditando, capacidadDisponible, onGuardado, onCancelar }) {
   const [formData, setFormData] = useState({
     nombre: '',
+    tipoZona: 'general',
+    esVIP: false,
     descripcion: '',
     precio: '',
-    cupoMaximo: '',
+    filas: '',
+    asientosPorFila: '',
   });
 
   const [errores, setErrores] = useState({});
@@ -27,21 +48,37 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, capacidadDispon
   // cupoDisponible: si estamos editando, sumamos de vuelta el cupo anterior
   const cupoEditando = tipoEditando ? (tipoEditando.cupoMaximo || 0) : 0;
   const cupoLibre = (capacidadDisponible ?? 0) + cupoEditando;
+  const filas = parseInt(formData.filas, 10) || 0;
+  const asientosPorFila = parseInt(formData.asientosPorFila, 10) || 0;
+  const totalAsientos = filas * asientosPorFila;
+  const seatPreviewRows = getSeatRowsPreview(filas, asientosPorFila);
 
   useEffect(() => {
     if (tipoEditando) {
+      const filasIniciales = tipoEditando.filas || (tipoEditando.cupoMaximo ? 1 : '');
+      const asientosIniciales = tipoEditando.asientosPorFila || tipoEditando.cupoMaximo || '';
       setFormData({
         nombre: tipoEditando.nombre || '',
+        tipoZona: tipoEditando.tipoZona || 'general',
+        esVIP: Boolean(tipoEditando.esVIP || tipoEditando.tipoZona === 'vip'),
         descripcion: tipoEditando.descripcion || '',
         precio: tipoEditando.precio || '',
-        cupoMaximo: tipoEditando.cupoMaximo || '',
+        filas: filasIniciales,
+        asientosPorFila: asientosIniciales,
       });
     }
   }, [tipoEditando]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const { name, value, type, checked } = e.target;
+    const nextValue = type === 'checkbox' ? checked : value;
+    const nextState = { ...formData, [name]: nextValue };
+
+    if (name === 'tipoZona' && value === 'vip') {
+      nextState.esVIP = true;
+    }
+
+    setFormData(nextState);
     if (errores[name]) setErrores({ ...errores, [name]: '' });
     setErrorGeneral('');
   };
@@ -61,6 +98,10 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, capacidadDispon
       nuevosErrores.descripcion = 'La descripción no puede exceder los 200 caracteres';
     }
 
+    if (!formData.tipoZona) {
+      nuevosErrores.tipoZona = 'Debes seleccionar una zona';
+    }
+
     if (!formData.precio) {
       nuevosErrores.precio = 'El precio es requerido';
     } else {
@@ -72,15 +113,36 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, capacidadDispon
       }
     }
 
-    if (!formData.cupoMaximo) {
-      nuevosErrores.cupoMaximo = 'El cupo máximo es requerido';
+    if (!formData.filas) {
+      nuevosErrores.filas = 'Las filas son requeridas';
     } else {
-      const cupo = parseInt(formData.cupoMaximo);
-      if (isNaN(cupo) || cupo < 1) {
-        nuevosErrores.cupoMaximo = 'El cupo debe ser al menos 1';
-      } else if (cupo > cupoLibre) {
-        nuevosErrores.cupoMaximo = `El cupo no puede superar el disponible (${cupoLibre})`;
+      const totalFilas = parseInt(formData.filas, 10);
+      if (isNaN(totalFilas) || totalFilas < 1) {
+        nuevosErrores.filas = 'Las filas deben ser al menos 1';
+      } else if (totalFilas > 50) {
+        nuevosErrores.filas = 'Las filas no pueden exceder 50';
       }
+    }
+
+    if (!formData.asientosPorFila) {
+      nuevosErrores.asientosPorFila = 'Los asientos por fila son requeridos';
+    } else {
+      const seatsByRow = parseInt(formData.asientosPorFila, 10);
+      if (isNaN(seatsByRow) || seatsByRow < 1) {
+        nuevosErrores.asientosPorFila = 'Los asientos por fila deben ser al menos 1';
+      } else if (seatsByRow > 100) {
+        nuevosErrores.asientosPorFila = 'Los asientos por fila no pueden exceder 100';
+      }
+    }
+
+    if (totalAsientos < 1) {
+      nuevosErrores.distribucion = 'La distribución debe generar al menos 1 asiento';
+    } else if (totalAsientos > cupoLibre) {
+      nuevosErrores.distribucion = `La zona supera el cupo disponible (${cupoLibre})`;
+    }
+
+    if (tipoEditando?.cupoVendido > 0 && totalAsientos < tipoEditando.cupoVendido) {
+      nuevosErrores.distribucion = `No puedes definir menos asientos que los ya vendidos (${tipoEditando.cupoVendido})`;
     }
 
     return nuevosErrores;
@@ -96,7 +158,7 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, capacidadDispon
     }
 
     // Doble check: bloquea si intenta exceder la capacidad libre
-    const cupoNuevo = parseInt(formData.cupoMaximo);
+    const cupoNuevo = totalAsientos;
     if (cupoNuevo > cupoLibre) {
       setErrorGeneral(`No hay suficiente cupo disponible. Cupo libre: ${cupoLibre}`);
       return;
@@ -107,9 +169,13 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, capacidadDispon
       let tipoGuardado;
       const payload = {
         nombre: formData.nombre.trim(),
+        tipoZona: formData.tipoZona,
+        esVIP: Boolean(formData.esVIP || formData.tipoZona === 'vip'),
         descripcion: formData.descripcion?.trim() || '',
         precio: parseFloat(formData.precio),
         cupoMaximo: cupoNuevo,
+        filas,
+        asientosPorFila,
       };
 
       if (tipoEditando) {
@@ -169,7 +235,7 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, capacidadDispon
 
           <div className="form-group">
             <label htmlFor="nombre">
-              Nombre del tipo de entrada <span className="required">*</span>
+              Nombre de la zona <span className="required">*</span>
             </label>
             <input
               type="text"
@@ -183,6 +249,42 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, capacidadDispon
             />
             <div className="campo-ayuda">{formData.nombre.length}/50 caracteres</div>
             {errores.nombre && <span className="error-mensaje">{errores.nombre}</span>}
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="tipoZona">
+                Tipo de zona <span className="required">*</span>
+              </label>
+              <select
+                id="tipoZona"
+                name="tipoZona"
+                value={formData.tipoZona}
+                onChange={handleChange}
+                className={errores.tipoZona ? 'error' : ''}
+              >
+                {ZONE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              {errores.tipoZona && <span className="error-mensaje">{errores.tipoZona}</span>}
+            </div>
+
+            <div className="form-group form-group-checkbox">
+              <label htmlFor="esVIP">Zona premium</label>
+              <label className="checkbox-card" htmlFor="esVIP">
+                <input
+                  type="checkbox"
+                  id="esVIP"
+                  name="esVIP"
+                  checked={Boolean(formData.esVIP)}
+                  onChange={handleChange}
+                />
+                <span>
+                  {formData.esVIP ? 'Marcada como VIP / premium' : 'Sin beneficios VIP'}
+                </span>
+              </label>
+            </div>
           </div>
 
           <div className="form-group">
@@ -222,30 +324,93 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, capacidadDispon
             </div>
 
             <div className="form-group">
-              <label htmlFor="cupoMaximo">
-                Cupo máximo <span className="required">*</span>
+              <label htmlFor="filas">
+                Filas <span className="required">*</span>
               </label>
               <input
                 type="number"
-                id="cupoMaximo"
-                name="cupoMaximo"
-                value={formData.cupoMaximo}
+                id="filas"
+                name="filas"
+                value={formData.filas}
                 onChange={handleChange}
-                placeholder="Ej: 500"
+                placeholder="Ej: 5"
                 min="1"
-                max={cupoLibre}
-                className={errores.cupoMaximo ? 'error' : ''}
+                max="50"
+                className={errores.filas ? 'error' : ''}
               />
-              <div className="campo-ayuda">Máximo disponible: {cupoLibre}</div>
-              {errores.cupoMaximo && <span className="error-mensaje">{errores.cupoMaximo}</span>}
+              <div className="campo-ayuda">Máximo sugerido: 50 filas</div>
+              {errores.filas && <span className="error-mensaje">{errores.filas}</span>}
             </div>
           </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="asientosPorFila">
+                Asientos por fila <span className="required">*</span>
+              </label>
+              <input
+                type="number"
+                id="asientosPorFila"
+                name="asientosPorFila"
+                value={formData.asientosPorFila}
+                onChange={handleChange}
+                placeholder="Ej: 20"
+                min="1"
+                max="100"
+                className={errores.asientosPorFila ? 'error' : ''}
+              />
+              <div className="campo-ayuda">Máximo sugerido: 100 asientos por fila</div>
+              {errores.asientosPorFila && <span className="error-mensaje">{errores.asientosPorFila}</span>}
+            </div>
+
+            <div className="form-group">
+              <label>Cupo generado</label>
+              <div className="seat-summary-card">
+                <strong>{totalAsientos || 0} asientos</strong>
+                <span>{filas || 0} filas x {asientosPorFila || 0} asientos</span>
+                <small>Cupo disponible en el evento: {cupoLibre}</small>
+              </div>
+            </div>
+          </div>
+
+          {errores.distribucion && <span className="error-mensaje">{errores.distribucion}</span>}
+
+          {(filas > 0 || asientosPorFila > 0) && (
+            <div className="seat-preview">
+              <div className="seat-preview-header">
+                <h4>Vista previa de asientos</h4>
+                <span>{formData.tipoZona.toUpperCase()}</span>
+              </div>
+              <div className="seat-preview-stage">Escenario / punto focal</div>
+              <div className="seat-preview-grid">
+                {seatPreviewRows.length > 0 ? seatPreviewRows.map((row) => (
+                  <div className="seat-row" key={row.label}>
+                    <span className="seat-row-label">{row.label}</span>
+                    <div className="seat-row-seats">
+                      {row.seats.map((seatId) => (
+                        <span
+                          key={seatId}
+                          className={`seat-dot ${formData.esVIP ? 'vip' : ''}`}
+                          title={seatId}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )) : (
+                  <p className="seat-preview-empty">Define filas y asientos por fila para ver la distribución.</p>
+                )}
+              </div>
+              {(filas > 6 || asientosPorFila > 10) && (
+                <p className="seat-preview-note">La vista previa muestra una muestra reducida del mapa real.</p>
+              )}
+            </div>
+          )}
 
           {tipoEditando && tipoEditando.cupoVendido > 0 && (
             <div className="advertencia-edicion">
               <p>
                 <strong>⚠️ Importante:</strong> Este tipo ya tiene {tipoEditando.cupoVendido} ventas.
-                No puedes reducir el cupo por debajo de las ventas realizadas.
+                No puedes definir menos asientos que las ventas realizadas.
               </p>
             </div>
           )}

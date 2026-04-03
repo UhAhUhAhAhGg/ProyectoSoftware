@@ -203,6 +203,8 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'create':
             return TicketTypeCreateSerializer
+        if self.action in ['update', 'partial_update']:
+            return TicketTypeCreateSerializer
         return TicketTypeSerializer
     
     def create(self, request, *args, **kwargs):

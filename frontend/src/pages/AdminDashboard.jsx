@@ -15,7 +15,10 @@ import AdminAuditoria from '../components/dashboard/admin/AdminAuditoria';
 function AdminDashboard() {
   const { user, isAuthenticated, isAdministrador, logout } = useAuth();
   const router = useRouter();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.innerWidth > 768;
+  });
   const [activeSection, setActiveSection] = useState('home');
 
   // Redirigir si no es admin — protección de ruta
@@ -26,13 +29,6 @@ function AdminDashboard() {
       router.replace('/dashboard');
     }
   }, [isAuthenticated, isAdministrador, router]);
-
-  // Cerrar sidebar en móvil al cambiar de sección
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
-      setSidebarOpen(false);
-    }
-  }, [activeSection]);
 
   if (!user) {
     return (
@@ -130,7 +126,7 @@ function AdminDashboard() {
             <ul>
               {menuItems.filter(item => item.section === 'usuarios').map(item => (
                 <li key={item.path} className={isActive(item.section + '_' + item.path.split('/').pop()) ? 'active' : ''}>
-                  <button onClick={() => { setActiveSection(item.path.split('/').pop()); setSidebarOpen(false); }} style={{background:'none',border:'none',cursor:'pointer',width:'100%',textAlign:'left',padding:0,color:'inherit'}}>
+                  <button onClick={() => { setActiveSection(item.path.split('/').pop()); if (typeof window !== 'undefined' && window.innerWidth <= 768) setSidebarOpen(false); }} style={{background:'none',border:'none',cursor:'pointer',width:'100%',textAlign:'left',padding:0,color:'inherit'}}>
                     <span className="nav-icon">{item.icon}</span>
                     <span className="nav-label">{item.label}</span>
                   </button>
@@ -145,7 +141,7 @@ function AdminDashboard() {
             <ul>
               {menuItems.filter(item => item.section === 'eventos').map(item => (
                 <li key={item.path} className={isActive(item.path.split('/').pop()) ? 'active' : ''}>
-                  <button onClick={() => { setActiveSection(item.path.split('/').pop()); setSidebarOpen(false); }} style={{background:'none',border:'none',cursor:'pointer',width:'100%',textAlign:'left',padding:0,color:'inherit'}}>
+                  <button onClick={() => { setActiveSection(item.path.split('/').pop()); if (typeof window !== 'undefined' && window.innerWidth <= 768) setSidebarOpen(false); }} style={{background:'none',border:'none',cursor:'pointer',width:'100%',textAlign:'left',padding:0,color:'inherit'}}>
                     <span className="nav-icon">{item.icon}</span>
                     <span className="nav-label">{item.label}</span>
                   </button>
@@ -160,7 +156,7 @@ function AdminDashboard() {
             <ul>
               {menuItems.filter(item => item.section === 'config').map(item => (
                 <li key={item.path} className={isActive(item.path.split('/').pop()) ? 'active' : ''}>
-                  <button onClick={() => { setActiveSection(item.path.split('/').pop()); setSidebarOpen(false); }} style={{background:'none',border:'none',cursor:'pointer',width:'100%',textAlign:'left',padding:0,color:'inherit'}}>
+                  <button onClick={() => { setActiveSection(item.path.split('/').pop()); if (typeof window !== 'undefined' && window.innerWidth <= 768) setSidebarOpen(false); }} style={{background:'none',border:'none',cursor:'pointer',width:'100%',textAlign:'left',padding:0,color:'inherit'}}>
                     <span className="nav-icon">{item.icon}</span>
                     <span className="nav-label">{item.label}</span>
                   </button>
@@ -175,7 +171,7 @@ function AdminDashboard() {
             <ul>
               {menuItems.filter(item => item.section === 'auditoria').map(item => (
                 <li key={item.path} className={isActive(item.path.split('/').pop()) ? 'active' : ''}>
-                  <button onClick={() => { setActiveSection(item.path.split('/').pop()); setSidebarOpen(false); }} style={{background:'none',border:'none',cursor:'pointer',width:'100%',textAlign:'left',padding:0,color:'inherit'}}>
+                  <button onClick={() => { setActiveSection(item.path.split('/').pop()); if (typeof window !== 'undefined' && window.innerWidth <= 768) setSidebarOpen(false); }} style={{background:'none',border:'none',cursor:'pointer',width:'100%',textAlign:'left',padding:0,color:'inherit'}}>
                     <span className="nav-icon">{item.icon}</span>
                     <span className="nav-label">{item.label}</span>
                   </button>

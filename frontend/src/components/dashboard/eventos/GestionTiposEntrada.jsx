@@ -3,6 +3,18 @@ import { eventosService } from '../../../services/eventosService';
 import FormularioTipoEntrada from './FormularioTipoEntrada';
 import './GestionTiposEntrada.css';
 
+const getZoneLabel = (tipoZona) => {
+  const labels = {
+    general: 'General',
+    platea: 'Platea',
+    preferencial: 'Preferencial',
+    vip: 'VIP',
+    palco: 'Palco',
+  };
+
+  return labels[tipoZona] || tipoZona || 'Zona';
+};
+
 function GestionTiposEntrada({ eventoId, evento, onChange }) {
   const [tiposEntrada, setTiposEntrada] = useState([]);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
@@ -154,7 +166,7 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
 
         <button className="btn-crear-tipo" onClick={handleCrear}>
           <span className="btn-icono">➕</span>
-          Agregar Tipo de Entrada
+          Agregar Zona
         </button>
       </div>
 
@@ -190,8 +202,8 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
       {tiposFiltrados.length === 0 ? (
         <div className="no-tipos">
           <div className="no-tipos-icono">🎟️</div>
-          <h4>No hay tipos de entrada</h4>
-          <p>Agrega diferentes tipos de entrada para este evento</p>
+          <h4>No hay zonas configuradas</h4>
+          <p>Agrega zonas con distribución de asientos y precios distintos para este evento</p>
         </div>
       ) : (
         <div className="tipos-grid">
@@ -202,11 +214,23 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
               )}
               
               <div className="tipo-header">
-                <h4>{tipo.nombre}</h4>
+                <div>
+                  <h4>{tipo.nombre}</h4>
+                  <div className="tipo-meta-badges">
+                    <span className="tipo-badge-secundario">{getZoneLabel(tipo.tipoZona)}</span>
+                    {tipo.esVIP && <span className="tipo-badge-secundario vip">VIP</span>}
+                  </div>
+                </div>
                 <span className="tipo-precio">${tipo.precio}</span>
               </div>
 
               <p className="tipo-descripcion">{tipo.descripcion}</p>
+
+              <div className="tipo-layout-summary">
+                <span>{tipo.filas || 0} filas</span>
+                <span>{tipo.asientosPorFila || 0} asientos/fila</span>
+                <span>{tipo.asientosConfigurados || tipo.cupoMaximo} asientos</span>
+              </div>
 
               <div className="tipo-stats">
                 <div className="stat">

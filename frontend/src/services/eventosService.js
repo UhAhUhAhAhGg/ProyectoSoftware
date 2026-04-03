@@ -16,6 +16,11 @@ const mapEvento = (e) => {
     descripcion: t.description,
     precio: parseFloat(t.price),
     cupoMaximo: t.max_capacity,
+    tipoZona: t.zone_type ?? 'general',
+    esVIP: Boolean(t.is_vip),
+    filas: t.seat_rows ?? '',
+    asientosPorFila: t.seats_per_row ?? '',
+    asientosConfigurados: t.configured_seats ?? null,
     cupoVendido: t.current_sold ?? 0,
     estado: TICKET_STATUS_MAP[t.status] ?? t.status,
     disponibles: t.available_capacity ?? (t.max_capacity - (t.current_sold ?? 0)),
@@ -55,6 +60,11 @@ const mapTipoEntrada = (t) => ({
   descripcion: t.description,
   precio: parseFloat(t.price),
   cupoMaximo: t.max_capacity,
+  tipoZona: t.zone_type ?? 'general',
+  esVIP: Boolean(t.is_vip),
+  filas: t.seat_rows ?? '',
+  asientosPorFila: t.seats_per_row ?? '',
+  asientosConfigurados: t.configured_seats ?? null,
   cupoVendido: t.current_sold ?? 0,
   estado: TICKET_STATUS_MAP[t.status] ?? t.status,
   disponibles: t.available_capacity ?? (t.max_capacity - (t.current_sold ?? 0)),
@@ -235,6 +245,10 @@ export const eventosService = {
         description: tipoData.descripcion || '',
         price: parseFloat(tipoData.precio),
         max_capacity: parseInt(tipoData.cupoMaximo),
+        zone_type: tipoData.tipoZona || 'general',
+        is_vip: Boolean(tipoData.esVIP),
+        seat_rows: parseInt(tipoData.filas),
+        seats_per_row: parseInt(tipoData.asientosPorFila),
       }),
     });
     if (!res.ok) {
@@ -253,6 +267,10 @@ export const eventosService = {
     if (tipoData.descripcion !== undefined) body.description = tipoData.descripcion;
     if (tipoData.precio !== undefined) body.price = parseFloat(tipoData.precio);
     if (tipoData.cupoMaximo !== undefined) body.max_capacity = parseInt(tipoData.cupoMaximo);
+    if (tipoData.tipoZona !== undefined) body.zone_type = tipoData.tipoZona;
+    if (tipoData.esVIP !== undefined) body.is_vip = Boolean(tipoData.esVIP);
+    if (tipoData.filas !== undefined) body.seat_rows = parseInt(tipoData.filas);
+    if (tipoData.asientosPorFila !== undefined) body.seats_per_row = parseInt(tipoData.asientosPorFila);
     if (tipoData.estado !== undefined) {
       const statusMap = { activo: 'active', eliminado: 'inactive', inactivo: 'inactive' };
       body.status = statusMap[tipoData.estado] || tipoData.estado;

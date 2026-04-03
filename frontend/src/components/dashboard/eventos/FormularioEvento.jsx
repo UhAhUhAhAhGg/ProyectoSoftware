@@ -50,6 +50,18 @@ function FormularioEvento() {
 
   const [categorias, setCategorias] = useState([]);
 
+  const getZoneLabel = (tipoZona) => {
+    const labels = {
+      general: 'General',
+      platea: 'Platea',
+      preferencial: 'Preferencial',
+      vip: 'VIP',
+      palco: 'Palco',
+    };
+
+    return labels[tipoZona] || tipoZona || 'Zona';
+  };
+
   // Cargar datos iniciales
   useEffect(() => {
     const cargarDatos = async () => {
@@ -458,11 +470,18 @@ function FormularioEvento() {
                   <div className="preview-capacidad" style={{ textAlign: "right", color: "gray", fontSize: "14px", marginBottom: "10px" }}>Capacidad: {formData.capacidad || '0'}</div>
                   {previewTickets.length > 0 ? (
                     <div className="preview-tickets-list">
-                      <h5 style={{ margin: "0 0 10px 0", color: "#666" }}>Tipos de Entrada</h5>
+                      <h5 style={{ margin: '0 0 10px 0', color: '#666' }}>Zonas y precios</h5>
                       {previewTickets.map(t => (
-                        <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', background: '#f9f9f9', borderRadius: '4px', marginBottom: '5px' }}>
-                          <span style={{ fontWeight: 'bold' }}>{t.nombre}</span>
-                          <span style={{ color: "var(--color-marron)", fontWeight: 'bold' }}>${t.precio}</span>
+                        <div key={t.id} className="preview-zone-card">
+                          <div>
+                            <span style={{ fontWeight: 'bold' }}>{t.nombre}</span>
+                            <div className="preview-zone-meta">
+                              <span>{getZoneLabel(t.tipoZona)}</span>
+                              {t.esVIP && <span>VIP</span>}
+                              <span>{t.filas || 0} x {t.asientosPorFila || 0}</span>
+                            </div>
+                          </div>
+                          <span style={{ color: 'var(--color-marron)', fontWeight: 'bold' }}>${t.precio}</span>
                         </div>
                       ))}
                     </div>

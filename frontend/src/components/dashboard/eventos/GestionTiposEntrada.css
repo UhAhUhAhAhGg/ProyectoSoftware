@@ -162,6 +162,29 @@
   font-size: 18px;
 }
 
+.tipo-meta-badges {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.tipo-badge-secundario {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background-color: rgba(173, 129, 73, 0.14);
+  color: var(--color-marron);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tipo-badge-secundario.vip {
+  background-color: rgba(214, 168, 7, 0.18);
+  color: #9a7200;
+}
+
 .tipo-precio {
   font-size: 20px;
   font-weight: 700;
@@ -174,6 +197,22 @@
   line-height: 1.5;
   margin: 0 0 15px 0;
   min-height: 40px;
+}
+
+.tipo-layout-summary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 15px;
+}
+
+.tipo-layout-summary span {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.65);
+  color: var(--color-verde-gris);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .tipo-stats {
