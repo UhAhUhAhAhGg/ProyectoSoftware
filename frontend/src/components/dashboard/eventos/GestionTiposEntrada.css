@@ -396,6 +396,10 @@
   padding: 0 5px;
 }
 
+.gestion-tipos-entrada .venue-layout-preview {
+  margin-bottom: 24px;
+}
+
 /* Loading */
 .tipos-loading {
   min-height: 200px;

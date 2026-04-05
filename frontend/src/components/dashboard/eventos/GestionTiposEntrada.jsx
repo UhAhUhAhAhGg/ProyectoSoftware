@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { eventosService } from '../../../services/eventosService';
 import FormularioTipoEntrada from './FormularioTipoEntrada';
+import VenueLayoutPreview from './VenueLayoutPreview';
 import './GestionTiposEntrada.css';
 
 const getZoneLabel = (tipoZona) => {
@@ -30,7 +31,7 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
     } else {
       setCargando(false);
     }
-  }, [eventoId]);
+  }, [eventoId, cargarTiposEntrada]);
 
   useEffect(() => {
     if (evento && tiposEntrada) {
@@ -41,7 +42,7 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
     }
   }, [evento, tiposEntrada]);
 
-  const cargarTiposEntrada = async () => {
+  const cargarTiposEntrada = useCallback(async () => {
     if (!eventoId) return;
     setCargando(true);
     try {
@@ -53,7 +54,7 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
     } finally {
       setCargando(false);
     }
-  };
+  }, [eventoId, onChange]);
 
   const handleCrear = () => {
     setTipoEditando(null);
@@ -177,6 +178,14 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
           <button className="error-close" onClick={() => setError('')}>×</button>
         </div>
       )}
+
+      <VenueLayoutPreview
+        tiposEntrada={tiposEntrada}
+        capacidadTotal={evento?.capacidad}
+        titulo="Mapa del recinto"
+        subtitulo="Compara visualmente la distribucion del aforo, las zonas VIP y el rango de precios antes de publicar o ajustar el evento."
+        compact
+      />
 
       <div className="tipos-filtros">
         <button 

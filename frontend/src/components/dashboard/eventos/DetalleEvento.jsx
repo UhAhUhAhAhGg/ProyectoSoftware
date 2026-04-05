@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { Link, useParams } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
+import VenueLayoutPreview from './VenueLayoutPreview';
 import './DetalleEvento.css';
 
 function DetalleEvento() {
@@ -52,7 +54,16 @@ function DetalleEvento() {
       <Link className="volver-link" to="/dashboard/eventos">← Volver a eventos</Link>
 
       <div className="detalle-card">
-        {evento.imagen && <img src={evento.imagen} alt={evento.nombre} />}
+        {evento.imagen && (
+          <Image
+            src={evento.imagen}
+            alt={evento.nombre}
+            width={1600}
+            height={320}
+            unoptimized
+            className="detalle-imagen"
+          />
+        )}
 
         <div className="detalle-contenido">
           <h2>{evento.nombre}</h2>
@@ -63,6 +74,13 @@ function DetalleEvento() {
             <p><strong>Hora:</strong> {evento.hora}</p>
             <p><strong>Lugar:</strong> {evento.ubicacion}</p>
           </div>
+
+          <VenueLayoutPreview
+            tiposEntrada={evento.tiposEntrada}
+            capacidadTotal={evento.capacidad}
+            titulo="Distribucion del recinto"
+            subtitulo="Consulta las zonas disponibles, ubicaciones premium y la relacion entre cupo y precio antes de seleccionar tu entrada."
+          />
 
           {evento.tiposEntrada.length > 0 && (
             <div className="tipos-entrada">

@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useNavigate, useParams } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
 import { useAuth } from '../../../context/AuthContext';
 import GestionTiposEntrada from './GestionTiposEntrada';
+import VenueLayoutPreview from './VenueLayoutPreview';
 import './FormularioEvento.css';
 
 function FormularioEvento() {
@@ -49,6 +51,8 @@ function FormularioEvento() {
   }, [formData.imagen]);
 
   const [categorias, setCategorias] = useState([]);
+
+  const previewTicketList = isEditing ? previewTickets : nuevosTiposEntrada;
 
   const getZoneLabel = (tipoZona) => {
     const labels = {
@@ -441,11 +445,14 @@ function FormularioEvento() {
             <div className="preview-card">
               <h3>Vista previa del evento</h3>
               <div className="preview-content">
-                <div style={{ marginBottom: '15px' }}>
-                  <img 
-                    src={imagePreviewUrl} 
-                    alt={formData.nombre || 'Vista previa'} 
-                    style={{ width: '100%', height: '350px', objectFit: 'cover', borderRadius: '8px' }} 
+                <div className="preview-image-wrapper">
+                  <Image
+                    src={imagePreviewUrl}
+                    alt={formData.nombre || 'Vista previa'}
+                    width={1200}
+                    height={350}
+                    unoptimized
+                    className="preview-image"
                   />
                 </div>
                 <div className="preview-header">
@@ -468,10 +475,10 @@ function FormularioEvento() {
                 </div>
                 <div className="preview-footer" style={{ borderTop: "1px solid #eee", paddingTop: "15px", marginTop: "15px" }}>
                   <div className="preview-capacidad" style={{ textAlign: "right", color: "gray", fontSize: "14px", marginBottom: "10px" }}>Capacidad: {formData.capacidad || '0'}</div>
-                  {previewTickets.length > 0 ? (
+                  {previewTicketList.length > 0 ? (
                     <div className="preview-tickets-list">
                       <h5 style={{ margin: '0 0 10px 0', color: '#666' }}>Zonas y precios</h5>
-                      {previewTickets.map(t => (
+                      {previewTicketList.map(t => (
                         <div key={t.id} className="preview-zone-card">
                           <div>
                             <span style={{ fontWeight: 'bold' }}>{t.nombre}</span>
@@ -484,6 +491,13 @@ function FormularioEvento() {
                           <span style={{ color: 'var(--color-marron)', fontWeight: 'bold' }}>${t.precio}</span>
                         </div>
                       ))}
+                      <VenueLayoutPreview
+                        tiposEntrada={previewTicketList}
+                        capacidadTotal={formData.capacidad}
+                        titulo="Distribucion visual del recinto"
+                        subtitulo="Confirma que la relacion entre zonas, cupos y precios refleja tu estrategia de monetizacion."
+                        compact
+                      />
                     </div>
                   ) : (
                     <div style={{ fontStyle: "italic", color: "#999", fontSize: "14px" }}>No hay entradas definidas aún. Guarda el evento para agregarlas.</div>

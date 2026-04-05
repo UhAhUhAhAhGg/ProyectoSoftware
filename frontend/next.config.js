@@ -5,6 +5,13 @@ const nextConfig = {
   // Solo procesa como rutas de Next.js los archivos que terminen en .page.tsx o .page.jsx
   // Esto previene que Next.js lea `src/pages` y genere rutas fantasma conflictivas
   pageExtensions: ['page.tsx', 'page.ts', 'page.jsx', 'page.js'],
+  images: {
+    unoptimized: true,
+    remotePatterns: [
+      { protocol: 'http', hostname: '**' },
+      { protocol: 'https', hostname: '**' },
+    ],
+  },
 };
 
 module.exports = nextConfig;
