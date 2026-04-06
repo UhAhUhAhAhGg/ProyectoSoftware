@@ -184,8 +184,6 @@ class EventViewSet(viewsets.ModelViewSet):
         """Cancelar un evento validando todas las condiciones de negocio"""
         event = self.get_object()
 
-        # --- INICIO DE VALIDACIONES (Subtarea: 4h) ---
-
         # Condición 1: Permisos (Solo el promotor dueño puede cancelar)
         if str(event.promoter_id) != str(request.user.id):
             return Response({
@@ -207,9 +205,6 @@ class EventViewSet(viewsets.ModelViewSet):
                 "message": "No se puede cancelar un evento cuya fecha ya pasó o está en curso."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # --- FIN DE VALIDACIONES, PROCEDEMOS A CANCELAR ---
-
-        # Calculamos si hay entradas vendidas antes de cancelar
         tickets = event.tickettype_set.all()
         total_sold = sum(ticket.current_sold for ticket in tickets)
 
