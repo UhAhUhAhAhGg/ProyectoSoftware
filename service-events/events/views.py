@@ -181,11 +181,37 @@ class EventViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
-        """Cancelar un evento"""
+        """Cancelar un evento y desactivar sus tickets"""
         event = self.get_object()
+
+        # 1. Validar Permisos: Solo el dueño puede cancelarlo
+        if str(event.promoter_id) != str(request.user.id):
+            return Response({
+                "status": "error",
+                "message": "No tienes permisos. Solo el promotor que creó el evento puede cancelarlo."
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. Validar Estado: Evitar cancelar algo ya cancelado
+        if event.status in ['cancelled', 'completed']:
+            return Response({
+                "status": "error",
+                "message": f"Acción denegada. El evento ya se encuentra '{event.status}'."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. ACTUALIZAR ESTADO A CANCELADO (El núcleo de tu tarea)
         event.status = 'cancelled'
         event.save()
-        return Response({'success': 'Event cancelled'})
+
+        # 4. Desactivamos todos sus tickets para detener la comercialización
+        tickets = event.tickettype_set.all()
+        for ticket in tickets:
+            ticket.status = 'inactive'
+            ticket.save()
+
+        return Response({
+            "status": "success",
+            "message": "El evento ha sido cancelado y su comercialización detenida exitosamente."
+        }, status=status.HTTP_200_OK)
 
 
 class TicketTypeViewSet(viewsets.ModelViewSet):
