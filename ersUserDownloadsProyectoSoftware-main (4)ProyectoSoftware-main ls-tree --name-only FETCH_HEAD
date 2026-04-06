@@ -1,0 +1,25 @@
+[33m1e6ffffe[m[33m ([m[1;31morigin/main[m[33m)[m Update project folder and validation fixes
+ docker-compose.yml                                 |   2 [31m-[m
+ frontend/eslint.config.js                          |   3 [32m+[m
+ frontend/next-env.d.ts                             |   2 [32m+[m[31m-[m
+ frontend/package-lock.json                         | 165 [32m++++++++++++++[m[31m--[m
+ .../dashboard/eventos/FormularioEvento.css         |  36 [32m++++[m
+ .../dashboard/eventos/FormularioEvento.jsx         |  27 [32m++[m[31m-[m
+ .../dashboard/eventos/FormularioTipoEntrada.css    | 162 [32m+++++++++++++++[m[31m-[m
+ .../dashboard/eventos/FormularioTipoEntrada.jsx    | 213 [32m++++++++++++++++++[m[31m---[m
+ .../dashboard/eventos/GestionTiposEntrada.css      |  39 [32m++++[m
+ .../dashboard/eventos/GestionTiposEntrada.jsx      |  32 [32m+++[m[31m-[m
+ .../components/dashboard/eventos/ListaEventos.jsx  |   2 [32m+[m[31m-[m
+ frontend/src/context/AuthContext.jsx               |  46 [32m+++[m[31m--[m
+ frontend/src/pages/AdminDashboard.jsx              |  20 [32m+[m[31m-[m
+ frontend/src/pages/Home.jsx                        |  13 [32m+[m[31m-[m
+ frontend/src/services/eventosService.js            |  18 [32m++[m
+ service-auth/users/tests.py                        |   6 [32m+[m[31m-[m
+ .../0003_tickettype_zone_configuration.py          |  41 [32m++++[m
+ service-events/events/models.py                    |  18 [32m++[m
+ service-events/events/serializers.py               |  70 [32m++++++[m[31m-[m
+ service-events/events/tests.py                     |  84 [32m+++++++[m[31m-[m
+ service-events/events/views.py                     |   2 [32m+[m
+ 21 files changed, 901 insertions(+), 100 deletions(-)
+ create mode 100644 frontend/eslint.config.js
+ create mode 100644 service-events/events/migrations/0003_tickettype_zone_configuration.py
