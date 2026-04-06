@@ -181,39 +181,59 @@ class EventViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
-        """Cancelar un evento y desactivar sus tickets"""
+        """Cancelar un evento validando todas las condiciones de negocio"""
         event = self.get_object()
 
-        # 1. Validar Permisos: Solo el dueño puede cancelarlo
+        # --- INICIO DE VALIDACIONES (Subtarea: 4h) ---
+
+        # Condición 1: Permisos (Solo el promotor dueño puede cancelar)
         if str(event.promoter_id) != str(request.user.id):
             return Response({
                 "status": "error",
                 "message": "No tienes permisos. Solo el promotor que creó el evento puede cancelarlo."
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # 2. Validar Estado: Evitar cancelar algo ya cancelado
+        # Condición 2: Estado del evento (Evitar doble cancelación)
         if event.status in ['cancelled', 'completed']:
             return Response({
                 "status": "error",
                 "message": f"Acción denegada. El evento ya se encuentra '{event.status}'."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # 3. ACTUALIZAR ESTADO A CANCELADO (El núcleo de tu tarea)
+        # Condición 3: Validar temporalidad (No cancelar eventos pasados)
+        if not event.is_upcoming:
+            return Response({
+                "status": "error",
+                "message": "No se puede cancelar un evento cuya fecha ya pasó o está en curso."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # --- FIN DE VALIDACIONES, PROCEDEMOS A CANCELAR ---
+
+        # Calculamos si hay entradas vendidas antes de cancelar
+        tickets = event.tickettype_set.all()
+        total_sold = sum(ticket.current_sold for ticket in tickets)
+
+        # Actualizamos el estado del evento
         event.status = 'cancelled'
         event.save()
 
-        # 4. Desactivamos todos sus tickets para detener la comercialización
-        tickets = event.tickettype_set.all()
+        # Detenemos la comercialización desactivando los tickets
         for ticket in tickets:
             ticket.status = 'inactive'
             ticket.save()
 
+        # Preparamos una respuesta inteligente basada en las ventas
+        if total_sold > 0:
+            mensaje = f"Evento cancelado. ATENCIÓN: Se registraron {total_sold} entradas vendidas. Se debe notificar a los compradores y gestionar reembolsos."
+        else:
+            mensaje = "Evento cancelado exitosamente. La comercialización fue detenida (0 entradas vendidas)."
+
         return Response({
             "status": "success",
-            "message": "El evento ha sido cancelado y su comercialización detenida exitosamente."
+            "message": mensaje,
+            "tickets_sold": total_sold
         }, status=status.HTTP_200_OK)
-
-
+    
 class TicketTypeViewSet(viewsets.ModelViewSet):
     queryset = TicketType.objects.all()
     filter_backends = [DjangoFilterBackend, SearchFilter]
