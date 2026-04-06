@@ -6,7 +6,8 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from .permissions import IsAdministrador, IsPromotor, IsComprador
-
+from .services import TicketGenerationService
+import uuid # Por si necesitamos simular el ID de la compra
 from .models import Category, Event, TicketType
 from .serializers import (
     CategorySerializer,
@@ -411,16 +412,34 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
                 "message": "Este tipo de entrada está agotado o inactivo."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Usamos transacciones para evitar errores de concurrencia
+       # Usamos transacciones para evitar errores de concurrencia
         try:
             with transaction.atomic():
-                # Descontamos el inventario sumando a los vendidos
+                # A. Descontamos el inventario
                 ticket_type.current_sold += 1
                 ticket_type.save()
 
+                # B. Simulamos que se creó la orden de compra
+                # Order.objects.create(...)
+                fake_purchase_id = str(uuid.uuid4()) # Quita esto cuando tengas tu modelo de Orden real
+
+                # C. ¡LLAMAMOS AL NUEVO SERVICIO DE GENERACIÓN DE ENTRADAS!
+                digital_ticket = TicketGenerationService.generate_digital_ticket(
+                    purchase_id=fake_purchase_id,
+                    event_name=event.name,
+                    buyer_id=comprador_id
+                )
+
+            # Devolvemos el QR y el código directo al frontend
             return Response({
                 "status": "success",
-                "message": f"Compra identificada y procesada exitosamente para el usuario ID: {comprador_id}."
+                "message": "Compra procesada exitosamente.",
+                "ticket_data": {
+                    "event_name": event.name,
+                    "ticket_type": ticket_type.name,
+                    "emergency_code": digital_ticket["emergency_code"],
+                    "qr_code": digital_ticket["qr_image_base64"]
+                }
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
