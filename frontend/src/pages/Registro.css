@@ -1,0 +1,760 @@
+/* ===== VARIABLES ===== */
+:root {
+  --color-marron: #AD8149;
+  --color-dorado: #EABF0B;
+  --color-negro: #212121;
+  --color-verde-gris: #363A33;
+  --color-beige: #F0EEEB;
+  
+  /* Modo oscuro */
+  --dark-bg: #1a1a1a;
+  --dark-card: #2a2a2a;
+  --dark-hover: #3a3a3a;
+  --dark-border: #444444;
+  --dark-text: #f0f0f0;
+  --dark-text-secondary: #cccccc;
+}
+
+/* ===== MODO CLARO (por defecto) ===== */
+.registro-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-beige);
+  padding: 20px;
+  transition: background-color 0.3s ease;
+}
+
+.registro-card {
+  background: white;
+  border-radius: 20px;
+  padding: 40px;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 10px 40px rgba(33, 33, 33, 0.1);
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.registro-card h2 {
+  margin: 0 0 10px 0;
+  color: var(--color-negro);
+  font-size: 28px;
+  text-align: center;
+}
+
+.subtitulo {
+  color: var(--color-verde-gris);
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+/* Botón de modo oscuro */
+.dark-mode-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 10px 20px;
+  background-color: var(--color-marron);
+  color: white;
+  border: none;
+  border-radius: 30px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 1000;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode-toggle:hover {
+  background-color: #8B6537;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(173, 129, 73, 0.3);
+}
+
+/* Botón Volver al Inicio */
+.back-to-home {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  padding: 10px 20px;
+  background-color: var(--color-marron);
+  color: white;
+  text-decoration: none;
+  border-radius: 30px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  z-index: 1000;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.back-to-home:hover {
+  background-color: #8B6537;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(173, 129, 73, 0.3);
+}
+
+/* Selector de tipo de usuario */
+.tipo-usuario {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.tipo-option {
+  position: relative;
+  cursor: pointer;
+  border: 2px solid var(--color-beige);
+  border-radius: 10px;
+  padding: 15px;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background-color: white;
+}
+
+.tipo-option.active {
+  border-color: var(--color-marron);
+  background-color: var(--color-beige);
+}
+
+.tipo-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.radio-custom {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-marron);
+  border-radius: 50%;
+  display: inline-block;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.tipo-option input[type="radio"]:checked + .radio-custom::after {
+  content: '';
+  width: 12px;
+  height: 12px;
+  background: var(--color-marron);
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.tipo-content {
+  flex: 1;
+  position: relative;
+}
+
+.tipo-content h3 {
+  margin: 0 0 5px 0;
+  font-size: 16px;
+  color: var(--color-negro);
+}
+
+.tipo-content p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-verde-gris);
+}
+
+/* Badges */
+.badge {
+  position: absolute;
+  top: -8px;
+  right: -5px;
+  background-color: var(--color-marron);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.badge-dorado {
+  background-color: var(--color-dorado);
+  color: var(--color-negro);
+}
+
+/* Formulario */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--color-negro);
+  font-weight: 500;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px 15px;
+  border: 2px solid var(--color-beige);
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+  background-color: var(--color-beige);
+  color: var(--color-negro);
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--color-marron);
+  background-color: white;
+}
+
+.form-group input.error {
+  border-color: var(--color-verde-gris);
+  background-color: #fff5f5;
+}
+
+.error-mensaje {
+  color: var(--color-verde-gris);
+  font-size: 12px;
+  margin-top: 5px;
+  display: block;
+}
+
+/* Botón principal */
+.btn-registro {
+  width: 100%;
+  padding: 14px;
+  background-color: var(--color-marron);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 10px;
+}
+
+.btn-registro:hover {
+  background-color: #8B6537;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(173, 129, 73, 0.3);
+}
+
+.btn-registro:active {
+  transform: translateY(0);
+}
+
+/* Enlaces */
+.login-link {
+  text-align: center;
+  margin-top: 20px;
+  color: var(--color-verde-gris);
+}
+
+.login-link a {
+  color: var(--color-marron);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.login-link a:hover {
+  color: var(--color-dorado);
+  text-decoration: underline;
+}
+
+/* ===== MODO OSCURO ===== */
+body.dark-mode {
+  background-color: var(--dark-bg);
+}
+
+body.dark-mode .registro-container {
+  background-color: var(--dark-bg);
+}
+
+body.dark-mode .registro-card {
+  background-color: var(--dark-card);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--dark-border);
+}
+
+body.dark-mode .registro-card h2 {
+  color: var(--dark-text);
+}
+
+body.dark-mode .subtitulo {
+  color: var(--dark-text-secondary);
+}
+
+body.dark-mode .tipo-option {
+  background-color: var(--dark-card);
+  border-color: var(--dark-border);
+}
+
+body.dark-mode .tipo-option.active {
+  border-color: var(--color-marron);
+  background-color: var(--dark-hover);
+}
+
+body.dark-mode .tipo-content h3 {
+  color: var(--dark-text);
+}
+
+body.dark-mode .tipo-content p {
+  color: var(--dark-text-secondary);
+}
+
+body.dark-mode .radio-custom {
+  border-color: var(--color-marron);
+}
+
+body.dark-mode .form-group label {
+  color: var(--dark-text);
+}
+
+body.dark-mode .form-group input {
+  background-color: var(--dark-card);
+  border-color: var(--dark-border);
+  color: var(--dark-text);
+}
+
+body.dark-mode .form-group input:focus {
+  border-color: var(--color-marron);
+  background-color: var(--dark-hover);
+}
+
+body.dark-mode .form-group input.error {
+  border-color: var(--color-dorado);
+  background-color: rgba(234, 191, 11, 0.1);
+}
+
+body.dark-mode .error-mensaje {
+  color: var(--color-dorado);
+}
+
+body.dark-mode .login-link {
+  color: var(--dark-text-secondary);
+}
+
+body.dark-mode .login-link a {
+  color: var(--color-dorado);
+}
+
+body.dark-mode .login-link a:hover {
+  color: var(--color-marron);
+}
+
+body.dark-mode .badge {
+  background-color: var(--color-marron);
+  color: var(--dark-text);
+}
+
+body.dark-mode .badge-dorado {
+  background-color: var(--color-dorado);
+  color: var(--color-negro);
+}
+
+body.dark-mode .dark-mode-toggle {
+  background-color: var(--color-dorado);
+  color: var(--color-negro);
+}
+
+body.dark-mode .dark-mode-toggle:hover {
+  background-color: #c99f0a;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 600px) {
+  .registro-card {
+    padding: 30px 20px;
+  }
+
+  .tipo-usuario {
+    grid-template-columns: 1fr;
+  }
+
+  .dark-mode-toggle {
+    top: 10px;
+    right: 10px;
+    padding: 8px 16px;
+    font-size: 12px;
+  }
+}
+
+/* ===== ANIMACIONES ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.registro-card {
+  animation: fadeIn 0.5s ease-out;
+}
+/* ===== ESTILOS PARA CONTRASEÑA ===== */
+.password-input-container {
+  position: relative;
+  width: 100%;
+}
+
+.password-input-container input {
+  width: 100%;
+  padding-right: 50px !important; /* !important usado para evitar sobrescritura por estilos base (ej. Next.js Tailwind Forms) que causan superposición con el icono del ojito */
+}
+
+.password-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  padding: 5px;
+  color: var(--color-marron);
+  transition: all 0.3s ease;
+}
+
+.password-toggle:hover {
+  transform: translateY(-50%) scale(1.1);
+}
+
+/* Indicador de fortaleza */
+.password-strength {
+  margin-top: 8px;
+}
+
+.strength-bars {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.strength-bar {
+  height: 4px;
+  flex: 1;
+  background-color: var(--color-beige);
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.strength-bar.weak {
+  background-color: #ff4444;
+}
+
+.strength-bar.medium {
+  background-color: #ffbb33;
+}
+
+.strength-bar.strong {
+  background-color: #00C851;
+}
+
+.strength-text {
+  font-size: 12px;
+}
+
+.strength-text.weak {
+  color: #ff4444;
+}
+
+.strength-text.medium {
+  color: #ffbb33;
+}
+
+.strength-text.strong {
+  color: #00C851;
+}
+
+/* Requisitos de contraseña */
+.password-requirements {
+  background-color: #fff5f5;
+  border: 1px solid #ffcdd2;
+  border-radius: 8px;
+  padding: 10px;
+  margin-top: 8px;
+}
+
+.password-requirements strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #d32f2f;
+}
+
+.password-requirements ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.password-requirements li {
+  color: #d32f2f;
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+
+/* Indicador de coincidencia */
+.password-match {
+  margin-top: 5px;
+  font-size: 12px;
+}
+
+.match-success {
+  color: #00C851;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.match-error {
+  color: #ff4444;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ===== MODAL DE BIENVENIDA ===== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.3s ease;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 20px;
+  padding: 40px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  animation: slideUp 0.3s ease;
+}
+
+.modal-close {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--color-verde-gris);
+  transition: all 0.3s ease;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.modal-close:hover {
+  background-color: var(--color-beige);
+  color: var(--color-marron);
+}
+
+.modal-icon {
+  font-size: 60px;
+  text-align: center;
+  margin-bottom: 20px;
+  animation: bounce 0.5s ease;
+}
+
+.modal-content h2 {
+  color: var(--color-marron);
+  margin-bottom: 20px;
+}
+
+.welcome-message {
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+.welcome-message p {
+  margin: 10px 0;
+  color: var(--color-verde-gris);
+}
+
+.welcome-message strong {
+  color: var(--color-marron);
+}
+
+.email-confirm {
+  margin-top: 15px;
+  font-size: 14px;
+}
+
+.user-email {
+  background-color: var(--color-beige);
+  padding: 10px;
+  border-radius: 8px;
+  font-weight: 600;
+  color: var(--color-marron);
+  display: inline-block;
+}
+
+.registration-date {
+  font-size: 12px;
+  color: var(--color-verde-gris);
+  margin-top: 10px;
+}
+
+.next-steps {
+  background-color: var(--color-beige);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 25px;
+}
+
+.next-steps h3 {
+  color: var(--color-marron);
+  margin: 0 0 15px 0;
+  font-size: 18px;
+}
+
+.next-steps ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.next-steps li {
+  color: var(--color-verde-gris);
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.modal-button {
+  width: 100%;
+  padding: 14px;
+  background-color: var(--color-marron);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.modal-button:hover {
+  background-color: #8B6537;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(173, 129, 73, 0.3);
+}
+
+/* Modo oscuro para modal */
+body.dark-mode .modal-content {
+  background-color: var(--dark-card);
+  border: 1px solid var(--dark-border);
+}
+
+body.dark-mode .modal-content h2 {
+  color: var(--color-dorado);
+}
+
+body.dark-mode .welcome-message p {
+  color: var(--dark-text-secondary);
+}
+
+body.dark-mode .welcome-message strong {
+  color: var(--color-dorado);
+}
+
+body.dark-mode .user-email {
+  background-color: var(--dark-hover);
+  color: var(--color-dorado);
+}
+
+body.dark-mode .next-steps {
+  background-color: var(--dark-hover);
+}
+
+body.dark-mode .next-steps h3 {
+  color: var(--color-dorado);
+}
+
+body.dark-mode .next-steps li {
+  color: var(--dark-text-secondary);
+}
+
+body.dark-mode .modal-close {
+  color: var(--dark-text-secondary);
+}
+
+body.dark-mode .modal-close:hover {
+  background-color: var(--dark-hover);
+  color: var(--color-dorado);
+}
+
+/* ===== ANIMACIONES ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-20px);
+  }
+  60% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Responsive para modal */
+@media (max-width: 600px) {
+  .modal-content {
+    padding: 30px 20px;
+    width: 95%;
+  }
+
+  .modal-icon {
+    font-size: 50px;
+  }
+}
