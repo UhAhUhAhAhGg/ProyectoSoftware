@@ -1,0 +1,33 @@
+.ticket-container {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.ticket-box {
+  border: 1px solid #ccc;
+  padding: 20px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+.qr {
+  width: 150px;
+  height: 150px;
+}
+
+.ticket-container {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.ticket-box {
+  border: 1px solid #ccc;
+  padding: 20px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+.qr {
+  width: 150px;
+  height: 150px;
+}
