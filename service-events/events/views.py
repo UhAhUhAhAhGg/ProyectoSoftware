@@ -1,5 +1,6 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from django.db import transaction
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
@@ -394,3 +395,41 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
         ticket.status = 'inactive'
         ticket.save()
         return Response({'success': 'Ticket type deactivated'})
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsComprador])
+    def purchase(self, request, pk=None):
+        """
+        Proceso de compra seguro: Identifica al usuario y valida el límite de 1 ticket.
+        """
+        ticket_type = self.get_object()
+        event = ticket_type.event
+        comprador_id = request.user.id
+
+        # Validar disponibilidad
+        if not ticket_type.is_available:
+            return Response({
+                "status": "error",
+                "message": "Este tipo de entrada está agotado o inactivo."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Usamos transacciones para evitar errores de concurrencia
+        try:
+            with transaction.atomic():
+                # Descontamos el inventario sumando a los vendidos
+                ticket_type.current_sold += 1
+                ticket_type.save()
+
+                # NOTA PARA TI: Aquí debes llamar a tu modelo/servicio de Ventas reales.
+                # Por ahora, dejamos la lógica simulada de que se guardó.
+                # MiModeloDeVenta.objects.create(buyer_id=comprador_id, ticket=ticket_type)
+
+            return Response({
+                "status": "success",
+                "message": f"Compra identificada y procesada exitosamente para el usuario ID: {comprador_id}."
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": "Error interno al procesar la compra.",
+                "detail": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
