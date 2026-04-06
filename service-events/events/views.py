@@ -418,10 +418,6 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
                 ticket_type.current_sold += 1
                 ticket_type.save()
 
-                # NOTA PARA TI: Aquí debes llamar a tu modelo/servicio de Ventas reales.
-                # Por ahora, dejamos la lógica simulada de que se guardó.
-                # MiModeloDeVenta.objects.create(buyer_id=comprador_id, ticket=ticket_type)
-
             return Response({
                 "status": "success",
                 "message": f"Compra identificada y procesada exitosamente para el usuario ID: {comprador_id}."
