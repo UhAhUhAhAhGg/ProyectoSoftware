@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
+    'drf_spectacular',
     'profiles',  # Tu app de perfiles
 ]
 
@@ -123,6 +124,14 @@ REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
     ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# Swagger Configuration
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Service Profiles API',
+    'DESCRIPTION': 'API para gestión de perfiles de usuarios (Admin, Buyer, Promotor)',
+    'VERSION': '1.0.0',
 }
 
 # JWT Configuration - Solo valida, no genera

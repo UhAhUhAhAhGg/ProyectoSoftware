@@ -1,5 +1,12 @@
 import uuid
+import secrets
 from django.db import models
+
+
+def generate_backup_code():
+    """Generar código alfanumérico único para respaldo"""
+    return secrets.token_hex(5).upper()
+
 
 class Category(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -37,6 +44,10 @@ class Event(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
     ticket_types: models.Manager["TicketType"]
+
+    # 🆕 Lista de espera
+    waitlist_threshold = models.IntegerField(default=90)  # porcentaje
+    waitlist_active = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = 'Event'
@@ -121,17 +132,71 @@ class TicketType(models.Model):
     def is_available(self):
         return self.status == 'active' and self.available_capacity > 0
 
+class Purchase(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('used', 'Used'),
+        ('pending', 'Pending'),
+        ('cancelled', 'Cancelled'),
+    ]
 
-class TicketInstance(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user_id = models.UUIDField()
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
     ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE)
-    qr_code_data = models.CharField(max_length=255, unique=True)
-    emergency_code = models.CharField(max_length=20, unique=True)
-    is_used = models.BooleanField(default=False)
-    validated_at = models.DateTimeField(null=True, blank=True)
-    
-    # Relación con el usuario comprador 
-    buyer_id = models.UUIDField() 
+
+    quantity = models.PositiveIntegerField()
+    total_price = models.DecimalField(max_digits=10, decimal_places=2)
+
+    # Campos para entrada digital
+    qr_code = models.TextField(null=True, blank=True)
+    backup_code = models.CharField(max_length=20, unique=True, db_index=True, null=True, blank=True)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+
+    used_at = models.DateTimeField(null=True, blank=True)
+    validated_by = models.UUIDField(null=True, blank=True)
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['backup_code']),
+            models.Index(fields=['user_id']),
+            models.Index(fields=['status']),
+        ]
+
+
+class Waitlist(models.Model):
+    STATUS_CHOICES = [
+        ('waiting', 'Waiting'),
+        ('notified', 'Notified'),
+        ('converted', 'Converted'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    user_id = models.UUIDField()
+
+    position = models.IntegerField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='waiting')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['position']
+        unique_together = ('event', 'user_id')  # no duplicados
+
+
+class BlacklistedToken(models.Model):
+    token = models.TextField(unique=True)
+    expires_at = models.DateTimeField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.ticket_type.name} - {'USADA' if self.is_used else 'ACTIVA'}"
+        return self.token[:20]
+
