@@ -6,6 +6,13 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.utils import timezone
+import qrcode
+import base64
+from io import BytesIO
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import status
+from .models import TicketType, PaymentOrder # Asegúrate de importar tus modelos
 from .permissions import IsAdministrador, IsPromotor, IsComprador
 from .services import TicketGenerationService
 import uuid # Por si necesitamos simular el ID de la compra
@@ -512,8 +519,7 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
         """
         Endpoint para que el comprador vea sus propias entradas.
         """
-        # Obtenemos el ID del usuario autenticado (asumiendo que request.user es el comprador)
-        # y filtramos la tabla TicketInstance
+        
         tickets = TicketInstance.objects.filter(buyer_id=request.user.id).select_related('ticket_type', 'ticket_type__event')
         
         data = []
@@ -528,3 +534,53 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
             })
             
         return Response(data, status=200)    
+@action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+def procesar_compra(self, request):
+    # 1. Recibir datos reales del frontend
+    ticket_type_id = request.data.get('ticket_type_id')
+    cantidad = int(request.data.get('quantity', 1))
+
+    try:
+        ticket_type = TicketType.objects.get(id=ticket_type_id)
+    except TicketType.DoesNotExist:
+        return Response({"error": "Tipo de entrada no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+    # 2. Validación REAL: ¿Hay espacio?
+    if not ticket_type.is_available or ticket_type.available_capacity < cantidad:
+        return Response({"error": "Se agotaron las entradas de este tipo"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 3. Calcular total real
+    total = ticket_type.price * cantidad
+
+    # 4. Crear la orden de pago en la Base de Datos (Esto le pone los 15 min de vida automáticamente)
+    orden = PaymentOrder.objects.create(
+        buyer_id=request.user.id, 
+        ticket_type=ticket_type,
+        quantity=cantidad,
+        total_price=total
+    )
+
+    # 5. Generar un QR REAL (No simulado). 
+    # Le ponemos los datos de la orden. En un entorno bancario real de Bolivia (Simple), 
+    # aquí iría la cadena del banco, pero esto ya es un QR 100% escaneable.
+    qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    datos_qr = f"TICKETGO|ORDEN:{orden.id}|TOTAL:{orden.total_price}|BOB"
+    qr.add_data(datos_qr)
+    qr.make(fit=True)
+    
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = BytesIO()
+    img.save(buffer,"PNG")
+    qr_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+   # 6. Devolver todo al frontend
+    # Usamos un 'if' en una sola línea para que Pylance sepa que estamos verificando que no sea nulo
+    fecha_expiracion = orden.expires_at.isoformat() if orden.expires_at else None
+
+    return Response({
+        "order_id": orden.id,
+        "total_price": orden.total_price,
+        "qr_image": qr_base64,
+        "expires_at": fecha_expiracion, # Fecha y hora real de expiración (ahora segura)
+        "status": orden.status
+    }, status=status.HTTP_201_CREATED)

@@ -1,5 +1,8 @@
 import uuid
 from django.db import models
+from django.db import models
+from django.utils import timezone
+from datetime import timedelta
 
 class Category(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -135,3 +138,51 @@ class TicketInstance(models.Model):
 
     def __str__(self):
         return f"{self.ticket_type.name} - {'USADA' if self.is_used else 'ACTIVA'}"
+class PaymentOrder(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente'),
+        ('paid', 'Pagado'),
+        ('expired', 'Expirado'),
+        ('cancelled', 'Cancelado')
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # El usuario que está intentando comprar
+    buyer_id = models.UUIDField() 
+    # Qué entrada está intentando comprar
+    ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE)
+    # Cuántas entradas quiere
+    quantity = models.PositiveIntegerField(default=1)
+    # Cuánto tiene que pagar en total
+    total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    # Estado y tiempos de vida (El corazón de tu historia de usuario)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Payment Order'
+        verbose_name_plural = 'Payment Orders'
+        ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        # Magia pura: Si es una orden nueva, le asignamos 15 minutos de vida desde AHORA
+        if not self.id and not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(minutes=15)
+        super().save(*args, **kwargs)
+
+    @property
+    def is_expired(self):
+        """Devuelve True si ya pasaron los 15 minutos y no ha pagado"""
+        if self.status == 'paid':
+            return False
+            
+        # Agregamos esta validación para que Pylance esté feliz
+        if self.expires_at is None:
+            return False 
+            
+        return timezone.now() > self.expires_at
+
+    def __str__(self):
+        return f"Orden {self.id} - Estado: {self.status}"    
