@@ -3,12 +3,18 @@ import Image from 'next/image';
 import { Link, useParams } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
 import VenueLayoutPreview from './VenueLayoutPreview';
+import ModalPagoQR from './ModalPagoQR'; // IMPORTAMOS NUESTRO MODAL REAL
 import './DetalleEvento.css';
 
 function DetalleEvento() {
   const { id } = useParams();
   const [evento, setEvento] = useState(null);
   const [cargando, setCargando] = useState(true);
+
+  // NUEVOS ESTADOS PARA LA COMPRA REAL
+  const [cargandoCompra, setCargandoCompra] = useState(false);
+  const [datosQR, setDatosQR] = useState(null);
+  const [mostrarModal, setMostrarModal] = useState(false);
 
   useEffect(() => {
     const cargar = async () => {
@@ -23,6 +29,45 @@ function DetalleEvento() {
     };
     cargar();
   }, [id]);
+
+  // FUNCIÓN REAL QUE LLAMA A TU BACKEND DE DJANGO
+  const handlePagarConQR = async (ticketTypeId) => {
+    setCargandoCompra(true);
+    
+    try {
+      // Usamos el token real de tu sistema de login (ajusta esto si lo guardas distinto)
+      const token = localStorage.getItem('token'); 
+
+      const response = await fetch('http://127.0.0.1:8000/api/tickets/procesar_compra/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({
+          ticket_type_id: ticketTypeId, // El ID real de la entrada que clickeó
+          quantity: 1 
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Hubo un error al procesar la compra");
+        return;
+      }
+
+      // Si todo sale bien, Django nos manda el QR y el tiempo de expiración
+      setDatosQR(data);
+      setMostrarModal(true);
+
+    } catch (error) {
+      console.error("Error en la conexión:", error);
+      alert("No se pudo conectar con el servidor.");
+    } finally {
+      setCargandoCompra(false);
+    }
+  };
 
   if (cargando) {
     return (
@@ -86,18 +131,38 @@ function DetalleEvento() {
             <div className="tipos-entrada">
               <h3>Tipos de entrada</h3>
               {evento.tiposEntrada.map((t) => (
-                <div key={t.id} className="tipo-entrada-item">
-                  <span className="tipo-nombre">{t.nombre}</span>
-                  <span className="tipo-precio">Bs. {t.precio}</span>
-                  <span className="tipo-disponible">{t.disponibles} disponibles</span>
+                <div key={t.id} className="tipo-entrada-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #eee' }}>
+                  <div>
+                    <span className="tipo-nombre" style={{ display: 'block', fontWeight: 'bold' }}>{t.nombre}</span>
+                    <span className="tipo-precio" style={{ display: 'block', color: '#666' }}>Bs. {t.precio}</span>
+                    <span className="tipo-disponible" style={{ fontSize: '0.8rem', color: t.disponibles > 0 ? 'green' : 'red' }}>
+                      {t.disponibles > 0 ? `${t.disponibles} disponibles` : 'Agotado'}
+                    </span>
+                  </div>
+                  
+                  {/* AQUÍ ESTÁ EL BOTÓN DE COMPRA REAL POR CADA TIPO DE ENTRADA */}
+                  <button 
+                    onClick={() => handlePagarConQR(t.id)}
+                    disabled={cargandoCompra || t.disponibles <= 0}
+                    style={{
+                      padding: '8px 16px',
+                      background: (cargandoCompra || t.disponibles <= 0) ? '#ccc' : '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: (cargandoCompra || t.disponibles <= 0) ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {cargandoCompra ? 'Procesando...' : 'Pagar con QR'}
+                  </button>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="disponibilidad">
+          <div className="disponibilidad" style={{ marginTop: '20px' }}>
             <div className="fila">
-              <span>Disponibilidad</span>
+              <span>Disponibilidad general</span>
               <span>{evento.boletosVendidos}/{evento.capacidad}</span>
             </div>
             <div className="barra">
@@ -105,11 +170,16 @@ function DetalleEvento() {
             </div>
           </div>
 
-          <button type="button" className="btn-seleccionar">
-            Seleccionar este evento
-          </button>
         </div>
       </div>
+
+      {/* RENDERIZAMOS EL MODAL SI HAY DATOS DEL BACKEND */}
+      {mostrarModal && datosQR && (
+        <ModalPagoQR 
+          qrData={datosQR} 
+          onCancel={() => setMostrarModal(false)} 
+        />
+      )}
     </section>
   );
 }
