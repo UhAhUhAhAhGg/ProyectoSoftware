@@ -24,7 +24,6 @@ import secrets
 import uuid
 from django.db.models import Max
 from datetime import timedelta
- main
 from .permissions import IsAdministrador, IsPromotor, IsComprador
 from .services import TicketGenerationService, send_ticket_email
 from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken
