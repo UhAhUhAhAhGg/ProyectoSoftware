@@ -1,7 +1,6 @@
 import uuid
 from django.db import models
 
-
 class Category(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)
@@ -37,6 +36,7 @@ class Event(models.Model):
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='draft')
     created_at = models.DateTimeField(auto_now_add=True)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
+    ticket_types: models.Manager["TicketType"]
 
     class Meta:
         verbose_name = 'Event'
@@ -58,9 +58,10 @@ class Event(models.Model):
 
     @property
     def is_full(self):
+        # Asegúrate de usar ticket_types porque le agregamos related_name='ticket_types' abajo
         total_sold = sum(
-            ticket.current_sold 
-            for ticket in self.tickettype_set.all()
+            ticket.current_sold
+            for ticket in self.ticket_types.all()
         )
         return total_sold >= self.capacity
 
@@ -81,7 +82,7 @@ class TicketType(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='ticket_types')
     name = models.CharField(max_length=100)
     description = models.TextField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -119,3 +120,18 @@ class TicketType(models.Model):
     @property
     def is_available(self):
         return self.status == 'active' and self.available_capacity > 0
+
+
+class TicketInstance(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE)
+    qr_code_data = models.CharField(max_length=255, unique=True)
+    emergency_code = models.CharField(max_length=20, unique=True)
+    is_used = models.BooleanField(default=False)
+    validated_at = models.DateTimeField(null=True, blank=True)
+    
+    # Relación con el usuario comprador 
+    buyer_id = models.UUIDField() 
+
+    def __str__(self):
+        return f"{self.ticket_type.name} - {'USADA' if self.is_used else 'ACTIVA'}"

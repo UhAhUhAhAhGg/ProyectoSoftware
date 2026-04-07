@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from django.utils import timezone
 from .permissions import IsAdministrador, IsPromotor, IsComprador
 from .services import TicketGenerationService
 import uuid # Por si necesitamos simular el ID de la compra
@@ -453,3 +454,56 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
                 "message": "Error interno al procesar la compra.",
                 "detail": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def validate_ticket(self, request):
+        """
+        Endpoint para el personal de seguridad.
+        Recibe el código (QR o Alfanumérico) y lo marca como usado.
+        """
+        from django.utils import timezone
+        from django.db.models import Q
+        from .models import TicketInstance # Asegúrate de que el nombre coincida con tu models.py
+
+        code = request.data.get('code') # Puede ser el contenido del QR o el alfanumérico
+        event_id = request.data.get('event_id')
+
+        if not code or not event_id:
+            return Response({
+                "error": "Código y event_id son requeridos"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Buscamos la entrada usando el operador Q para buscar en dos columnas a la vez (QR o Emergencia)
+            ticket = TicketInstance.objects.get(
+                Q(qr_code_data=code) | Q(emergency_code=code),
+                ticket_type__event_id=event_id
+            )
+
+            # REGLA DE ORO: ¿Ya fue validada antes?
+            if ticket.is_used:
+                return Response({
+                    "status": "DENIED",
+                    "message": "ALERTA: ESTA ENTRADA YA FUE USADA",
+                    "validated_at": ticket.validated_at
+                }, status=status.HTTP_409_CONFLICT)
+
+            # Si llega aquí, la entrada es válida. La "quemamos":
+            ticket.is_used = True
+            ticket.validated_at = timezone.now()
+            ticket.save()
+
+            return Response({
+                "status": "SUCCESS",
+                "message": "Entrada validada correctamente. ¡Acceso permitido!",
+                "details": {
+                    "tipo": ticket.ticket_type.name,
+                    "zona": ticket.ticket_type.get_zone_type_display()  # type: ignore
+                }
+            }, status=status.HTTP_200_OK)
+
+        except TicketInstance.DoesNotExist:
+            return Response({
+                "status": "ERROR",
+                "message": "Entrada no encontrada o no pertenece a este evento."
+            }, status=status.HTTP_404_NOT_FOUND)
