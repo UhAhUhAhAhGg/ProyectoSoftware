@@ -423,22 +423,27 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
                 # Order.objects.create(...)
                 fake_purchase_id = str(uuid.uuid4()) # Quita esto cuando tengas tu modelo de Orden real
 
-                # C. ¡LLAMAMOS AL NUEVO SERVICIO DE GENERACIÓN DE ENTRADAS!
+              # ... (resto de tu código atomic()...)
+                fake_purchase_id = str(uuid.uuid4())
+
+                # LLAMAMOS AL SERVICIO ACTUALIZADO (Ahora pide event y ticket_type)
                 digital_ticket = TicketGenerationService.generate_digital_ticket(
                     purchase_id=fake_purchase_id,
-                    event_name=event.name,
+                    event=event,
+                    ticket_type=ticket_type,
                     buyer_id=comprador_id
                 )
 
-            # Devolvemos el QR y el código directo al frontend
+            # Devolvemos todo al frontend
             return Response({
                 "status": "success",
-                "message": "Compra procesada exitosamente.",
+                "message": "Compra procesada exitosamente. Tu entrada está lista.",
                 "ticket_data": {
                     "event_name": event.name,
                     "ticket_type": ticket_type.name,
                     "emergency_code": digital_ticket["emergency_code"],
-                    "qr_code": digital_ticket["qr_image_base64"]
+                    "qr_code": digital_ticket["qr_image_base64"],
+                    "pdf_file": digital_ticket["pdf_document_base64"] # ¡El frontend solo debe decodificar esto y guardarlo como .pdf!
                 }
             }, status=status.HTTP_201_CREATED)
 
