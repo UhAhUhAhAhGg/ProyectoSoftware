@@ -8,6 +8,9 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django.utils import timezone
 import qrcode
 import base64
+from django.db import transaction
+from rest_framework.permissions import AllowAny
+import uuid
 from io import BytesIO
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -238,6 +241,78 @@ class EventViewSet(viewsets.ModelViewSet):
             "message": mensaje,
             "tickets_sold": total_sold
         }, status=status.HTTP_200_OK)
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def webhook_banco(self, request):
+        """
+        Este endpoint NO lo llama el frontend de React. 
+        Lo llama el servidor del Banco (ej: Banco Mercantil, BNB, Simple) cuando el pago es exitoso.
+        """
+        # 1. Seguridad: Verificar que quien llama es realmente el banco.
+        # Normalmente el banco te manda un token o firma en los headers.
+        token_banco = request.headers.get('X-Bank-Secret')
+        
+        # En producción, 'mi_secreto_super_seguro' debe estar en un archivo .env
+        if token_banco != 'mi_secreto_super_seguro': 
+            return Response({"error": "No autorizado. Firma inválida."}, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. Leer los datos que manda el banco
+        order_id = request.data.get('order_id')
+        estado_transaccion = request.data.get('status') # El banco suele mandar 'EXITOSO', 'RECHAZADO', etc.
+
+        try:
+            orden = PaymentOrder.objects.get(id=order_id)
+        except PaymentOrder.DoesNotExist:
+            return Response({"error": "Orden no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+        # 3. Idempotencia: ¿Qué pasa si el banco manda el mismo mensaje dos veces por error?
+        if orden.status == 'paid':
+            return Response({"mensaje": "Esta orden ya fue procesada y pagada anteriormente"}, status=status.HTTP_200_OK)
+
+        # 4. Validar si la orden ya expiró en nuestro sistema
+        if orden.is_expired:
+            orden.status = 'expired'
+            orden.save()
+            return Response({"error": "La orden ya expiró"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 5. EL MOMENTO DE LA VERDAD: Procesar el pago exitoso
+        if estado_transaccion == 'EXITOSO':
+            
+            # Usamos transaction.atomic(). Esto significa que o se hace TODO, o no se hace NADA.
+            # Evita que el usuario pague pero por un error de BD se quede sin su entrada.
+            with transaction.atomic():
+                
+                # A) Marcar la orden como pagada
+                orden.status = 'paid'
+                orden.save()
+
+                # B) Actualizar la cantidad de entradas vendidas en el TicketType
+                ticket_type = orden.ticket_type
+                ticket_type.current_sold += orden.quantity
+                ticket_type.save()
+
+                # C) Generar la(s) entrada(s) real(es) para el usuario (TicketInstance)
+                entradas_generadas = []
+                for _ in range(orden.quantity):
+                    # Este es el QR que el usuario mostrará EN LA PUERTA del evento
+                    qr_puerta = f"TICKETGO-{uuid.uuid4()}" 
+                    codigo_emergencia = str(uuid.uuid4())[:8].upper() # Ej: 4A8F9B2C
+
+                    nueva_entrada = TicketInstance.objects.create(
+                        ticket_type=ticket_type,
+                        qr_code_data=qr_puerta,
+                        emergency_code=codigo_emergencia,
+                        buyer_id=orden.buyer_id
+                    )
+                    entradas_generadas.append(str(nueva_entrada.id))
+
+            # Respondemos al banco con un 200 OK para que sepa que recibimos el pago bien
+            return Response({
+                "mensaje": "Pago procesado correctamente. Entradas generadas.",
+                "entradas_ids": entradas_generadas
+            }, status=status.HTTP_200_OK)
+
+        # Si el banco manda 'RECHAZADO' u otro estado
+        return Response({"error": "Transacción no exitosa"}, status=status.HTTP_400_BAD_REQUEST)
     
 class TicketTypeViewSet(viewsets.ModelViewSet):
     queryset = TicketType.objects.all()
