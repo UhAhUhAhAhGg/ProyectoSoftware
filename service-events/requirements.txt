@@ -26,3 +26,13 @@ pytest-django==4.7.0
 
 # Image Processing
 Pillow==12.1.1
+
+# QR Code Generation
+qrcode==7.4.2
+
+# PDF Generation
+reportlab==4.0.7
+
+# Email & Background Tasks
+celery==5.3.4
+redis==5.0.1
