@@ -525,7 +525,7 @@ class PurchaseView(APIView):
         try:
             qr = qrcode.make(backup_code)
             buffer = io.BytesIO()
-            qr.save(buffer, format='PNG')
+            qr.save(buffer,'PNG')
             qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
         except Exception as e:
             print(f"Error generando QR: {str(e)}")
