@@ -154,6 +154,13 @@ class EventViewSet(viewsets.ModelViewSet):
             "status": "success",
             "message": "El evento ha sido eliminado lógicamente. El historial de compras previas se mantiene intacto."
         }, status=status.HTTP_200_OK)
+    @action(detail=False, methods=['get'], url_path='estado_orden/(?P<order_id>[^/.]+)', permission_classes=[IsAuthenticated])
+    def estado_orden(self, request, order_id=None):
+        try:
+            orden = PaymentOrder.objects.get(id=order_id, buyer_id=request.user.id)
+            return Response({"status": orden.status}, status=status.HTTP_200_OK)
+        except PaymentOrder.DoesNotExist:
+            return Response({"error": "Orden no encontrada"}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=False, methods=['get'])
     def upcoming(self, request):
@@ -659,3 +666,4 @@ def procesar_compra(self, request):
         "expires_at": fecha_expiracion, # Fecha y hora real de expiración (ahora segura)
         "status": orden.status
     }, status=status.HTTP_201_CREATED)
+    
