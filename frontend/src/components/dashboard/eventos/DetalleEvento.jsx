@@ -15,12 +15,11 @@ function DetalleEvento() {
   useEffect(() => {
     const cargar = async () => {
       try {
-        // CÓDIGO REAL (con el backend despues)
-        const data = await eventosService.getEventoById(id);
-        setEvento(data);
+        // 🔵 CÓDIGO REAL (cuando backend esté listo)
+        // const data = await eventosService.getEventoById(id);
+        // setEvento(data);
 
-        // DEMO (SOLO PARA PRUEBAS - NO USAR EN PRODUCCIÓN)
-        /*
+        // 🟡 DEMO TEMPORAL
         const data = {
           id: 1,
           nombre: "Evento Demo",
@@ -40,8 +39,8 @@ function DetalleEvento() {
             }
           ]
         };
+
         setEvento(data);
-        */
 
       } catch {
         setEvento(null);
@@ -133,7 +132,7 @@ function DetalleEvento() {
             </div>
           </div>
 
-          {/*  BOTÓN DEMO DE COMPRA */}
+          {/* 🟢 BOTÓN DEMO */}
           <button
             type="button"
             className="btn-seleccionar"
@@ -142,7 +141,9 @@ function DetalleEvento() {
                 evento: evento.nombre,
                 usuario: "Usuario Demo",
                 fecha: new Date().toLocaleDateString(),
-                codigo: "ABC123XYZ"
+                codigo: "ABC123XYZ",
+                qr: "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Demo",
+                pdf: "#"
               };
               setTicket(ticketDemo);
             }}
@@ -150,7 +151,7 @@ function DetalleEvento() {
             Comprar entrada
           </button>
 
-          {/*  VISUALIZACIÓN DEL TICKET */}
+          {/* 🟢 TICKET */}
           {ticket && <TicketView ticket={ticket} />}
 
         </div>

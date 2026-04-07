@@ -31,3 +31,12 @@
   width: 150px;
   height: 150px;
 }
+
+.temporizador {
+  margin: 10px 0;
+  font-weight: bold;
+}
+
+.expirado {
+  color: red;
+}
