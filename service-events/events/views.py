@@ -24,7 +24,6 @@ import secrets
 import uuid
 from django.db.models import Max
 from datetime import timedelta
- main
 from .permissions import IsAdministrador, IsPromotor, IsComprador
 from .services import TicketGenerationService, send_ticket_email
 from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken
@@ -143,6 +142,13 @@ class EventViewSet(viewsets.ModelViewSet):
             "status": "success",
             "message": "El evento ha sido eliminado logicamente. El historial de compras previas se mantiene intacto."
         }, status=status.HTTP_200_OK)
+    @action(detail=False, methods=['get'], url_path='estado_orden/(?P<order_id>[^/.]+)', permission_classes=[IsAuthenticated])
+    def estado_orden(self, request, order_id=None):
+        try:
+            orden = PaymentOrder.objects.get(id=order_id, buyer_id=request.user.id)
+            return Response({"status": orden.status}, status=status.HTTP_200_OK)
+        except PaymentOrder.DoesNotExist:
+            return Response({"error": "Orden no encontrada"}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=False, methods=['get'])
     def upcoming(self, request):
@@ -732,91 +738,3 @@ def procesar_compra(self, request):
         "expires_at": fecha_expiracion, # Fecha y hora real de expiración (ahora segura)
         "status": orden.status
     }, status=status.HTTP_201_CREATED)
-                "status": "error",
-                "message": "Esta entrada ha sido cancelada"
-            }, status=status.HTTP_410_GONE)
-
-        purchase.status = 'used'
-        purchase.used_at = timezone.now()
-        purchase.validated_by = request.user.id
-        purchase.save()
-
-        return Response({
-            "status": "success",
-            "message": "Entrada validada correctamente âœ…",
-            "data": {
-                "purchase_id": str(purchase.id),
-                "evento": purchase.event.name,
-                "usuario": purchase.user_id,
-                "zona": purchase.ticket_type.name,
-                "validado_en": timezone.now().isoformat(),
-                "validador": str(request.user.id)
-            }
-        }, status=status.HTTP_200_OK)
-
-
-class WaitlistView(APIView):
-
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        event_id = request.data.get("event_id")
-        user_id = request.user.id
-
-        event = get_object_or_404(Event, id=event_id)
-
-        if Waitlist.objects.filter(event=event, user_id=user_id).exists():
-            return Response({"error": "Ya estÃ¡s en la lista de espera"}, status=400)
-
-        last_position = Waitlist.objects.filter(event=event).aggregate(
-            Max('position')
-        )['position__max'] or 0
-
-        new_position = last_position + 1
-
-        Waitlist.objects.create(
-            event=event,
-            user_id=user_id,
-            position=new_position
-        )
-
-        return Response({"status": "success", "position": new_position}, status=201)
-
-
-class LogoutView(APIView):
-
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        token = request.headers.get("Authorization")
-
-        if not token:
-            return Response({"error": "Token requerido"}, status=400)
-
-        BlacklistedToken.objects.create(
-            token=token,
-            expires_at=timezone.now() + timedelta(hours=1)
-        )
-
-        return Response({"status": "success", "message": "SesiÃ³n cerrada correctamente"})
-
-
-class PurchaseHistoryView(APIView):
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        purchases = Purchase.objects.filter(user_id=request.user.id)
-
-        data = [
-            {
-                "event": p.event.name,
-                "ticket": p.ticket_type.name,
-                "quantity": p.quantity,
-                "total": p.total_price,
-                "date": p.created_at
-            }
-            for p in purchases
-        ]
-
-        return Response(data)
