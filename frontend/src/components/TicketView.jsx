@@ -16,6 +16,7 @@ const TicketView = ({ ticket }) => {
 
   const minutos = Math.floor(tiempoRestante / 60);
   const segundos = tiempoRestante % 60;
+  const tiempoExpirado = tiempoRestante <= 0;
 
   if (!ticket) return null;
 
@@ -24,12 +25,20 @@ const TicketView = ({ ticket }) => {
       <h2>🎉 Pago exitoso</h2>
       <p>Tu entrada ha sido generada</p>
 
-      <p className="temporizador">
-        ⏳ Tiempo restante: {minutos}:{segundos < 10 ? `0${segundos}` : segundos}
-      </p>
+      {!tiempoExpirado ? (
+        <p className="temporizador">
+          ⏳ Tiempo restante: {minutos}:{segundos < 10 ? `0${segundos}` : segundos}
+        </p>
+      ) : (
+        <p className="tiempo-expirado">
+          ⛔ Tiempo expirado
+        </p>
+      )}
 
       <div className="ticket-box">
-        <img src={ticket.qr} alt="QR" className="qr" />
+        {!tiempoExpirado && (
+          <img src={ticket.qr} alt="QR" className="qr" />
+        )}
 
         <p><strong>Código:</strong> {ticket.codigo}</p>
 
@@ -37,9 +46,19 @@ const TicketView = ({ ticket }) => {
           Descargar PDF
         </a>
       </div>
+
+      {tiempoExpirado && (
+        <button
+          className="btn-reintentar"
+          onClick={() => {
+            setTiempoRestante(120);
+          }}
+        >
+          🔄 Reintentar pago
+        </button>
+      )}
     </div>
   );
 };
 
 export default TicketView;
-
