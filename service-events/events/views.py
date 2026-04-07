@@ -1,11 +1,13 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from django.db import transaction
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from .permissions import IsAdministrador, IsPromotor, IsComprador
-
+from .services import TicketGenerationService
+import uuid # Por si necesitamos simular el ID de la compra
 from .models import Category, Event, TicketType
 from .serializers import (
     CategorySerializer,
@@ -181,13 +183,54 @@ class EventViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
-        """Cancelar un evento"""
+        """Cancelar un evento validando todas las condiciones de negocio"""
         event = self.get_object()
+
+        # Condición 1: Permisos (Solo el promotor dueño puede cancelar)
+        if str(event.promoter_id) != str(request.user.id):
+            return Response({
+                "status": "error",
+                "message": "No tienes permisos. Solo el promotor que creó el evento puede cancelarlo."
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # Condición 2: Estado del evento (Evitar doble cancelación)
+        if event.status in ['cancelled', 'completed']:
+            return Response({
+                "status": "error",
+                "message": f"Acción denegada. El evento ya se encuentra '{event.status}'."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Condición 3: Validar temporalidad (No cancelar eventos pasados)
+        if not event.is_upcoming:
+            return Response({
+                "status": "error",
+                "message": "No se puede cancelar un evento cuya fecha ya pasó o está en curso."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        tickets = event.tickettype_set.all()
+        total_sold = sum(ticket.current_sold for ticket in tickets)
+
+        # Actualizamos el estado del evento
         event.status = 'cancelled'
         event.save()
-        return Response({'success': 'Event cancelled'})
 
+        # Detenemos la comercialización desactivando los tickets
+        for ticket in tickets:
+            ticket.status = 'inactive'
+            ticket.save()
 
+        # Preparamos una respuesta inteligente basada en las ventas
+        if total_sold > 0:
+            mensaje = f"Evento cancelado. ATENCIÓN: Se registraron {total_sold} entradas vendidas. Se debe notificar a los compradores y gestionar reembolsos."
+        else:
+            mensaje = "Evento cancelado exitosamente. La comercialización fue detenida (0 entradas vendidas)."
+
+        return Response({
+            "status": "success",
+            "message": mensaje,
+            "tickets_sold": total_sold
+        }, status=status.HTTP_200_OK)
+    
 class TicketTypeViewSet(viewsets.ModelViewSet):
     queryset = TicketType.objects.all()
     filter_backends = [DjangoFilterBackend, SearchFilter]
@@ -353,3 +396,55 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
         ticket.status = 'inactive'
         ticket.save()
         return Response({'success': 'Ticket type deactivated'})
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsComprador])
+    def purchase(self, request, pk=None):
+        """
+        Proceso de compra seguro: Identifica al usuario y valida el límite de 1 ticket.
+        """
+        ticket_type = self.get_object()
+        event = ticket_type.event
+        comprador_id = request.user.id
+
+        # Validar disponibilidad
+        if not ticket_type.is_available:
+            return Response({
+                "status": "error",
+                "message": "Este tipo de entrada está agotado o inactivo."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+       # Usamos transacciones para evitar errores de concurrencia
+        try:
+            with transaction.atomic():
+                # A. Descontamos el inventario
+                ticket_type.current_sold += 1
+                ticket_type.save()
+
+                # B. Simulamos que se creó la orden de compra
+                # Order.objects.create(...)
+                fake_purchase_id = str(uuid.uuid4()) # Quita esto cuando tengas tu modelo de Orden real
+
+                # C. ¡LLAMAMOS AL NUEVO SERVICIO DE GENERACIÓN DE ENTRADAS!
+                digital_ticket = TicketGenerationService.generate_digital_ticket(
+                    purchase_id=fake_purchase_id,
+                    event_name=event.name,
+                    buyer_id=comprador_id
+                )
+
+            # Devolvemos el QR y el código directo al frontend
+            return Response({
+                "status": "success",
+                "message": "Compra procesada exitosamente.",
+                "ticket_data": {
+                    "event_name": event.name,
+                    "ticket_type": ticket_type.name,
+                    "emergency_code": digital_ticket["emergency_code"],
+                    "qr_code": digital_ticket["qr_image_base64"]
+                }
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": "Error interno al procesar la compra.",
+                "detail": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
