@@ -507,3 +507,24 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
                 "status": "ERROR",
                 "message": "Entrada no encontrada o no pertenece a este evento."
             }, status=status.HTTP_404_NOT_FOUND)
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def mis_entradas(self, request):
+        """
+        Endpoint para que el comprador vea sus propias entradas.
+        """
+        # Obtenemos el ID del usuario autenticado (asumiendo que request.user es el comprador)
+        # y filtramos la tabla TicketInstance
+        tickets = TicketInstance.objects.filter(buyer_id=request.user.id).select_related('ticket_type', 'ticket_type__event')
+        
+        data = []
+        for ticket in tickets:
+            data.append({
+                "id": str(ticket.id),
+                "event_name": ticket.ticket_type.event.name,
+                "ticket_type": ticket.ticket_type.name,
+                "qr_code": ticket.qr_code_data,  # El string en Base64
+                "emergency_code": ticket.emergency_code,
+                "is_used": ticket.is_used
+            })
+            
+        return Response(data, status=200)    
