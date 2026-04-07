@@ -12,10 +12,19 @@ from django.utils import timezone
 import qrcode
 import io
 import base64
+from django.db import transaction
+from rest_framework.permissions import AllowAny
+import uuid
+from io import BytesIO
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import status
+from .models import TicketType, PaymentOrder # Asegúrate de importar tus modelos
 import secrets
 import uuid
 from django.db.models import Max
 from datetime import timedelta
+ main
 from .permissions import IsAdministrador, IsPromotor, IsComprador
 from .services import TicketGenerationService, send_ticket_email
 from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken
@@ -221,6 +230,78 @@ class EventViewSet(viewsets.ModelViewSet):
             "message": mensaje,
             "tickets_sold": total_sold
         }, status=status.HTTP_200_OK)
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def webhook_banco(self, request):
+        """
+        Este endpoint NO lo llama el frontend de React. 
+        Lo llama el servidor del Banco (ej: Banco Mercantil, BNB, Simple) cuando el pago es exitoso.
+        """
+        # 1. Seguridad: Verificar que quien llama es realmente el banco.
+        # Normalmente el banco te manda un token o firma en los headers.
+        token_banco = request.headers.get('X-Bank-Secret')
+        
+        # En producción, 'mi_secreto_super_seguro' debe estar en un archivo .env
+        if token_banco != 'mi_secreto_super_seguro': 
+            return Response({"error": "No autorizado. Firma inválida."}, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. Leer los datos que manda el banco
+        order_id = request.data.get('order_id')
+        estado_transaccion = request.data.get('status') # El banco suele mandar 'EXITOSO', 'RECHAZADO', etc.
+
+        try:
+            orden = PaymentOrder.objects.get(id=order_id)
+        except PaymentOrder.DoesNotExist:
+            return Response({"error": "Orden no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+        # 3. Idempotencia: ¿Qué pasa si el banco manda el mismo mensaje dos veces por error?
+        if orden.status == 'paid':
+            return Response({"mensaje": "Esta orden ya fue procesada y pagada anteriormente"}, status=status.HTTP_200_OK)
+
+        # 4. Validar si la orden ya expiró en nuestro sistema
+        if orden.is_expired:
+            orden.status = 'expired'
+            orden.save()
+            return Response({"error": "La orden ya expiró"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 5. EL MOMENTO DE LA VERDAD: Procesar el pago exitoso
+        if estado_transaccion == 'EXITOSO':
+            
+            # Usamos transaction.atomic(). Esto significa que o se hace TODO, o no se hace NADA.
+            # Evita que el usuario pague pero por un error de BD se quede sin su entrada.
+            with transaction.atomic():
+                
+                # A) Marcar la orden como pagada
+                orden.status = 'paid'
+                orden.save()
+
+                # B) Actualizar la cantidad de entradas vendidas en el TicketType
+                ticket_type = orden.ticket_type
+                ticket_type.current_sold += orden.quantity
+                ticket_type.save()
+
+                # C) Generar la(s) entrada(s) real(es) para el usuario (TicketInstance)
+                entradas_generadas = []
+                for _ in range(orden.quantity):
+                    # Este es el QR que el usuario mostrará EN LA PUERTA del evento
+                    qr_puerta = f"TICKETGO-{uuid.uuid4()}" 
+                    codigo_emergencia = str(uuid.uuid4())[:8].upper() # Ej: 4A8F9B2C
+
+                    nueva_entrada = TicketInstance.objects.create(
+                        ticket_type=ticket_type,
+                        qr_code_data=qr_puerta,
+                        emergency_code=codigo_emergencia,
+                        buyer_id=orden.buyer_id
+                    )
+                    entradas_generadas.append(str(nueva_entrada.id))
+
+            # Respondemos al banco con un 200 OK para que sepa que recibimos el pago bien
+            return Response({
+                "mensaje": "Pago procesado correctamente. Entradas generadas.",
+                "entradas_ids": entradas_generadas
+            }, status=status.HTTP_200_OK)
+
+        # Si el banco manda 'RECHAZADO' u otro estado
+        return Response({"error": "Transacción no exitosa"}, status=status.HTTP_400_BAD_REQUEST)
     
 class TicketTypeViewSet(viewsets.ModelViewSet):
     queryset = TicketType.objects.all()
@@ -578,6 +659,79 @@ class ValidateTicketView(APIView):
 
         if purchase.status == 'cancelled':
             return Response({
+                "status": "ERROR",
+                "message": "Entrada no encontrada o no pertenece a este evento."
+            }, status=status.HTTP_404_NOT_FOUND)
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def mis_entradas(self, request):
+        """
+        Endpoint para que el comprador vea sus propias entradas.
+        """
+        
+        tickets = TicketInstance.objects.filter(buyer_id=request.user.id).select_related('ticket_type', 'ticket_type__event')
+        
+        data = []
+        for ticket in tickets:
+            data.append({
+                "id": str(ticket.id),
+                "event_name": ticket.ticket_type.event.name,
+                "ticket_type": ticket.ticket_type.name,
+                "qr_code": ticket.qr_code_data,  # El string en Base64
+                "emergency_code": ticket.emergency_code,
+                "is_used": ticket.is_used
+            })
+            
+        return Response(data, status=200)    
+@action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+def procesar_compra(self, request):
+    # 1. Recibir datos reales del frontend
+    ticket_type_id = request.data.get('ticket_type_id')
+    cantidad = int(request.data.get('quantity', 1))
+
+    try:
+        ticket_type = TicketType.objects.get(id=ticket_type_id)
+    except TicketType.DoesNotExist:
+        return Response({"error": "Tipo de entrada no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+    # 2. Validación REAL: ¿Hay espacio?
+    if not ticket_type.is_available or ticket_type.available_capacity < cantidad:
+        return Response({"error": "Se agotaron las entradas de este tipo"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 3. Calcular total real
+    total = ticket_type.price * cantidad
+
+    # 4. Crear la orden de pago en la Base de Datos (Esto le pone los 15 min de vida automáticamente)
+    orden = PaymentOrder.objects.create(
+        buyer_id=request.user.id, 
+        ticket_type=ticket_type,
+        quantity=cantidad,
+        total_price=total
+    )
+
+    # 5. Generar un QR REAL (No simulado). 
+    # Le ponemos los datos de la orden. En un entorno bancario real de Bolivia (Simple), 
+    # aquí iría la cadena del banco, pero esto ya es un QR 100% escaneable.
+    qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    datos_qr = f"TICKETGO|ORDEN:{orden.id}|TOTAL:{orden.total_price}|BOB"
+    qr.add_data(datos_qr)
+    qr.make(fit=True)
+    
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = BytesIO()
+    img.save(buffer,"PNG")
+    qr_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+   # 6. Devolver todo al frontend
+    # Usamos un 'if' en una sola línea para que Pylance sepa que estamos verificando que no sea nulo
+    fecha_expiracion = orden.expires_at.isoformat() if orden.expires_at else None
+
+    return Response({
+        "order_id": orden.id,
+        "total_price": orden.total_price,
+        "qr_image": qr_base64,
+        "expires_at": fecha_expiracion, # Fecha y hora real de expiración (ahora segura)
+        "status": orden.status
+    }, status=status.HTTP_201_CREATED)
                 "status": "error",
                 "message": "Esta entrada ha sido cancelada"
             }, status=status.HTTP_410_GONE)
