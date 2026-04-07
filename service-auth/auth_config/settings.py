@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework_simplejwt',
     'django_filters',
+    'drf_spectacular',
     'users',  # App de usuarios
 ]
 
@@ -128,6 +129,14 @@ REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
     ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# Swagger Configuration
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Service Auth API',
+    'DESCRIPTION': 'API para autenticación y gestión de usuarios',
+    'VERSION': '1.0.0',
 }
 
 # JWT Configuration

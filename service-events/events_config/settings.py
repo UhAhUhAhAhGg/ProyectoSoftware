@@ -42,6 +42,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'events.middleware.TokenBlacklistMiddleware',
+    'events.middleware.ActivityMiddleware',
 ]
 
 ROOT_URLCONF = 'events_config.urls'
@@ -148,6 +150,16 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API for managing events and ticket types.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SECURITY': [
+        {
+            'Bearer': {
+                'type': 'http',
+                'scheme': 'bearer',
+                'bearerFormat': 'JWT',
+            }
+        }
+    ],
 }
 
 # JWT Configuration - Solo valida, no genera
