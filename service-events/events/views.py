@@ -53,35 +53,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
         categories = Category.objects.filter(is_active=True)
         serializer = CategorySerializer(categories, many=True)
         return Response(serializer.data)
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
-    def historial_compras(self, request):
-        """
-        Devuelve todas las compras exitosas del usuario logueado.
-        Ordenadas automáticamente de la más reciente a la más antigua.
-        """
-        # 1. Filtramos por el usuario actual y solo pagos exitosos.
-        # El .order_by('-created_at') asegura explícitamente que el más nuevo salga arriba.
-        ordenes = PaymentOrder.objects.filter(
-            buyer_id=request.user.id,
-            status='paid'
-        ).order_by('-created_at')
 
-        # 2. Preparamos la respuesta (Serialización manual rápida, o puedes usar un Serializer si prefieres)
-        historial_data = []
-        for orden in ordenes:
-            historial_data.append({
-                "order_id": orden.id,
-                "fecha_compra": orden.created_at.isoformat(), # Fecha exacta para que React la formatee
-                "total_pagado": orden.total_price,
-                "cantidad": orden.quantity,
-                "evento_nombre": orden.ticket_type.event.name,
-                "evento_fecha": orden.ticket_type.event.event_date.isoformat(),
-                "tipo_entrada": orden.ticket_type.name,
-                "estado": orden.status
-            })
-
-        # 3. Devolvemos la lista al frontend
-        return Response(historial_data, status=status.HTTP_200_OK)
 
 class EventViewSet(viewsets.ModelViewSet):
 
@@ -495,7 +467,29 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
         ticket.save()
         return Response({'success': 'Ticket type deactivated'})
 
+class PaymentOrder(models.Model):
+    buyer_id = models.IntegerField() # Guardamos el ID del comprador
+    ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=1)
+    total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=20, default='pending') # pending, paid, expired
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
 
+    @property
+    def is_expired(self):
+        from django.utils import timezone
+        if self.expires_at:
+            return timezone.now() > self.expires_at
+        return False
+
+class TicketInstance(models.Model):
+    buyer_id = models.IntegerField()
+    ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE)
+    qr_code_data = models.CharField(max_length=255, unique=True)
+    emergency_code = models.CharField(max_length=50, unique=True)
+    is_used = models.BooleanField(default=False)
+    validated_at = models.DateTimeField(null=True, blank=True)
 
 class PurchaseView(APIView):
     permission_classes = [IsAuthenticated]
