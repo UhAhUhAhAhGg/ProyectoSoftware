@@ -48,7 +48,12 @@ class Event(models.Model):
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
     ticket_types: models.Manager["TicketType"]
 
-    # 🆕 Lista de espera
+    # Campos de cancelación (TIC-9 / TIC-210 / TIC-229)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.UUIDField(null=True, blank=True)
+    cancellation_reason = models.TextField(null=True, blank=True)
+
+    # Lista de espera
     waitlist_threshold = models.IntegerField(default=90)  # porcentaje
     waitlist_active = models.BooleanField(default=False)
 

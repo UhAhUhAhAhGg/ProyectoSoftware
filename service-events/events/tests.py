@@ -17,6 +17,12 @@ class FakeUser:
         self.is_superuser = False
 
 
+class FakeAuth:
+    """Mock auth object to simulate JWT payload with role."""
+    def __init__(self, role='Comprador'):
+        self.payload = {'role': role}
+
+
 class PurchaseTestCase(APITestCase):
 
     def setUp(self):
@@ -512,3 +518,257 @@ class ValidateTicketTestCase(APITestCase):
 
         purchase.refresh_from_db()
         self.assertEqual(purchase.status, 'used')
+
+
+# =============================================
+# PA Tests - TIC-9: Cancelar Evento
+# =============================================
+
+class EventCancellationPATestCase(APITestCase):
+    """
+    Pruebas de aceptación para TIC-9 (Cancelar Evento).
+    TIC-228: Evento cancelado muestra estado 'cancelled'
+    TIC-229: Metadata de cancelación se almacena correctamente
+    TIC-230: No se puede comprar en un evento cancelado
+    """
+
+    def setUp(self):
+        self.promoter_id = uuid.uuid4()
+        self.promoter = FakeUser(self.promoter_id)
+        self.buyer_id = uuid.uuid4()
+        self.buyer = FakeUser(self.buyer_id)
+
+        self.event = Event.objects.create(
+            promoter_id=self.promoter_id,
+            name="Concierto PA Test",
+            description="Evento para pruebas de aceptación",
+            event_date="2026-12-15",
+            event_time="21:00",
+            location="Cochabamba",
+            capacity=200,
+            status='published'
+        )
+
+        self.ticket = TicketType.objects.create(
+            event=self.event,
+            name="General",
+            description="Entrada general",
+            price=80,
+            max_capacity=200,
+            current_sold=0,
+            status='active'
+        )
+
+    def test_tic228_cancelled_event_shows_status(self):
+        """TIC-228: Al cancelar un evento, su estado debe mostrarse como 'cancelled'."""
+        self.client.force_authenticate(user=self.promoter, token=FakeAuth('Promotor'))
+
+        cancel_url = reverse('events:event-cancel', args=[self.event.id])
+        response = self.client.post(cancel_url, {
+            "cancellation_reason": "Fuerza mayor"
+        }, format='json')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "success")
+
+        # Verificar que el evento aparece como cancelled al consultarlo
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.status, 'cancelled')
+
+        # Verificar vía API GET
+        detail_url = reverse('events:event-detail', args=[self.event.id])
+        get_response = self.client.get(detail_url)
+        self.assertEqual(get_response.status_code, 200)
+        self.assertEqual(get_response.data['status'], 'cancelled')
+
+    def test_tic229_cancellation_metadata_stored(self):
+        """TIC-229: La cancelación debe almacenar fecha, responsable y motivo."""
+        self.client.force_authenticate(user=self.promoter, token=FakeAuth('Promotor'))
+
+        cancel_url = reverse('events:event-cancel', args=[self.event.id])
+        response = self.client.post(cancel_url, {
+            "cancellation_reason": "Clima adverso"
+        }, format='json')
+
+        self.assertEqual(response.status_code, 200)
+
+        # Verificar metadata en la respuesta
+        self.assertIn("cancelled_at", response.data)
+        self.assertIn("cancelled_by", response.data)
+        self.assertIn("cancellation_reason", response.data)
+        self.assertEqual(response.data["cancellation_reason"], "Clima adverso")
+        self.assertEqual(response.data["cancelled_by"], str(self.promoter_id))
+
+        # Verificar metadata en la BD
+        self.event.refresh_from_db()
+        self.assertIsNotNone(self.event.cancelled_at)
+        self.assertEqual(self.event.cancelled_by, self.promoter_id)
+        self.assertEqual(self.event.cancellation_reason, "Clima adverso")
+
+    def test_tic230_cannot_purchase_cancelled_event(self):
+        """TIC-230: No se puede comprar entradas para un evento cancelado."""
+        # Primero cancelar el evento
+        self.client.force_authenticate(user=self.promoter, token=FakeAuth('Promotor'))
+        cancel_url = reverse('events:event-cancel', args=[self.event.id])
+        self.client.post(cancel_url, {
+            "cancellation_reason": "Cancelado para test"
+        }, format='json')
+
+        # Intentar comprar como comprador
+        self.client.force_authenticate(user=self.buyer)
+        purchase_url = reverse('events:purchase')
+        response = self.client.post(purchase_url, {
+            "event_id": str(self.event.id),
+            "ticket_type_id": str(self.ticket.id),
+            "quantity": 1
+        }, format='json')
+
+        self.assertEqual(response.status_code, 400)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.status, 'cancelled')
+
+
+# =============================================
+# PA Tests - TIC-10: Configuración de Asientos
+# =============================================
+
+class SeatConfigurationPATestCase(APITestCase):
+    """
+    Pruebas de aceptación para TIC-10 (Configuración de Asientos).
+    TIC-225: Asientos vinculados correctamente a zona
+    TIC-226: Distribución de zonas visible en GET del evento
+    TIC-227: Configuración inválida rechazada
+    """
+
+    def setUp(self):
+        self.promoter_id = uuid.uuid4()
+        self.promoter = FakeUser(self.promoter_id)
+
+        self.event = Event.objects.create(
+            promoter_id=self.promoter_id,
+            name="Festival PA Test",
+            description="Evento para PA de configuración",
+            event_date="2026-12-20",
+            event_time="19:00",
+            location="Santa Cruz",
+            capacity=500,
+            status='published'
+        )
+
+    def test_tic225_seats_linked_to_zone(self):
+        """TIC-225: Asientos quedan vinculados a la zona con tipo, capacidad y precio correctos."""
+        self.client.force_authenticate(user=self.promoter)
+
+        url = reverse('events:seat-config', args=[self.event.id])
+        data = {
+            "zones": [
+                {
+                    "name": "General",
+                    "price": 50,
+                    "max_capacity": 300,
+                    "zone_type": "general"
+                },
+                {
+                    "name": "VIP",
+                    "price": 150,
+                    "max_capacity": 100,
+                    "zone_type": "vip"
+                },
+                {
+                    "name": "Platea",
+                    "price": 80,
+                    "max_capacity": 100,
+                    "zone_type": "platea"
+                }
+            ]
+        }
+
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, 201)
+
+        # Verificar que se crearon los TicketTypes con los datos correctos
+        ticket_types = TicketType.objects.filter(event=self.event).order_by('name')
+        self.assertEqual(ticket_types.count(), 3)
+
+        general = ticket_types.get(name="General")
+        self.assertEqual(general.zone_type, "general")
+        self.assertEqual(general.max_capacity, 300)
+        self.assertEqual(general.price, 50)
+
+        vip = ticket_types.get(name="VIP")
+        self.assertEqual(vip.zone_type, "vip")
+        self.assertEqual(vip.max_capacity, 100)
+        self.assertEqual(vip.price, 150)
+
+        platea = ticket_types.get(name="Platea")
+        self.assertEqual(platea.zone_type, "platea")
+        self.assertEqual(platea.max_capacity, 100)
+        self.assertEqual(platea.price, 80)
+
+    def test_tic226_venue_shows_zone_distribution(self):
+        """TIC-226: Al consultar el evento, se muestra la distribución de zonas configuradas."""
+        self.client.force_authenticate(user=self.promoter)
+
+        # Configurar zonas
+        config_url = reverse('events:seat-config', args=[self.event.id])
+        self.client.post(config_url, {
+            "zones": [
+                {"name": "General", "price": 50, "max_capacity": 300, "zone_type": "general"},
+                {"name": "VIP", "price": 150, "max_capacity": 100, "zone_type": "vip"}
+            ]
+        }, format='json')
+
+        # Consultar el evento
+        detail_url = reverse('events:event-detail', args=[self.event.id])
+        response = self.client.get(detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('tickets', response.data)
+
+        tickets_data = response.data['tickets']
+        self.assertEqual(len(tickets_data), 2)
+
+        zone_names = [t['name'] for t in tickets_data]
+        self.assertIn('General', zone_names)
+        self.assertIn('VIP', zone_names)
+
+        for t in tickets_data:
+            self.assertIn('zone_type', t)
+            self.assertIn('max_capacity', t)
+            self.assertIn('price', t)
+            self.assertIn('available_capacity', t)
+
+    def test_tic227_invalid_config_rejected(self):
+        """TIC-227: Configuración inválida (sin zone_type, nombres duplicados) es rechazada con 422."""
+        self.client.force_authenticate(user=self.promoter)
+
+        url = reverse('events:seat-config', args=[self.event.id])
+
+        # Caso 1: Nombres duplicados
+        response_dup = self.client.post(url, {
+            "zones": [
+                {"name": "VIP", "price": 100, "max_capacity": 50, "zone_type": "vip"},
+                {"name": "VIP", "price": 120, "max_capacity": 50, "zone_type": "vip"}
+            ]
+        }, format='json')
+        self.assertEqual(response_dup.status_code, 422)
+
+        # Caso 2: Capacidad excede el evento
+        response_cap = self.client.post(url, {
+            "zones": [
+                {"name": "General", "price": 50, "max_capacity": 600, "zone_type": "general"}
+            ]
+        }, format='json')
+        self.assertEqual(response_cap.status_code, 422)
+
+        # Caso 3: VIP con precio menor que general
+        response_price = self.client.post(url, {
+            "zones": [
+                {"name": "General", "price": 100, "max_capacity": 200, "zone_type": "general"},
+                {"name": "VIP", "price": 50, "max_capacity": 100, "zone_type": "vip"}
+            ]
+        }, format='json')
+        self.assertEqual(response_price.status_code, 422)
+
+        # Verificar que no se crearon TicketTypes (todo fue rechazado)
+        self.assertEqual(TicketType.objects.filter(event=self.event).count(), 0)

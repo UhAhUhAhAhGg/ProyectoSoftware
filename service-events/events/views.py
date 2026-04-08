@@ -213,28 +213,34 @@ class EventViewSet(viewsets.ModelViewSet):
                 "message": "No se puede cancelar un evento cuya fecha ya pasÃ³ o estÃ¡ en curso."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        tickets = event.tickettype_set.all()
+        tickets = event.ticket_types.all()
         total_sold = sum(ticket.current_sold for ticket in tickets)
 
-        # Actualizamos el estado del evento
+        # Registrar metadata de cancelación (TIC-210/TIC-229)
         event.status = 'cancelled'
+        event.cancelled_at = timezone.now()
+        event.cancelled_by = request.user.id
+        event.cancellation_reason = request.data.get('cancellation_reason', '')
         event.save()
 
-        # Detenemos la comercializaciÃ³n desactivando los tickets
+        # Detenemos la comercialización desactivando los tickets
         for ticket in tickets:
             ticket.status = 'inactive'
             ticket.save()
 
         # Preparamos una respuesta inteligente basada en las ventas
         if total_sold > 0:
-            mensaje = f"Evento cancelado. ATENCIÃ“N: Se registraron {total_sold} entradas vendidas. Se debe notificar a los compradores y gestionar reembolsos."
+            mensaje = f"Evento cancelado. ATENCIÓN: Se registraron {total_sold} entradas vendidas. Se debe notificar a los compradores y gestionar reembolsos."
         else:
-            mensaje = "Evento cancelado exitosamente. La comercializaciÃ³n fue detenida (0 entradas vendidas)."
+            mensaje = "Evento cancelado exitosamente. La comercialización fue detenida (0 entradas vendidas)."
 
         return Response({
             "status": "success",
             "message": mensaje,
-            "tickets_sold": total_sold
+            "tickets_sold": total_sold,
+            "cancelled_at": event.cancelled_at.isoformat(),
+            "cancelled_by": str(event.cancelled_by),
+            "cancellation_reason": event.cancellation_reason,
         }, status=status.HTTP_200_OK)
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def webhook_banco(self, request):
@@ -467,29 +473,6 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
         ticket.save()
         return Response({'success': 'Ticket type deactivated'})
 
-class PaymentOrder(models.Model):
-    buyer_id = models.IntegerField() # Guardamos el ID del comprador
-    ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE)
-    quantity = models.PositiveIntegerField(default=1)
-    total_price = models.DecimalField(max_digits=10, decimal_places=2)
-    status = models.CharField(max_length=20, default='pending') # pending, paid, expired
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField(null=True, blank=True)
-
-    @property
-    def is_expired(self):
-        from django.utils import timezone
-        if self.expires_at:
-            return timezone.now() > self.expires_at
-        return False
-
-class TicketInstance(models.Model):
-    buyer_id = models.IntegerField()
-    ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE)
-    qr_code_data = models.CharField(max_length=255, unique=True)
-    emergency_code = models.CharField(max_length=50, unique=True)
-    is_used = models.BooleanField(default=False)
-    validated_at = models.DateTimeField(null=True, blank=True)
 
 class PurchaseView(APIView):
     permission_classes = [IsAuthenticated]
@@ -687,76 +670,86 @@ class ValidateTicketView(APIView):
 
         if purchase.status == 'cancelled':
             return Response({
-                "status": "ERROR",
-                "message": "Entrada no encontrada o no pertenece a este evento."
-            }, status=status.HTTP_404_NOT_FOUND)
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
-    def mis_entradas(self, request):
-        """
-        Endpoint para que el comprador vea sus propias entradas.
-        """
-        
-        tickets = TicketInstance.objects.filter(buyer_id=request.user.id).select_related('ticket_type', 'ticket_type__event')
-        
+                "status": "error",
+                "message": "Esta entrada fue cancelada"
+            }, status=status.HTTP_410_GONE)
+
+        # Marcar como usada
+        purchase.status = 'used'
+        purchase.used_at = timezone.now()
+        purchase.validated_by = request.user.id
+        purchase.save()
+
+        return Response({
+            "status": "success",
+            "message": "Entrada validada correctamente",
+            "data": {
+                "purchase_id": str(purchase.id),
+                "event": purchase.event.name,
+                "ticket_type": purchase.ticket_type.name,
+                "validated_at": purchase.used_at.isoformat()
+            }
+        }, status=status.HTTP_200_OK)
+
+
+
+class WaitlistView(APIView):
+    """Endpoint para gestionar lista de espera."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        event_id = request.data.get("event_id")
+        event = get_object_or_404(Event, id=event_id)
+        user_id = request.user.id
+
+        if Waitlist.objects.filter(event=event, user_id=user_id).exists():
+            return Response({"error": "Ya estás en la lista de espera"}, status=400)
+
+        max_pos = Waitlist.objects.filter(event=event).aggregate(Max('position'))['position__max'] or 0
+        entry = Waitlist.objects.create(
+            event=event,
+            user_id=user_id,
+            position=max_pos + 1
+        )
+        return Response({
+            "status": "waitlist",
+            "position": entry.position,
+            "message": f"Estás en la posición {entry.position} de la lista de espera."
+        }, status=status.HTTP_201_CREATED)
+
+
+class LogoutView(APIView):
+    """Endpoint para cerrar sesión (blacklist token)."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if token:
+            BlacklistedToken.objects.get_or_create(
+                token=token,
+                defaults={'expires_at': timezone.now() + timedelta(days=1)}
+            )
+        return Response({"message": "Sesión cerrada correctamente"}, status=200)
+
+
+class PurchaseHistoryView(APIView):
+    """Endpoint para consultar historial de compras del usuario."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user_id = request.user.id
+        purchases = Purchase.objects.filter(user_id=user_id).select_related('event', 'ticket_type').order_by('-created_at')
         data = []
-        for ticket in tickets:
+        for p in purchases:
             data.append({
-                "id": str(ticket.id),
-                "event_name": ticket.ticket_type.event.name,
-                "ticket_type": ticket.ticket_type.name,
-                "qr_code": ticket.qr_code_data,  # El string en Base64
-                "emergency_code": ticket.emergency_code,
-                "is_used": ticket.is_used
+                "id": str(p.id),
+                "event_name": p.event.name,
+                "event_date": str(p.event.event_date),
+                "ticket_type": p.ticket_type.name,
+                "quantity": p.quantity,
+                "total_price": str(p.total_price),
+                "status": p.status,
+                "backup_code": p.backup_code,
+                "created_at": p.created_at.isoformat(),
             })
-            
-        return Response(data, status=200)    
-@action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
-def procesar_compra(self, request):
-    # 1. Recibir datos reales del frontend
-    ticket_type_id = request.data.get('ticket_type_id')
-    cantidad = int(request.data.get('quantity', 1))
-
-    try:
-        ticket_type = TicketType.objects.get(id=ticket_type_id)
-    except TicketType.DoesNotExist:
-        return Response({"error": "Tipo de entrada no encontrado"}, status=status.HTTP_404_NOT_FOUND)
-
-    # 2. Validación REAL: ¿Hay espacio?
-    if not ticket_type.is_available or ticket_type.available_capacity < cantidad:
-        return Response({"error": "Se agotaron las entradas de este tipo"}, status=status.HTTP_400_BAD_REQUEST)
-
-    # 3. Calcular total real
-    total = ticket_type.price * cantidad
-
-    # 4. Crear la orden de pago en la Base de Datos (Esto le pone los 15 min de vida automáticamente)
-    orden = PaymentOrder.objects.create(
-        buyer_id=request.user.id, 
-        ticket_type=ticket_type,
-        quantity=cantidad,
-        total_price=total
-    )
-
-    # 5. Generar un QR REAL (No simulado). 
-    # Le ponemos los datos de la orden. En un entorno bancario real de Bolivia (Simple), 
-    # aquí iría la cadena del banco, pero esto ya es un QR 100% escaneable.
-    qr = qrcode.QRCode(version=1, box_size=10, border=4)
-    datos_qr = f"TICKETGO|ORDEN:{orden.id}|TOTAL:{orden.total_price}|BOB"
-    qr.add_data(datos_qr)
-    qr.make(fit=True)
-    
-    img = qr.make_image(fill_color="black", back_color="white")
-    buffer = BytesIO()
-    img.save(buffer,"PNG")
-    qr_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-
-   # 6. Devolver todo al frontend
-    # Usamos un 'if' en una sola línea para que Pylance sepa que estamos verificando que no sea nulo
-    fecha_expiracion = orden.expires_at.isoformat() if orden.expires_at else None
-
-    return Response({
-        "order_id": orden.id,
-        "total_price": orden.total_price,
-        "qr_image": qr_base64,
-        "expires_at": fecha_expiracion, # Fecha y hora real de expiración (ahora segura)
-        "status": orden.status
-    }, status=status.HTTP_201_CREATED)
+        return Response(data, status=200)

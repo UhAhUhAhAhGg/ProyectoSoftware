@@ -25,6 +25,20 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
   const [error, setError] = useState('');
   const [capacidadDisponible, setCapacidadDisponible] = useState(0);
 
+  const cargarTiposEntrada = useCallback(async () => {
+    if (!eventoId) return;
+    setCargando(true);
+    try {
+      const tipos = await eventosService.getTiposEntradaByEvento(eventoId);
+      setTiposEntrada(tipos);
+      if (onChange) onChange(tipos);
+    } catch {
+      setTiposEntrada([]);
+    } finally {
+      setCargando(false);
+    }
+  }, [eventoId]);
+
   useEffect(() => {
     if (eventoId) {
       cargarTiposEntrada();
@@ -41,20 +55,6 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
       setCapacidadDisponible((parseInt(evento.capacidad) || 0) - sumaCupos);
     }
   }, [evento, tiposEntrada]);
-
-  const cargarTiposEntrada = useCallback(async () => {
-    if (!eventoId) return;
-    setCargando(true);
-    try {
-      const tipos = await eventosService.getTiposEntradaByEvento(eventoId);
-      setTiposEntrada(tipos);
-      if (onChange) onChange(tipos);
-    } catch {
-      setTiposEntrada([]);
-    } finally {
-      setCargando(false);
-    }
-  }, [eventoId, onChange]);
 
   const handleCrear = () => {
     setTipoEditando(null);

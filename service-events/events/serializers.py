@@ -34,7 +34,7 @@ class TicketTypeSerializer(serializers.ModelSerializer):
 
 class EventSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
-    tickets = TicketTypeSerializer(source='tickettype_set', many=True, read_only=True)
+    tickets = TicketTypeSerializer(source='ticket_types', many=True, read_only=True)
     disponibilidad = serializers.SerializerMethodField()
 
     class Meta:

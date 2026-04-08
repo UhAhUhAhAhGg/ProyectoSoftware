@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { useNavigate, useParams } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
@@ -29,9 +29,20 @@ function FormularioEvento() {
   const [errores, setErrores] = useState({});
   const [cargando, setCargando] = useState(false);
   const [mostrarPreview, setMostrarPreview] = useState(false);
+  const mostrarPreviewRef = useRef(mostrarPreview);
+  mostrarPreviewRef.current = mostrarPreview;
   const [imagePreviewUrl, setImagePreviewUrl] = useState('https://via.placeholder.com/300x200?text=Evento');
   const [previewTickets, setPreviewTickets] = useState([]);
   const [nuevosTiposEntrada, setNuevosTiposEntrada] = useState([]);
+
+  const handleTiposChange = useCallback((tipos) => {
+    if (!isEditing) {
+      setNuevosTiposEntrada(tipos);
+    }
+    if (mostrarPreviewRef.current) {
+      setPreviewTickets(tipos.filter(t => t.estado === 'activo'));
+    }
+  }, [isEditing]);
 
   // Cargar preview cuando la imagen cambia
   useEffect(() => {
@@ -547,14 +558,7 @@ function FormularioEvento() {
         <GestionTiposEntrada 
            eventoId={isEditing ? id : null} 
            evento={formData} 
-           onChange={(tipos) => {
-             if (!isEditing) {
-               setNuevosTiposEntrada(tipos);
-             }
-             if (mostrarPreview) {
-               setPreviewTickets(tipos.filter(t => t.estado === 'activo'));
-             }
-           }}
+           onChange={handleTiposChange}
         />
       </div>
     </div>
