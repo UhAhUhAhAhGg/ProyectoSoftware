@@ -53,7 +53,35 @@ class CategoryViewSet(viewsets.ModelViewSet):
         categories = Category.objects.filter(is_active=True)
         serializer = CategorySerializer(categories, many=True)
         return Response(serializer.data)
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def historial_compras(self, request):
+        """
+        Devuelve todas las compras exitosas del usuario logueado.
+        Ordenadas automáticamente de la más reciente a la más antigua.
+        """
+        # 1. Filtramos por el usuario actual y solo pagos exitosos.
+        # El .order_by('-created_at') asegura explícitamente que el más nuevo salga arriba.
+        ordenes = PaymentOrder.objects.filter(
+            buyer_id=request.user.id,
+            status='paid'
+        ).order_by('-created_at')
 
+        # 2. Preparamos la respuesta (Serialización manual rápida, o puedes usar un Serializer si prefieres)
+        historial_data = []
+        for orden in ordenes:
+            historial_data.append({
+                "order_id": orden.id,
+                "fecha_compra": orden.created_at.isoformat(), # Fecha exacta para que React la formatee
+                "total_pagado": orden.total_price,
+                "cantidad": orden.quantity,
+                "evento_nombre": orden.ticket_type.event.name,
+                "evento_fecha": orden.ticket_type.event.event_date.isoformat(),
+                "tipo_entrada": orden.ticket_type.name,
+                "estado": orden.status
+            })
+
+        # 3. Devolvemos la lista al frontend
+        return Response(historial_data, status=status.HTTP_200_OK)
 
 class EventViewSet(viewsets.ModelViewSet):
 
