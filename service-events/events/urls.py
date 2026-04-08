@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CategoryViewSet, EventViewSet, TicketTypeViewSet, PurchaseView, SeatConfigurationView, ValidateTicketView, WaitlistView, LogoutView, PurchaseHistoryView
+from .views import CategoryViewSet, EventViewSet, TicketTypeViewSet, PurchaseView, SeatConfigurationView, ValidateTicketView #WaitlistView, LogoutView, PurchaseHistoryView
 
 app_name = 'events'
 

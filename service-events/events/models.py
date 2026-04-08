@@ -203,3 +203,65 @@ class BlacklistedToken(models.Model):
     def __str__(self):
         return self.token[:20]
 
+class PaymentOrder(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente'),
+        ('completed', 'Completado'),
+        ('failed', 'Fallido'),
+        ('cancelled', 'Cancelado'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField() # Relacionado con el microservicio de usuarios
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Payment Order'
+        verbose_name_plural = 'Payment Orders'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user_id']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"Order {self.id} - {self.status}"
+
+
+class TicketInstance(models.Model):
+    STATUS_CHOICES = [
+        ('valid', 'Válida'),
+        ('used', 'Usada'),
+        ('cancelled', 'Cancelada'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    order = models.ForeignKey(PaymentOrder, on_delete=models.CASCADE, related_name='tickets')
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE)
+    
+    # Datos únicos de esta entrada en particular
+    qr_code = models.TextField(null=True, blank=True)
+    backup_code = models.CharField(max_length=20, unique=True, db_index=True, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='valid')
+    
+    used_at = models.DateTimeField(null=True, blank=True)
+    validated_by = models.UUIDField(null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Ticket Instance'
+        verbose_name_plural = 'Ticket Instances'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['backup_code']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"Ticket {self.backup_code} - {self.event.name}"
