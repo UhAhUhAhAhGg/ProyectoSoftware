@@ -298,4 +298,17 @@ export const eventosService = {
     }
     return true;
   },
+
+  cancelEvento: async (id, reason = '') => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/events/${id}/cancel/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cancellation_reason: reason }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || 'No se pudo cancelar el evento.');
+    }
+    return await res.json();
+  },
 };

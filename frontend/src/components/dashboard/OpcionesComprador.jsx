@@ -31,6 +31,14 @@ function OpcionesComprador() {
       contador: 2
     },
     {
+      id: 'mis-compras',
+      icono: '🧾',
+      titulo: 'Mis Compras',
+      descripcion: 'Revisa tus compras y descargas',
+      link: '/dashboard/mis-compras',
+      color: '#3B6FB0'
+    },
+    {
       id: 'favoritos',
       icono: '❤️',
       titulo: 'Favoritos',

@@ -7,6 +7,7 @@ import ResetPassword from './pages/ResetPassword';
 import CuentaEliminada from './pages/CuentaEliminada';
 import Dashboard from './pages/Dashboard';
 import PerfilUsuario from './pages/PerfilUsuario';
+import MisCompras from './pages/MisCompras';
 import ListaEventos from './components/dashboard/eventos/ListaEventos';
 import FormularioEvento from './components/dashboard/eventos/FormularioEvento';
 import ExplorarEventos from './components/dashboard/eventos/ExplorarEventos';
@@ -25,6 +26,7 @@ function App() {
           <Route path="/cuenta-eliminada" element={<CuentaEliminada />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/perfil" element={<PerfilUsuario />} />
+          <Route path="/dashboard/mis-compras" element={<MisCompras />} />
           <Route path="/dashboard/eventos" element={<ExplorarEventos />} />
           <Route path="/dashboard/evento/:id" element={<DetalleEvento />} />
           <Route path="/dashboard/mis-eventos" element={<ListaEventos />} />
