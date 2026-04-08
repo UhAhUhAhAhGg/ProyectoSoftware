@@ -1,0 +1,50 @@
+.mis-compras-page {
+  padding: 1.2rem;
+  min-height: 80vh;
+}
+
+.mis-compras-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.mis-compras-grid {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 16px;
+  margin-top: 1rem;
+}
+
+.compras-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.compra-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #ececec;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #fff;
+}
+
+.compra-card:hover { background: #fbfbfb; }
+
+.compra-title { font-weight: 700; }
+.compra-meta { color: #666; font-size: 0.9rem; }
+.compra-amount { font-weight: 800; color: #2f2f2f; }
+
+.compra-detalle { border: 1px solid #ececec; padding: 12px; border-radius: 8px; background: #fff; }
+
+.btn-link.small { background: transparent; border: none; color: #3b6fb0; cursor: pointer; font-size: 0.9rem; }
+
+@media (max-width: 880px) {
+  .mis-compras-grid { grid-template-columns: 1fr; }
+  .compra-detalle { order: 2; margin-top: 12px; }
+}
