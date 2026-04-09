@@ -4,10 +4,10 @@ import { getUserTickets, downloadPurchasePDF } from '../services/profileService'
 import './MisCompras.css';
 
 const STATUS_LABELS = {
-  active: { label: 'Completada', className: 'badge-completada' },
-  used: { label: 'Utilizada', className: 'badge-utilizada' },
-  pending: { label: 'Pendiente', className: 'badge-pendiente' },
-  cancelled: { label: 'Cancelada', className: 'badge-cancelada' },
+  active: { label: 'Completada', className: 'badge-completada', icon: '✅' },
+  used: { label: 'Utilizada', className: 'badge-utilizada', icon: '🎟️' },
+  pending: { label: 'Pendiente', className: 'badge-pendiente', icon: '⏳' },
+  cancelled: { label: 'Cancelada', className: 'badge-cancelada', icon: '❌' },
 };
 
 export default function MisCompras() {
@@ -90,10 +90,19 @@ export default function MisCompras() {
     } catch { return d; }
   };
 
-  const getBadge = (status) => {
-    const info = STATUS_LABELS[status] || { label: status, className: 'badge-default' };
-    return <span className={`compra-badge ${info.className}`}>{info.label}</span>;
+const getBadge = (status) => {
+  const info = STATUS_LABELS[status] || {
+    label: status,
+    className: 'badge-default',
+    icon: '❓'
   };
+
+  return (
+    <span className={`compra-badge ${info.className}`}>
+      {info.icon} {info.label}
+    </span>
+  );
+};
 
   return (
     <section className="mis-compras-page">

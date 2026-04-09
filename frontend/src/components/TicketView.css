@@ -1,0 +1,74 @@
+.ticket-container {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.ticket-box {
+  border: 1px solid #ccc;
+  padding: 20px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+.qr {
+  width: 150px;
+  height: 150px;
+}
+
+.ticket-container {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.ticket-box {
+  border: 1px solid #ccc;
+  padding: 20px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+.qr {
+  width: 150px;
+  height: 150px;
+}
+
+
+
+.temporizador {
+  font-size: 18px;
+  font-weight: bold;
+  color: #ff4d4f;
+  margin-bottom: 10px;
+}
+
+.tiempo-expirado {
+  color: red;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.btn-reintentar {
+  margin-top: 20px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #1890ff, #40a9ff);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 10px rgba(24, 144, 255, 0.3);
+}
+
+.btn-reintentar:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(24, 144, 255, 0.4);
+}
+
+.btn-reintentar:active {
+  transform: scale(0.97);
+}

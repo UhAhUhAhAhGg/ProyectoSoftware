@@ -5,11 +5,13 @@ import { eventosService } from '../../../services/eventosService';
 import VenueLayoutPreview from './VenueLayoutPreview';
 import ModalPagoQR from './ModalPagoQR';
 import './DetalleEvento.css';
+import TicketView from '../../TicketView';
 
 function DetalleEvento() {
   const { id } = useParams();
   const [evento, setEvento] = useState(null);
   const [cargando, setCargando] = useState(true);
+  const [ticket, setTicket] = useState(null);
 
   const [cargandoCompra, setCargandoCompra] = useState(false);
   const [ordenCompra, setOrdenCompra] = useState(null);
@@ -19,8 +21,33 @@ function DetalleEvento() {
   useEffect(() => {
     const cargar = async () => {
       try {
-        const data = await eventosService.getEventoById(id);
+        // 🔵 CÓDIGO REAL (cuando backend esté listo)
+        // const data = await eventosService.getEventoById(id);
+        // setEvento(data);
+
+        // 🟡 DEMO TEMPORAL
+        const data = {
+          id: 1,
+          nombre: "Evento Demo",
+          descripcion: "Evento de prueba",
+          fecha: new Date(),
+          hora: "20:00",
+          ubicacion: "La Paz",
+          estado: "activo",
+          capacidad: 100,
+          boletosVendidos: 20,
+          tiposEntrada: [
+            {
+              id: 1,
+              nombre: "General",
+              precio: 50,
+              disponibles: 80
+            }
+          ]
+        };
+
         setEvento(data);
+
       } catch {
         setEvento(null);
       } finally {
@@ -107,10 +134,10 @@ function DetalleEvento() {
             tiposEntrada={evento.tiposEntrada}
             capacidadTotal={evento.capacidad}
             titulo="Distribucion del recinto"
-            subtitulo="Consulta las zonas disponibles, ubicaciones premium y la relacion entre cupo y precio antes de seleccionar tu entrada."
+            subtitulo="Consulta las zonas disponibles antes de seleccionar tu entrada."
           />
 
-          {evento.tiposEntrada.length > 0 && (
+          {evento.tiposEntrada?.length > 0 && (
             <div className="tipos-entrada">
               <h3>Tipos de entrada</h3>
               {errorCompra && (
@@ -158,6 +185,31 @@ function DetalleEvento() {
             </div>
           </div>
 
+<<<<<<< HEAD
+          {/* 🟢 BOTÓN DEMO */}
+          <button
+            type="button"
+            className="btn-seleccionar"
+            onClick={() => {
+              const ticketDemo = {
+                evento: evento.nombre,
+                usuario: "Usuario Demo",
+                fecha: new Date().toLocaleDateString(),
+                codigo: "ABC123XYZ",
+                qr: "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Demo",
+                pdf: "#"
+              };
+              setTicket(ticketDemo);
+            }}
+          >
+            Comprar entrada
+          </button>
+
+          {/* 🟢 TICKET */}
+          {ticket && <TicketView ticket={ticket} />}
+
+=======
+>>>>>>> main
         </div>
       </div>
 

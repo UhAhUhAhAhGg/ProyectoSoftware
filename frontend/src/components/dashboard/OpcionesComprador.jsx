@@ -2,6 +2,9 @@ import { Link } from 'react-router-dom';
 import './OpcionesComprador.css';
 
 function OpcionesComprador() {
+  // DEMO - historial vacío (luego vendrá del backend)
+  const historialCompras = [];
+
   const opciones = [
     {
       id: 'explorar',
@@ -57,11 +60,6 @@ function OpcionesComprador() {
           <Link to={opcion.link} key={opcion.id} className="opcion-card">
             <div className="opcion-header" style={{ backgroundColor: opcion.color + '20' }}>
               <span className="opcion-icono" style={{ color: opcion.color }}>{opcion.icono}</span>
-              {opcion.contador && (
-                <span className="opcion-contador" style={{ backgroundColor: opcion.color }}>
-                  {opcion.contador}
-                </span>
-              )}
             </div>
             <div className="opcion-body">
               <h3>{opcion.titulo}</h3>
@@ -74,34 +72,16 @@ function OpcionesComprador() {
         ))}
       </div>
 
-      {/* Categorías de eventos */}
+      {/* Categorías */}
       <div className="categorias-eventos">
         <h3>Explora por categoría</h3>
         <div className="categorias-grid">
-          <Link to="/dashboard/eventos?categoria=conciertos" className="categoria-card">
-            <span className="categoria-icono">🎵</span>
-            <span>Conciertos</span>
-          </Link>
-          <Link to="/dashboard/eventos?categoria=deportes" className="categoria-card">
-            <span className="categoria-icono">⚽</span>
-            <span>Deportes</span>
-          </Link>
-          <Link to="/dashboard/eventos?categoria=teatro" className="categoria-card">
-            <span className="categoria-icono">🎭</span>
-            <span>Teatro</span>
-          </Link>
-          <Link to="/dashboard/eventos?categoria=cine" className="categoria-card">
-            <span className="categoria-icono">🎬</span>
-            <span>Cine</span>
-          </Link>
-          <Link to="/dashboard/eventos?categoria=conferencias" className="categoria-card">
-            <span className="categoria-icono">🎤</span>
-            <span>Conferencias</span>
-          </Link>
-          <Link to="/dashboard/eventos?categoria=festivales" className="categoria-card">
-            <span className="categoria-icono">🎪</span>
-            <span>Festivales</span>
-          </Link>
+          <Link to="/dashboard/eventos?categoria=conciertos" className="categoria-card">🎵 Conciertos</Link>
+          <Link to="/dashboard/eventos?categoria=deportes" className="categoria-card">⚽ Deportes</Link>
+          <Link to="/dashboard/eventos?categoria=teatro" className="categoria-card">🎭 Teatro</Link>
+          <Link to="/dashboard/eventos?categoria=cine" className="categoria-card">🎬 Cine</Link>
+          <Link to="/dashboard/eventos?categoria=conferencias" className="categoria-card">🎤 Conferencias</Link>
+          <Link to="/dashboard/eventos?categoria=festivales" className="categoria-card">🎪 Festivales</Link>
         </div>
       </div>
 
@@ -114,9 +94,7 @@ function OpcionesComprador() {
         <div className="eventos-lista">
           {[1, 2, 3].map(item => (
             <div key={item} className="evento-mini-card">
-              <div className="evento-mini-imagen">
-                <span>🎫</span>
-              </div>
+              <div className="evento-mini-imagen">🎫</div>
               <div className="evento-mini-info">
                 <h4>Evento destacado {item}</h4>
                 <p>📍 Lugar del evento</p>
@@ -125,6 +103,26 @@ function OpcionesComprador() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ✅ HISTORIAL (BIEN UBICADO) */}
+      <div className="historial-compras">
+        <h3>📜 Tu historial de compras</h3>
+
+        {historialCompras.length === 0 ? (
+          <div className="historial-vacio">
+            <div className="historial-icono">🎫</div>
+            <h4>Aún no tienes compras</h4>
+            <p>
+              Cuando compres entradas, aparecerán aquí para que puedas consultarlas fácilmente.
+            </p>
+            <Link to="/dashboard/eventos" className="btn-explorar">
+              Explorar eventos
+            </Link>
+          </div>
+        ) : (
+          <p>Aquí se mostrará el historial (cuando conectemos backend)</p>
+        )}
       </div>
     </div>
   );
