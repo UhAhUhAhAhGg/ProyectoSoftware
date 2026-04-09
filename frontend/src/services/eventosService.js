@@ -16,11 +16,6 @@ const mapEvento = (e) => {
     descripcion: t.description,
     precio: parseFloat(t.price),
     cupoMaximo: t.max_capacity,
-    tipoZona: t.zone_type ?? 'general',
-    esVIP: Boolean(t.is_vip),
-    filas: t.seat_rows ?? '',
-    asientosPorFila: t.seats_per_row ?? '',
-    asientosConfigurados: t.configured_seats ?? null,
     cupoVendido: t.current_sold ?? 0,
     estado: TICKET_STATUS_MAP[t.status] ?? t.status,
     disponibles: t.available_capacity ?? (t.max_capacity - (t.current_sold ?? 0)),
@@ -60,14 +55,13 @@ const mapTipoEntrada = (t) => ({
   descripcion: t.description,
   precio: parseFloat(t.price),
   cupoMaximo: t.max_capacity,
-  tipoZona: t.zone_type ?? 'general',
-  esVIP: Boolean(t.is_vip),
-  filas: t.seat_rows ?? '',
-  asientosPorFila: t.seats_per_row ?? '',
-  asientosConfigurados: t.configured_seats ?? null,
   cupoVendido: t.current_sold ?? 0,
   estado: TICKET_STATUS_MAP[t.status] ?? t.status,
   disponibles: t.available_capacity ?? (t.max_capacity - (t.current_sold ?? 0)),
+  tipoZona: t.zone_type ?? 'general',
+  esVIP: t.is_vip ?? false,
+  filas: t.seat_rows ?? null,
+  asientosPorFila: t.seats_per_row ?? null,
 });
 
 export const eventosService = {
@@ -170,13 +164,13 @@ export const eventosService = {
     if (eventoData.imagen && typeof eventoData.imagen === 'string' && eventoData.imagen.startsWith('data:image')) {
       // Necesita FormData para nueva imagen
       const formData = new FormData();
-      if (eventoData.nombre) formData.append('name', eventoData.nombre);
-      if (eventoData.descripcion) formData.append('description', eventoData.descripcion);
-      if (eventoData.fecha) formData.append('event_date', eventoData.fecha);
-      if (eventoData.hora) formData.append('event_time', eventoData.hora);
-      if (eventoData.ubicacion) formData.append('location', eventoData.ubicacion);
-      if (eventoData.capacidad) formData.append('capacity', parseInt(eventoData.capacidad));
-      if (eventoData.status) formData.append('status', eventoData.status);
+      if (eventoData.nombre != null) formData.append('name', eventoData.nombre);
+      if (eventoData.descripcion != null) formData.append('description', eventoData.descripcion);
+      if (eventoData.fecha != null) formData.append('event_date', eventoData.fecha);
+      if (eventoData.hora != null) formData.append('event_time', eventoData.hora);
+      if (eventoData.ubicacion != null) formData.append('location', eventoData.ubicacion);
+      if (eventoData.capacidad != null) formData.append('capacity', parseInt(eventoData.capacidad));
+      if (eventoData.status != null) formData.append('status', eventoData.status);
       if (eventoData.categoria) formData.append('category', eventoData.categoria);
       
       const resBlob = await fetch(eventoData.imagen);
@@ -190,14 +184,14 @@ export const eventosService = {
     } else {
       // Solo texto, JSON normal
       const body = {};
-      if (eventoData.nombre) body.name = eventoData.nombre;
-      if (eventoData.descripcion) body.description = eventoData.descripcion;
-      if (eventoData.fecha) body.event_date = eventoData.fecha;
-      if (eventoData.hora) body.event_time = eventoData.hora;
-      if (eventoData.ubicacion) body.location = eventoData.ubicacion;
-      if (eventoData.capacidad) body.capacity = parseInt(eventoData.capacidad);
-      if (eventoData.status) body.status = eventoData.status;
-      if (eventoData.categoria) body.category = eventoData.categoria;
+      if (eventoData.nombre != null) body.name = eventoData.nombre;
+      if (eventoData.descripcion != null) body.description = eventoData.descripcion;
+      if (eventoData.fecha != null) body.event_date = eventoData.fecha;
+      if (eventoData.hora != null) body.event_time = eventoData.hora;
+      if (eventoData.ubicacion != null) body.location = eventoData.ubicacion;
+      if (eventoData.capacidad != null) body.capacity = parseInt(eventoData.capacidad);
+      if (eventoData.status != null) body.status = eventoData.status;
+      if (eventoData.categoria != null) body.category = eventoData.categoria || null;
 
       res = await apiFetch(`${EVENTS_URL}/api/v1/events/${id}/`, {
         method: 'PATCH',
@@ -247,8 +241,8 @@ export const eventosService = {
         max_capacity: parseInt(tipoData.cupoMaximo),
         zone_type: tipoData.tipoZona || 'general',
         is_vip: Boolean(tipoData.esVIP),
-        seat_rows: parseInt(tipoData.filas),
-        seats_per_row: parseInt(tipoData.asientosPorFila),
+        seat_rows: tipoData.filas ? parseInt(tipoData.filas) : null,
+        seats_per_row: tipoData.asientosPorFila ? parseInt(tipoData.asientosPorFila) : null,
       }),
     });
     if (!res.ok) {
@@ -263,14 +257,14 @@ export const eventosService = {
 
   actualizarTipoEntrada: async (eventoId, tipoId, tipoData) => {
     const body = {};
-    if (tipoData.nombre) body.name = tipoData.nombre;
+    if (tipoData.nombre != null) body.name = tipoData.nombre;
     if (tipoData.descripcion !== undefined) body.description = tipoData.descripcion;
     if (tipoData.precio !== undefined) body.price = parseFloat(tipoData.precio);
     if (tipoData.cupoMaximo !== undefined) body.max_capacity = parseInt(tipoData.cupoMaximo);
-    if (tipoData.tipoZona !== undefined) body.zone_type = tipoData.tipoZona;
-    if (tipoData.esVIP !== undefined) body.is_vip = Boolean(tipoData.esVIP);
-    if (tipoData.filas !== undefined) body.seat_rows = parseInt(tipoData.filas);
-    if (tipoData.asientosPorFila !== undefined) body.seats_per_row = parseInt(tipoData.asientosPorFila);
+    if (tipoData.tipoZona != null) body.zone_type = tipoData.tipoZona;
+    if (tipoData.esVIP != null) body.is_vip = Boolean(tipoData.esVIP);
+    if (tipoData.filas != null) body.seat_rows = parseInt(tipoData.filas);
+    if (tipoData.asientosPorFila != null) body.seats_per_row = parseInt(tipoData.asientosPorFila);
     if (tipoData.estado !== undefined) {
       const statusMap = { activo: 'active', eliminado: 'inactive', inactivo: 'inactive' };
       body.status = statusMap[tipoData.estado] || tipoData.estado;
@@ -297,5 +291,56 @@ export const eventosService = {
       throw new Error(err.message || 'No se pudo eliminar el tipo de entrada.');
     }
     return true;
+  },
+
+  realizarCompra: async (eventoId, ticketTypeId, quantity = 1) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/purchase/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_id: eventoId,
+        ticket_type_id: ticketTypeId,
+        quantity,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const error = new Error(data.error || data.detail || 'No se pudo procesar la compra.');
+      error.status = res.status;
+      error.errorCode = data.error_code;
+      throw error;
+    }
+    return data;
+  },
+
+  simularPago: async (purchaseId) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/purchase/${purchaseId}/simular_pago/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'No se pudo confirmar el pago.');
+    }
+    return data;
+  },
+
+  consultarEstadoCompra: async (purchaseId) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/purchase/${purchaseId}/status/`);
+    if (!res.ok) return null;
+    return await res.json();
+  },
+
+  cancelEvento: async (id, reason = '') => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/events/${id}/cancel/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cancellation_reason: reason }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || 'No se pudo cancelar el evento.');
+    }
+    return await res.json();
   },
 };

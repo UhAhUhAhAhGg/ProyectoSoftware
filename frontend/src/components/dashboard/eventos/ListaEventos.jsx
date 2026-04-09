@@ -288,7 +288,7 @@ function ListaEventos() {
             <div className="modal-icono">⚠️</div>
             <h3>¿Cancelar evento?</h3>
             <p>
-              ¿Estás seguro que deseas cancelar el evento <strong>&quot;{eventoAEliminar?.nombre}&quot;</strong>?
+              ¿Estás seguro que deseas cancelar el evento <strong>"{eventoAEliminar?.nombre}"</strong>?
             </p>
             <p className="modal-advertencia">
               Esta acción no se puede deshacer y los compradores serán notificados.

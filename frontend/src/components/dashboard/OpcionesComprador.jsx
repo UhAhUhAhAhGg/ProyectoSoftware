@@ -16,48 +16,22 @@ function OpcionesComprador() {
       destacado: true
     },
     {
-      id: 'proximos',
-      icono: '📅',
-      titulo: 'Próximos Eventos',
-      descripcion: 'Eventos a los que asistirás pronto',
-      link: '/dashboard/proximos',
-      color: '#EABF0B',
-      contador: 3
-    },
-    {
-      id: 'boletos',
+      id: 'mis-compras',
       icono: '🎫',
-      titulo: 'Mis Boletos',
-      descripcion: 'Gestiona tus boletos comprados',
-      link: '/dashboard/boletos',
-      color: '#363A33',
-      contador: 2
+      titulo: 'Mis Entradas',
+      descripcion: 'Consulta tus entradas, descarga PDF y códigos QR',
+      link: '/dashboard/mis-compras',
+      color: '#3B6FB0'
     },
     {
-      id: 'favoritos',
-      icono: '❤️',
-      titulo: 'Favoritos',
-      descripcion: 'Eventos que te han gustado',
-      link: '/dashboard/favoritos',
-      color: '#AD8149',
-      contador: 5
-    },
-    {
-      id: 'historial',
-      icono: '📜',
-      titulo: 'Historial',
-      descripcion: 'Eventos a los que has asistido',
-      link: '/dashboard/historial',
-      color: '#363A33'
-    },
-    {
-      id: 'recomendados',
-      icono: '⭐',
-      titulo: 'Recomendados',
-      descripcion: 'Eventos que podrían gustarte',
-      link: '/dashboard/recomendados',
-      color: '#EABF0B',
-      destacado: true
+      id: 'perfil',
+      icono: '👤',
+      titulo: 'Mi Perfil',
+      descripcion: 'Edita tus datos personales',
+      link: '/dashboard/perfil',
+      color: '#AD8149'
+    }
+  ];
     },
     {
       id: 'perfil',

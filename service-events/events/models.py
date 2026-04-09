@@ -1,5 +1,14 @@
 import uuid
+import secrets
 from django.db import models
+from django.db import models
+from django.utils import timezone
+from datetime import timedelta
+
+
+def generate_backup_code():
+    """Generar código alfanumérico único para respaldo"""
+    return secrets.token_hex(5).upper()
 
 
 class Category(models.Model):
@@ -37,6 +46,16 @@ class Event(models.Model):
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='draft')
     created_at = models.DateTimeField(auto_now_add=True)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
+    ticket_types: models.Manager["TicketType"]
+
+    # Campos de cancelación (TIC-9 / TIC-210 / TIC-229)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.UUIDField(null=True, blank=True)
+    cancellation_reason = models.TextField(null=True, blank=True)
+
+    # Lista de espera
+    waitlist_threshold = models.IntegerField(default=90)  # porcentaje
+    waitlist_active = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = 'Event'
@@ -58,9 +77,10 @@ class Event(models.Model):
 
     @property
     def is_full(self):
+        # Asegúrate de usar ticket_types porque le agregamos related_name='ticket_types' abajo
         total_sold = sum(
-            ticket.current_sold 
-            for ticket in self.tickettype_set.all()
+            ticket.current_sold
+            for ticket in self.ticket_types.all()
         )
         return total_sold >= self.capacity
 
@@ -81,7 +101,7 @@ class TicketType(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='ticket_types')
     name = models.CharField(max_length=100)
     description = models.TextField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -119,3 +139,141 @@ class TicketType(models.Model):
     @property
     def is_available(self):
         return self.status == 'active' and self.available_capacity > 0
+
+class Purchase(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('used', 'Used'),
+        ('pending', 'Pending'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user_id = models.UUIDField()
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE)
+
+    quantity = models.PositiveIntegerField()
+    total_price = models.DecimalField(max_digits=10, decimal_places=2)
+
+    # Campos para entrada digital
+    qr_code = models.TextField(null=True, blank=True)
+    backup_code = models.CharField(max_length=20, unique=True, db_index=True, null=True, blank=True)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+
+    used_at = models.DateTimeField(null=True, blank=True)
+    validated_by = models.UUIDField(null=True, blank=True)
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['backup_code']),
+            models.Index(fields=['user_id']),
+            models.Index(fields=['status']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user_id', 'event'],
+                condition=models.Q(status__in=['active', 'pending']),
+                name='unique_active_purchase_per_user_event'
+            )
+        ]
+
+
+class Waitlist(models.Model):
+    STATUS_CHOICES = [
+        ('waiting', 'Waiting'),
+        ('notified', 'Notified'),
+        ('converted', 'Converted'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    user_id = models.UUIDField()
+
+    position = models.IntegerField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='waiting')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['position']
+        unique_together = ('event', 'user_id')  # no duplicados
+
+
+class BlacklistedToken(models.Model):
+    token = models.TextField(unique=True)
+    expires_at = models.DateTimeField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.token[:20]
+
+class PaymentOrder(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente'),
+        ('completed', 'Completado'),
+        ('failed', 'Fallido'),
+        ('cancelled', 'Cancelado'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField() # Relacionado con el microservicio de usuarios
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Payment Order'
+        verbose_name_plural = 'Payment Orders'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user_id']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"Order {self.id} - {self.status}"
+
+
+class TicketInstance(models.Model):
+    STATUS_CHOICES = [
+        ('valid', 'Válida'),
+        ('used', 'Usada'),
+        ('cancelled', 'Cancelada'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    order = models.ForeignKey(PaymentOrder, on_delete=models.CASCADE, related_name='tickets')
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE)
+    
+    # Datos únicos de esta entrada en particular
+    qr_code = models.TextField(null=True, blank=True)
+    backup_code = models.CharField(max_length=20, unique=True, db_index=True, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='valid')
+    
+    used_at = models.DateTimeField(null=True, blank=True)
+    validated_by = models.UUIDField(null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Ticket Instance'
+        verbose_name_plural = 'Ticket Instances'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['backup_code']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"Ticket {self.backup_code} - {self.event.name}"

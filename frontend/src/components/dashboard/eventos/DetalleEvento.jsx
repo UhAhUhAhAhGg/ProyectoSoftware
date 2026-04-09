@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { Link, useParams } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
 import VenueLayoutPreview from './VenueLayoutPreview';
+import ModalPagoQR from './ModalPagoQR';
 import './DetalleEvento.css';
 import TicketView from '../../TicketView';
 
@@ -11,6 +12,11 @@ function DetalleEvento() {
   const [evento, setEvento] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [ticket, setTicket] = useState(null);
+
+  const [cargandoCompra, setCargandoCompra] = useState(false);
+  const [ordenCompra, setOrdenCompra] = useState(null);
+  const [mostrarModal, setMostrarModal] = useState(false);
+  const [errorCompra, setErrorCompra] = useState('');
 
   useEffect(() => {
     const cargar = async () => {
@@ -50,6 +56,28 @@ function DetalleEvento() {
     };
     cargar();
   }, [id]);
+
+  const handlePagarConQR = async (ticketTypeId) => {
+    setCargandoCompra(true);
+    setErrorCompra('');
+    try {
+      const respuesta = await eventosService.realizarCompra(id, ticketTypeId, 1);
+      if (respuesta.status === 'waitlist') {
+        setErrorCompra('El evento está casi lleno. Has sido agregado a la lista de espera.');
+        return;
+      }
+      setOrdenCompra(respuesta.data);
+      setMostrarModal(true);
+    } catch (error) {
+      if (error.status === 409 || error.errorCode === 'DUPLICATE_PURCHASE') {
+        setErrorCompra('🛑 Ya compraste una entrada para este evento. Revisa tu historial en "Mis Compras".');
+      } else {
+        setErrorCompra(error.message || 'No se pudo conectar con el servidor.');
+      }
+    } finally {
+      setCargandoCompra(false);
+    }
+  };
 
   if (cargando) {
     return (
@@ -112,19 +140,44 @@ function DetalleEvento() {
           {evento.tiposEntrada?.length > 0 && (
             <div className="tipos-entrada">
               <h3>Tipos de entrada</h3>
+              {errorCompra && (
+                <div style={{ padding: '10px', background: '#f8d7da', color: '#721c24', borderRadius: '6px', marginBottom: '10px', border: '1px solid #f5c6cb' }}>
+                  {errorCompra}
+                </div>
+              )}
               {evento.tiposEntrada.map((t) => (
-                <div key={t.id} className="tipo-entrada-item">
-                  <span className="tipo-nombre">{t.nombre}</span>
-                  <span className="tipo-precio">Bs. {t.precio}</span>
-                  <span className="tipo-disponible">{t.disponibles} disponibles</span>
+                <div key={t.id} className="tipo-entrada-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #eee' }}>
+                  <div>
+                    <span className="tipo-nombre" style={{ display: 'block', fontWeight: 'bold' }}>{t.nombre}</span>
+                    <span className="tipo-precio" style={{ display: 'block', color: '#666' }}>Bs. {t.precio}</span>
+                    <span className="tipo-disponible" style={{ fontSize: '0.8rem', color: t.disponibles > 0 ? 'green' : 'red' }}>
+                      {t.disponibles > 0 ? `${t.disponibles} disponibles` : 'Agotado'}
+                    </span>
+                  </div>
+                  
+                  {/* AQUÍ ESTÁ EL BOTÓN DE COMPRA REAL POR CADA TIPO DE ENTRADA */}
+                  <button 
+                    onClick={() => handlePagarConQR(t.id)}
+                    disabled={cargandoCompra || t.disponibles <= 0}
+                    style={{
+                      padding: '8px 16px',
+                      background: (cargandoCompra || t.disponibles <= 0) ? '#ccc' : '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: (cargandoCompra || t.disponibles <= 0) ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {cargandoCompra ? 'Procesando...' : 'Pagar con QR'}
+                  </button>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="disponibilidad">
+          <div className="disponibilidad" style={{ marginTop: '20px' }}>
             <div className="fila">
-              <span>Disponibilidad</span>
+              <span>Disponibilidad general</span>
               <span>{evento.boletosVendidos}/{evento.capacidad}</span>
             </div>
             <div className="barra">
@@ -132,6 +185,7 @@ function DetalleEvento() {
             </div>
           </div>
 
+<<<<<<< HEAD
           {/* 🟢 BOTÓN DEMO */}
           <button
             type="button"
@@ -154,8 +208,18 @@ function DetalleEvento() {
           {/* 🟢 TICKET */}
           {ticket && <TicketView ticket={ticket} />}
 
+=======
+>>>>>>> main
         </div>
       </div>
+
+      {/* MODAL DE PAGO QR */}
+      {mostrarModal && ordenCompra && (
+        <ModalPagoQR
+          ordenData={ordenCompra}
+          onCerrar={() => { setMostrarModal(false); setOrdenCompra(null); }}
+        />
+      )}
     </section>
   );
 }
