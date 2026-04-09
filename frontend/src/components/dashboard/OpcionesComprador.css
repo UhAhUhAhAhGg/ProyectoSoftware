@@ -308,3 +308,42 @@ body.dark-mode .accion-rapida.secundaria {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+.historial-compras {
+  margin-top: 40px;
+}
+
+.historial-vacio {
+  background-color: #f9f9f9;
+  border: 2px dashed #ddd;
+  padding: 30px;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.historial-icono {
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+
+.historial-vacio h4 {
+  margin-bottom: 10px;
+}
+
+.historial-vacio p {
+  color: #666;
+  margin-bottom: 15px;
+}
+
+.btn-explorar {
+  display: inline-block;
+  padding: 10px 15px;
+  background-color: #AD8149;
+  color: white;
+  border-radius: 6px;
+  text-decoration: none;
+}
+
+.btn-explorar:hover {
+  background-color: #8c6a3a;
+}

@@ -2,6 +2,9 @@ import { Link } from 'react-router-dom';
 import './OpcionesComprador.css';
 
 function OpcionesComprador() {
+  // DEMO - historial vacío (luego vendrá del backend)
+  const historialCompras = [];
+
   const opciones = [
     {
       id: 'explorar',
@@ -100,6 +103,26 @@ function OpcionesComprador() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ✅ HISTORIAL (BIEN UBICADO) */}
+      <div className="historial-compras">
+        <h3>📜 Tu historial de compras</h3>
+
+        {historialCompras.length === 0 ? (
+          <div className="historial-vacio">
+            <div className="historial-icono">🎫</div>
+            <h4>Aún no tienes compras</h4>
+            <p>
+              Cuando compres entradas, aparecerán aquí para que puedas consultarlas fácilmente.
+            </p>
+            <Link to="/dashboard/eventos" className="btn-explorar">
+              Explorar eventos
+            </Link>
+          </div>
+        ) : (
+          <p>Aquí se mostrará el historial (cuando conectemos backend)</p>
+        )}
       </div>
     </div>
   );
