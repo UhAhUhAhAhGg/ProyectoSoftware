@@ -65,7 +65,7 @@ class EventViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'category', 'event_date']
     search_fields = ['name', 'location', 'description']
-    ordering_fields = ['event_date', 'created_at']
+    ordering_fields = ['event_date', 'created_at', 'name']
     ordering = ['-event_date']
 
     def get_permissions(self):
@@ -839,21 +839,66 @@ class LogoutView(APIView):
 
 
 class PurchaseHistoryView(APIView):
-    """Endpoint para consultar historial de compras del usuario con paginación y filtros."""
+    """
+    Endpoint para consultar historial de compras del usuario.
+    
+    Parámetros de consulta soportados:
+      - page (int): Número de página (default: 1)
+      - page_size (int): Cantidad por página (default: 10, max: 100)
+      - status (str): Filtrar por estado (active, used, pending, cancelled)
+      - sortBy (str): Campo de ordenación (created_at, total_price, event_date, status)
+      - sortType (str): Dirección de orden (ASC o DESC, default: DESC)
+      - minPrice (decimal): Precio mínimo del total
+      - maxPrice (decimal): Precio máximo del total
+    
+    Ejemplo:
+      GET /api/v1/purchases/history/?page=1&page_size=10&status=active&sortBy=total_price&sortType=ASC&minPrice=100
+    """
     permission_classes = [IsAuthenticated]
+
+    ALLOWED_SORT_FIELDS = {
+        'created_at': 'created_at',
+        'total_price': 'total_price',
+        'event_date': 'event__event_date',
+        'status': 'status',
+        'event_name': 'event__name',
+    }
 
     def get(self, request):
         user_id = request.user.id
-        qs = Purchase.objects.filter(user_id=user_id).select_related('event', 'ticket_type').order_by('-created_at')
+        qs = Purchase.objects.filter(user_id=user_id).select_related('event', 'ticket_type')
 
-        # Filtro por status
+        # ── Filtro por status ──
         status_filter = request.query_params.get('status')
         if status_filter and status_filter in ('active', 'used', 'pending', 'cancelled'):
             qs = qs.filter(status=status_filter)
 
-        # Paginación
+        # ── Filtro por rango de precio ──
+        min_price = request.query_params.get('minPrice')
+        max_price = request.query_params.get('maxPrice')
+        if min_price:
+            try:
+                qs = qs.filter(total_price__gte=float(min_price))
+            except ValueError:
+                pass
+        if max_price:
+            try:
+                qs = qs.filter(total_price__lte=float(max_price))
+            except ValueError:
+                pass
+
+        # ── Ordenación ──
+        sort_by = request.query_params.get('sortBy', 'created_at')
+        sort_type = request.query_params.get('sortType', 'DESC').upper()
+        db_field = self.ALLOWED_SORT_FIELDS.get(sort_by, 'created_at')
+        if sort_type == 'ASC':
+            qs = qs.order_by(db_field)
+        else:
+            qs = qs.order_by(f'-{db_field}')
+
+        # ── Paginación ──
         page = int(request.query_params.get('page', 1))
-        page_size = int(request.query_params.get('page_size', 20))
+        page_size = int(request.query_params.get('page_size', 10))
         page = max(1, page)
         page_size = min(max(1, page_size), 100)
         total = qs.count()
@@ -887,6 +932,13 @@ class PurchaseHistoryView(APIView):
             "page": page,
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size if total > 0 else 1,
+            "sort_by": sort_by,
+            "sort_type": sort_type,
+            "filters_applied": {
+                "status": status_filter,
+                "minPrice": min_price,
+                "maxPrice": max_price,
+            }
         }, status=200)
 
 

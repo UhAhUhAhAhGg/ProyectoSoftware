@@ -15,18 +15,22 @@ export default function MisCompras() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [filtro, setFiltro] = useState('');
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortType, setSortType] = useState('DESC');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [count, setCount] = useState(0);
   const [descargando, setDescargando] = useState(false);
 
-  const cargar = async (p = 1, statusFilter = '') => {
+  const cargar = async (p = 1, statusFilter = '', sort = sortBy, order = sortType) => {
     setLoading(true);
     try {
       const data = await getUserTickets({
         page: p,
         page_size: 10,
         status: statusFilter || undefined,
+        sortBy: sort,
+        sortType: order,
       });
       setPurchases(data.results || []);
       setTotalPages(data.total_pages || 1);
@@ -41,8 +45,22 @@ export default function MisCompras() {
   };
 
   useEffect(() => {
-    cargar(1, filtro);
-  }, [filtro]);
+    cargar(1, filtro, sortBy, sortType);
+  }, [filtro, sortBy, sortType]);
+
+  const toggleSort = (field) => {
+    if (sortBy === field) {
+      setSortType(prev => prev === 'DESC' ? 'ASC' : 'DESC');
+    } else {
+      setSortBy(field);
+      setSortType('DESC');
+    }
+  };
+
+  const getSortIcon = (field) => {
+    if (sortBy !== field) return '↕';
+    return sortType === 'DESC' ? '↓' : '↑';
+  };
 
   const handleDescargar = async (purchase) => {
     setDescargando(true);
@@ -105,6 +123,22 @@ export default function MisCompras() {
         </button>
       </div>
 
+      <div className="mis-compras-filtros" style={{ marginTop: 8, gap: 6, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.85rem', color: '#888', marginRight: 4 }}>Ordenar por:</span>
+        <button className={`filtro-btn ${sortBy === 'created_at' ? 'activo' : ''}`} onClick={() => toggleSort('created_at')}>
+          Fecha {getSortIcon('created_at')}
+        </button>
+        <button className={`filtro-btn ${sortBy === 'total_price' ? 'activo' : ''}`} onClick={() => toggleSort('total_price')}>
+          Precio {getSortIcon('total_price')}
+        </button>
+        <button className={`filtro-btn ${sortBy === 'event_name' ? 'activo' : ''}`} onClick={() => toggleSort('event_name')}>
+          Evento {getSortIcon('event_name')}
+        </button>
+        <button className={`filtro-btn ${sortBy === 'status' ? 'activo' : ''}`} onClick={() => toggleSort('status')}>
+          Estado {getSortIcon('status')}
+        </button>
+      </div>
+
       <div className="mis-compras-grid">
         <div className="compras-list">
           {loading ? (
@@ -142,9 +176,9 @@ export default function MisCompras() {
               ))}
               {totalPages > 1 && (
                 <div className="compras-pagination">
-                  <button disabled={page <= 1} onClick={() => cargar(page - 1, filtro)}>← Anterior</button>
+                  <button disabled={page <= 1} onClick={() => cargar(page - 1, filtro, sortBy, sortType)}>← Anterior</button>
                   <span>Página {page} de {totalPages}</span>
-                  <button disabled={page >= totalPages} onClick={() => cargar(page + 1, filtro)}>Siguiente →</button>
+                  <button disabled={page >= totalPages} onClick={() => cargar(page + 1, filtro, sortBy, sortType)}>Siguiente →</button>
                 </div>
               )}
             </>

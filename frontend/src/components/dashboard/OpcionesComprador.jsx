@@ -29,16 +29,6 @@ function OpcionesComprador() {
       color: '#AD8149'
     }
   ];
-    },
-    {
-      id: 'perfil',
-      icono: '👤',
-      titulo: 'Mi Perfil',
-      descripcion: 'Edita tus datos personales',
-      link: '/dashboard/perfil',
-      color: '#AD8149'
-    }
-  ];
 
   return (
     <div className="opciones-comprador">
@@ -52,9 +42,9 @@ function OpcionesComprador() {
           <span className="accion-icono">🔍</span>
           <span className="accion-texto">Buscar Eventos</span>
         </Link>
-        <Link to="/dashboard/proximos" className="accion-rapida secundaria">
-          <span className="accion-icono">📅</span>
-          <span className="accion-texto">Mis Próximos</span>
+        <Link to="/dashboard/mis-compras" className="accion-rapida secundaria">
+          <span className="accion-icono">🎫</span>
+          <span className="accion-texto">Mis Entradas</span>
         </Link>
         <Link to="/dashboard/perfil" className="accion-rapida secundaria">
           <span className="accion-icono">👤</span>

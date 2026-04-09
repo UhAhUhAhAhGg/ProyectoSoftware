@@ -21,6 +21,10 @@ export async function getUserTickets(options = {}) {
     if (options.status) params.set('status', options.status);
     if (options.page) params.set('page', options.page);
     if (options.page_size) params.set('page_size', options.page_size);
+    if (options.sortBy) params.set('sortBy', options.sortBy);
+    if (options.sortType) params.set('sortType', options.sortType);
+    if (options.minPrice) params.set('minPrice', options.minPrice);
+    if (options.maxPrice) params.set('maxPrice', options.maxPrice);
     const query = params.toString() ? `?${params.toString()}` : '';
 
     const res = await apiFetch(`${EVENTS_URL}/api/v1/purchases/history/${query}`);
