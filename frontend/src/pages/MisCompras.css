@@ -229,3 +229,9 @@
   .mis-compras-grid { grid-template-columns: 1fr; }
   .compra-detalle { position: static; max-height: none; order: -1; }
 }
+
+.compra-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
