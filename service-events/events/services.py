@@ -6,6 +6,7 @@ import random
 import string
 from io import BytesIO
 from django.core.mail import EmailMessage
+from django.conf import settings
 from django.utils import timezone
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib.pagesizes import letter
@@ -328,7 +329,7 @@ def send_ticket_email(user_email, purchase, user_name="Comprador"):
         email = EmailMessage(
             subject=subject,
             body=html_message,
-            from_email='noreply@eventos.com',
+            from_email=settings.DEFAULT_FROM_EMAIL,
             to=[user_email]
         )
         email.content_subtype = 'html'

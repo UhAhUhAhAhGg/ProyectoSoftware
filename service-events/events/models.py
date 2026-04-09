@@ -176,6 +176,13 @@ class Purchase(models.Model):
             models.Index(fields=['user_id']),
             models.Index(fields=['status']),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user_id', 'event'],
+                condition=models.Q(status__in=['active', 'pending']),
+                name='unique_active_purchase_per_user_event'
+            )
+        ]
 
 
 class Waitlist(models.Model):

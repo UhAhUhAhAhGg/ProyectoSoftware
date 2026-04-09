@@ -475,6 +475,12 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
 
 
 class PurchaseView(APIView):
+    """
+    POST /api/v1/purchase/
+    Inicia el proceso de compra: crea una Purchase con status='pending' y devuelve
+    un QR de pago (contiene el purchase_id) con 15 minutos de expiración.
+    El pago debe confirmarse via SimularPagoView (desarrollo) o webhook bancario (producción).
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -493,11 +499,10 @@ class PurchaseView(APIView):
         event = get_object_or_404(Event, id=event_id)
         ticket = get_object_or_404(TicketType, id=ticket_type_id)
 
-        # Si lista de espera activa â†’ no comprar
         if event.waitlist_active:
             return Response({
                 "status": "waitlist",
-                "message": "El evento estÃ¡ casi lleno. Has sido redirigido a la lista de espera."
+                "message": "El evento está casi lleno. Has sido redirigido a la lista de espera."
             }, status=200)
 
         if event.status == 'cancelled':
@@ -512,7 +517,6 @@ class PurchaseView(APIView):
         if ticket.available_capacity < quantity:
             return Response({"error": "No hay suficientes entradas disponibles"}, status=400)
 
-        # Validacion: no comprar mÃ¡s de una entrada por evento
         existing_purchase = Purchase.objects.filter(
             user_id=user_id,
             event=event,
@@ -520,21 +524,13 @@ class PurchaseView(APIView):
         ).exists()
 
         if existing_purchase:
-            return Response({"error": "Ya tienes una entrada para este evento"}, status=409)
+            return Response({
+                "error": "Ya tienes una entrada para este evento. Revisa tu historial de compras.",
+                "error_code": "DUPLICATE_PURCHASE"
+            }, status=409)
 
         total_price = ticket.price * quantity
-
-        backup_code = secrets.token_hex(5).upper()
-
-        qr_code_base64 = None
-        try:
-            qr = qrcode.make(backup_code)
-            buffer = io.BytesIO()
-            qr.save(buffer,'PNG')
-            qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
-        except Exception as e:
-            print(f"Error generando QR: {str(e)}")
-            qr_code_base64 = None
+        expires_at = timezone.now() + timedelta(minutes=15)
 
         purchase = Purchase.objects.create(
             user_id=user_id,
@@ -542,36 +538,146 @@ class PurchaseView(APIView):
             ticket_type=ticket,
             quantity=quantity,
             total_price=total_price,
-            qr_code=qr_code_base64,
-            backup_code=backup_code,
-            status='active'
+            status='pending'
         )
 
-        ticket.current_sold += quantity
+        payment_qr_base64 = None
+        try:
+            qr_content = f"TICKETPAY:{purchase.id}:{float(total_price)}"
+            qr = qrcode.make(qr_content)
+            buffer = io.BytesIO()
+            qr.save(buffer, 'PNG')
+            payment_qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+        except Exception as e:
+            print(f"Error generando QR de pago: {str(e)}")
+
+        return Response({
+            "status": "pending",
+            "message": "Orden de pago creada. Escanea el QR para completar el pago.",
+            "data": {
+                "purchase_id": str(purchase.id),
+                "total": float(total_price),
+                "payment_qr": payment_qr_base64,
+                "expires_at": expires_at.isoformat(),
+                "event_name": event.name,
+                "ticket_type_name": ticket.name,
+            }
+        }, status=status.HTTP_201_CREATED)
+
+
+class SimularPagoView(APIView):
+    """
+    POST /api/v1/purchase/<purchase_id>/simular_pago/
+    SOLO PARA DESARROLLO/TESTING.
+    Simula la confirmación de pago bancario, activa la compra y genera el QR/backup_code de la entrada.
+    En producción este endpoint no existiría; se reemplaza por un webhook del banco.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, purchase_id):
+        purchase = get_object_or_404(Purchase, id=purchase_id)
+
+        if str(purchase.user_id) != str(request.user.id):
+            return Response({"error": "No autorizado"}, status=403)
+
+        if purchase.status == 'active':
+            return Response({"error": "Esta compra ya fue confirmada"}, status=400)
+
+        if purchase.status == 'cancelled':
+            return Response({"error": "Esta orden fue cancelada"}, status=400)
+
+        expires_at = purchase.created_at + timedelta(minutes=15)
+        if timezone.now() > expires_at:
+            purchase.status = 'cancelled'
+            purchase.save()
+            return Response({"error": "El tiempo de pago expiró. Genera una nueva orden."}, status=410)
+
+        backup_code = secrets.token_hex(5).upper()
+        qr_code_base64 = None
+        try:
+            qr = qrcode.make(backup_code)
+            buffer = io.BytesIO()
+            qr.save(buffer, 'PNG')
+            qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
+        except Exception as e:
+            print(f"Error generando QR de entrada: {str(e)}")
+
+        purchase.status = 'active'
+        purchase.backup_code = backup_code
+        purchase.qr_code = qr_code_base64
+        purchase.save()
+
+        ticket = purchase.ticket_type
+        ticket.current_sold += purchase.quantity
         ticket.save()
 
-        # Verificar umbral de lista de espera
+        event = purchase.event
         total_sold = sum(t.current_sold for t in event.ticket_types.all())
-        percentage = (total_sold / event.capacity) * 100
-
-        if percentage >= event.waitlist_threshold:
+        if event.capacity > 0 and (total_sold / event.capacity) * 100 >= event.waitlist_threshold:
             event.waitlist_active = True
             event.save()
 
-        try:
-            print(f"Email pendiente de envÃ­o para {purchase.id}")
-        except Exception as e:
-            print(f"Error intentando enviar email: {str(e)}")
+        print(f"[PAGO SIMULADO] Compra {purchase.id} confirmada para usuario {purchase.user_id}")
+
+        # Enviar email con ticket al comprador
+        user_email = request.user.email
+        user_name = getattr(request.user, 'username', '') or user_email.split('@')[0]
+        email_sent = False
+        if user_email:
+            try:
+                email_sent = send_ticket_email(user_email, purchase, user_name)
+            except Exception as email_err:
+                print(f"[EMAIL] No se pudo enviar el ticket: {email_err}")
 
         return Response({
             "status": "success",
-            "message": "Compra realizada correctamente",
+            "message": "Pago confirmado. Tu entrada ha sido generada.",
             "data": {
-                "purchase_id": purchase.id,
+                "purchase_id": str(purchase.id),
                 "backup_code": backup_code,
-                "total": total_price
+                "total": float(purchase.total_price),
+                "qr_code": qr_code_base64,
+                "event_name": event.name,
+                "ticket_type_name": ticket.name,
+                "email_sent": email_sent,
+                "email_sent_to": user_email if email_sent else None,
             }
-        }, status=status.HTTP_201_CREATED)
+        }, status=200)
+
+
+class PurchaseStatusView(APIView):
+    """
+    GET /api/v1/purchase/<purchase_id>/status/
+    Consulta el estado actual de una compra (usado por polling del frontend).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, purchase_id):
+        purchase = get_object_or_404(Purchase, id=purchase_id)
+
+        if str(purchase.user_id) != str(request.user.id):
+            return Response({"error": "No autorizado"}, status=403)
+
+        expires_at = purchase.created_at + timedelta(minutes=15)
+
+        if purchase.status == 'pending' and timezone.now() > expires_at:
+            purchase.status = 'cancelled'
+            purchase.save()
+
+        data = {
+            "purchase_id": str(purchase.id),
+            "status": purchase.status,
+            "expires_at": expires_at.isoformat(),
+        }
+
+        if purchase.status == 'active':
+            data["backup_code"] = purchase.backup_code
+            data["qr_code"] = purchase.qr_code
+            data["event_name"] = purchase.event.name
+            data["ticket_type_name"] = purchase.ticket_type.name
+            data["total"] = float(purchase.total_price)
+
+        return Response(data, status=200)
 
 
 class SeatConfigurationView(APIView):
@@ -733,23 +839,112 @@ class LogoutView(APIView):
 
 
 class PurchaseHistoryView(APIView):
-    """Endpoint para consultar historial de compras del usuario."""
+    """Endpoint para consultar historial de compras del usuario con paginación y filtros."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user_id = request.user.id
-        purchases = Purchase.objects.filter(user_id=user_id).select_related('event', 'ticket_type').order_by('-created_at')
+        qs = Purchase.objects.filter(user_id=user_id).select_related('event', 'ticket_type').order_by('-created_at')
+
+        # Filtro por status
+        status_filter = request.query_params.get('status')
+        if status_filter and status_filter in ('active', 'used', 'pending', 'cancelled'):
+            qs = qs.filter(status=status_filter)
+
+        # Paginación
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 20))
+        page = max(1, page)
+        page_size = min(max(1, page_size), 100)
+        total = qs.count()
+        start = (page - 1) * page_size
+        purchases = qs[start:start + page_size]
+
         data = []
         for p in purchases:
             data.append({
                 "id": str(p.id),
+                "event_id": str(p.event.id),
                 "event_name": p.event.name,
                 "event_date": str(p.event.event_date),
+                "event_time": str(p.event.event_time) if p.event.event_time else None,
+                "event_location": p.event.location,
+                "event_image": p.event.image.url if p.event.image else None,
                 "ticket_type": p.ticket_type.name,
+                "zone_type": p.ticket_type.zone_type,
                 "quantity": p.quantity,
                 "total_price": str(p.total_price),
                 "status": p.status,
                 "backup_code": p.backup_code,
+                "qr_code": p.qr_code,
                 "created_at": p.created_at.isoformat(),
+                "used_at": p.used_at.isoformat() if p.used_at else None,
             })
-        return Response(data, status=200)
+
+        return Response({
+            "results": data,
+            "count": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size if total > 0 else 1,
+        }, status=200)
+
+
+class PurchaseDetailView(APIView):
+    """Endpoint para obtener detalle de una compra individual."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, purchase_id):
+        user_id = request.user.id
+        purchase = get_object_or_404(Purchase, id=purchase_id)
+
+        if str(purchase.user_id) != str(user_id):
+            return Response({"error": "No tienes permiso para ver esta compra."}, status=403)
+
+        return Response({
+            "id": str(purchase.id),
+            "event_id": str(purchase.event.id),
+            "event_name": purchase.event.name,
+            "event_date": str(purchase.event.event_date),
+            "event_time": str(purchase.event.event_time) if purchase.event.event_time else None,
+            "event_location": purchase.event.location,
+            "event_image": purchase.event.image.url if purchase.event.image else None,
+            "event_status": purchase.event.status,
+            "ticket_type": purchase.ticket_type.name,
+            "zone_type": purchase.ticket_type.zone_type,
+            "is_vip": purchase.ticket_type.is_vip,
+            "quantity": purchase.quantity,
+            "total_price": str(purchase.total_price),
+            "status": purchase.status,
+            "backup_code": purchase.backup_code,
+            "qr_code": purchase.qr_code,
+            "created_at": purchase.created_at.isoformat(),
+            "used_at": purchase.used_at.isoformat() if purchase.used_at else None,
+        }, status=200)
+
+
+class PurchaseDownloadPDFView(APIView):
+    """Endpoint para descargar el PDF de una entrada."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, purchase_id):
+        from .services import generate_ticket_pdf
+        from django.http import HttpResponse
+
+        user_id = request.user.id
+        purchase = get_object_or_404(Purchase, id=purchase_id)
+
+        if str(purchase.user_id) != str(user_id):
+            return Response({"error": "No tienes permiso para descargar esta entrada."}, status=403)
+
+        if purchase.status == 'cancelled':
+            return Response({"error": "No se puede descargar una entrada cancelada."}, status=400)
+
+        try:
+            pdf_content = generate_ticket_pdf(purchase)
+            response = HttpResponse(pdf_content, content_type='application/pdf')
+            filename = f"entrada_{purchase.event.name.replace(' ', '_')}_{purchase.backup_code}.pdf"
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        except Exception as e:
+            return Response({"error": f"Error generando el PDF: {str(e)}"}, status=500)

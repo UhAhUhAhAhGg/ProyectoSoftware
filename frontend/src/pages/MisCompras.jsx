@@ -1,129 +1,211 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getUserTickets } from '../services/profileService';
+import { getUserTickets, downloadPurchasePDF } from '../services/profileService';
 import './MisCompras.css';
+
+const STATUS_LABELS = {
+  active: { label: 'Completada', className: 'badge-completada' },
+  used: { label: 'Utilizada', className: 'badge-utilizada' },
+  pending: { label: 'Pendiente', className: 'badge-pendiente' },
+  cancelled: { label: 'Cancelada', className: 'badge-cancelada' },
+};
 
 export default function MisCompras() {
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const [filtro, setFiltro] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [count, setCount] = useState(0);
+  const [descargando, setDescargando] = useState(false);
+
+  const cargar = async (p = 1, statusFilter = '') => {
+    setLoading(true);
+    try {
+      const data = await getUserTickets({
+        page: p,
+        page_size: 10,
+        status: statusFilter || undefined,
+      });
+      setPurchases(data.results || []);
+      setTotalPages(data.total_pages || 1);
+      setCount(data.count || 0);
+      setPage(data.page || 1);
+    } catch (err) {
+      console.error('Error cargando compras:', err);
+      setPurchases([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let mounted = true;
-    const cargar = async () => {
-      setLoading(true);
-      try {
-        const data = await getUserTickets();
-        if (mounted) setPurchases(data || []);
-      } catch (err) {
-        console.error('Error cargando compras:', err);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-    cargar();
-    return () => { mounted = false; };
-  }, []);
+    cargar(1, filtro);
+  }, [filtro]);
 
-  // Auto-descargar PDF si backend provee pdf_url y compra está pagada
-  const [autoDownloaded, setAutoDownloaded] = useState(() => new Set());
-  useEffect(() => {
-    purchases.forEach((p) => {
-      const id = p.id || p.purchase_id || p.code;
-      const status = (p.status || p.state || p.status_detail || '').toString().toLowerCase();
-      const pdfUrl = p.pdf_url || p.download_url || p.file_url || null;
-      if (pdfUrl && (status === 'paid' || status === 'completed' || status === 'pagado') && !autoDownloaded.has(id)) {
-        // descargar
-        fetch(pdfUrl, { headers: { Accept: 'application/pdf' } })
-          .then((r) => r.blob())
-          .then((blob) => {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${(p.event?.name || p.event_name || 'entrada').replace(/\s+/g, '_')}_${id}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
-            setAutoDownloaded((s) => new Set([...s, id]));
-          })
-          .catch(() => {
-            // ignore download errors
-            setAutoDownloaded((s) => new Set([...s, id]));
-          });
-      }
-    });
-  }, [purchases]);
+  const handleDescargar = async (purchase) => {
+    setDescargando(true);
+    try {
+      await downloadPurchasePDF(purchase.id, purchase.event_name);
+    } catch (err) {
+      alert(err.message || 'Error al descargar la entrada.');
+    } finally {
+      setDescargando(false);
+    }
+  };
 
   const formatDate = (d) => {
     try {
-      return new Date(d).toLocaleString('es-ES');
+      return new Date(d).toLocaleDateString('es-ES', {
+        year: 'numeric', month: 'long', day: 'numeric',
+      });
     } catch { return d; }
+  };
+
+  const formatDateTime = (d) => {
+    try {
+      return new Date(d).toLocaleString('es-ES', {
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch { return d; }
+  };
+
+  const getBadge = (status) => {
+    const info = STATUS_LABELS[status] || { label: status, className: 'badge-default' };
+    return <span className={`compra-badge ${info.className}`}>{info.label}</span>;
   };
 
   return (
     <section className="mis-compras-page">
       <header className="mis-compras-header">
-        <h2>Mis Compras</h2>
-        <p>Consulta el historial de tus compras y revisa detalles de cada entrada.</p>
-        <Link to="/dashboard" className="btn-secundario small">Volver</Link>
+        <div>
+          <h2>Mis Compras</h2>
+          <p>Consulta el historial de tus compras y revisa detalles de cada entrada.</p>
+        </div>
+        <Link to="/dashboard" className="btn-secundario small">Volver al Dashboard</Link>
       </header>
+
+      <div className="mis-compras-filtros">
+        <button className={`filtro-btn ${filtro === '' ? 'activo' : ''}`} onClick={() => setFiltro('')}>
+          Todas ({count})
+        </button>
+        <button className={`filtro-btn ${filtro === 'active' ? 'activo' : ''}`} onClick={() => setFiltro('active')}>
+          Completadas
+        </button>
+        <button className={`filtro-btn ${filtro === 'used' ? 'activo' : ''}`} onClick={() => setFiltro('used')}>
+          Utilizadas
+        </button>
+        <button className={`filtro-btn ${filtro === 'pending' ? 'activo' : ''}`} onClick={() => setFiltro('pending')}>
+          Pendientes
+        </button>
+        <button className={`filtro-btn ${filtro === 'cancelled' ? 'activo' : ''}`} onClick={() => setFiltro('cancelled')}>
+          Canceladas
+        </button>
+      </div>
 
       <div className="mis-compras-grid">
         <div className="compras-list">
           {loading ? (
-            <p>Cargando historial...</p>
+            <div className="compras-loading">
+              <div className="spinner"></div>
+              <p>Cargando historial...</p>
+            </div>
           ) : purchases.length === 0 ? (
-            <p>No se encontraron compras.</p>
+            <div className="compras-empty">
+              <span className="empty-icon">🎫</span>
+              <h3>No tienes compras {filtro ? `con estado "${STATUS_LABELS[filtro]?.label || filtro}"` : 'registradas'}</h3>
+              <p>Cuando adquieras entradas para un evento, aparecerán aquí.</p>
+              <Link to="/dashboard" className="btn-principal small">Explorar eventos</Link>
+            </div>
           ) : (
-            purchases.map(p => {
-              const id = p.id || p.purchase_id || p.code || Math.random().toString(36).slice(2);
-              const eventName = p.event?.name || p.event_name || p.event || 'Evento desconocido';
-              const date = p.purchase_date || p.created_at || p.ts || '';
-              const price = p.amount ?? p.total ?? p.price ?? p.precio ?? '0.00';
-              return (
-                <div className="compra-card" key={id} onClick={() => setSelected(p)}>
+            <>
+              {purchases.map(p => (
+                <div
+                  className={`compra-card ${selected?.id === p.id ? 'compra-card-selected' : ''}`}
+                  key={p.id}
+                  onClick={() => setSelected(p)}
+                >
                   <div className="compra-main">
-                    <div className="compra-title">{eventName}</div>
-                    <div className="compra-meta">{formatDate(date)}</div>
+                    <div className="compra-title">{p.event_name}</div>
+                    <div className="compra-meta">
+                      {formatDate(p.event_date)} · {p.ticket_type} · {p.zone_type?.toUpperCase()}
+                    </div>
+                    <div className="compra-fecha-compra">Comprado: {formatDateTime(p.created_at)}</div>
                   </div>
                   <div className="compra-right">
-                    <div className="compra-amount">Bs. {price}</div>
-                    <button className="btn-link small" onClick={(e) => { e.stopPropagation(); setSelected(p); }}>Ver</button>
+                    {getBadge(p.status)}
+                    <div className="compra-amount">Bs. {p.total_price}</div>
                   </div>
                 </div>
-              );
-            })
+              ))}
+              {totalPages > 1 && (
+                <div className="compras-pagination">
+                  <button disabled={page <= 1} onClick={() => cargar(page - 1, filtro)}>← Anterior</button>
+                  <span>Página {page} de {totalPages}</span>
+                  <button disabled={page >= totalPages} onClick={() => cargar(page + 1, filtro)}>Siguiente →</button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
         <aside className="compra-detalle">
           {selected ? (
-            <div>
+            <div className="detalle-content">
               <h3>Detalle de la compra</h3>
-              <p><strong>Evento:</strong> {selected.event?.name || selected.event_name || selected.event}</p>
-              <p><strong>Fecha compra:</strong> {formatDate(selected.purchase_date || selected.created_at || selected.ts)}</p>
-              <p><strong>Monto:</strong> Bs. {selected.amount ?? selected.total ?? selected.price ?? selected.precio ?? '0.00'}</p>
-              <p><strong>Código compra:</strong> {selected.id || selected.purchase_id || selected.code}</p>
-              {selected.tickets && Array.isArray(selected.tickets) && (
-                <div>
-                  <h4>Entradas</h4>
-                  <ul>
-                    {selected.tickets.map((t, i) => (
-                      <li key={i}>{t.name || t.tipo || t.id} — {t.seat || t.location || 'General'}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <div style={{ marginTop: 12 }}>
-                <button className="btn-principal" onClick={() => alert('Descargar PDF (como en perfil)')}>Descargar entrada</button>
-                <button className="btn-secundario" style={{ marginLeft: 8 }} onClick={() => setSelected(null)}>Cerrar</button>
+              {getBadge(selected.status)}
+
+              <div className="detalle-section">
+                <h4>Evento</h4>
+                <p className="detalle-evento-nombre">{selected.event_name}</p>
+                <p>📅 {formatDate(selected.event_date)} {selected.event_time ? `· 🕐 ${selected.event_time}` : ''}</p>
+                <p>📍 {selected.event_location || 'Ubicación no disponible'}</p>
+              </div>
+
+              <div className="detalle-section">
+                <h4>Entrada</h4>
+                <p><strong>Tipo:</strong> {selected.ticket_type}</p>
+                <p><strong>Zona:</strong> {selected.zone_type?.toUpperCase()}</p>
+                <p><strong>Cantidad:</strong> {selected.quantity}</p>
+                <p><strong>Total pagado:</strong> Bs. {selected.total_price}</p>
+              </div>
+
+              <div className="detalle-section">
+                <h4>Código de acceso</h4>
+                <div className="detalle-codigo">{selected.backup_code || 'N/A'}</div>
+                {selected.qr_code && (
+                  <div className="detalle-qr">
+                    <img src={`data:image/png;base64,${selected.qr_code}`} alt="QR de entrada" />
+                  </div>
+                )}
+              </div>
+
+              <div className="detalle-section detalle-meta">
+                <p><strong>Fecha de compra:</strong> {formatDateTime(selected.created_at)}</p>
+                {selected.used_at && <p><strong>Utilizada:</strong> {formatDateTime(selected.used_at)}</p>}
+                <p><strong>ID:</strong> <code>{selected.id}</code></p>
+              </div>
+
+              <div className="detalle-acciones">
+                {selected.status !== 'cancelled' && (
+                  <button
+                    className="btn-principal"
+                    onClick={() => handleDescargar(selected)}
+                    disabled={descargando}
+                  >
+                    {descargando ? 'Descargando...' : '📄 Descargar entrada PDF'}
+                  </button>
+                )}
+                <button className="btn-secundario" onClick={() => setSelected(null)}>Cerrar</button>
               </div>
             </div>
           ) : (
-            <div>
+            <div className="detalle-placeholder">
+              <span className="placeholder-icon">👈</span>
               <h3>Selecciona una compra</h3>
-              <p>Haz clic en una tarjeta de la izquierda para ver los detalles de la compra.</p>
+              <p>Haz clic en una tarjeta de la izquierda para ver los detalles completos, el código QR y descargar tu entrada.</p>
             </div>
           )}
         </aside>

@@ -1,31 +1,61 @@
-import api from './api';
+import { apiFetch } from './apiHelper';
 
 const EVENTS_URL = process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002';
 
 export async function hasPurchasedForEvent(eventId) {
   try {
-    const resp = await api.get('/profile/purchases', { params: { eventId } });
-    return Array.isArray(resp.data) && resp.data.length > 0;
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/purchases/history/?status=active`);
+    if (!res.ok) return false;
+    const data = await res.json();
+    const purchases = data.results ?? data;
+    return Array.isArray(purchases) && purchases.some(p => p.event_id === eventId);
   } catch (err) {
     console.error('hasPurchasedForEvent error', err);
     return false;
   }
 }
 
-export async function getUserTickets() {
+export async function getUserTickets(options = {}) {
   try {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    const res = await fetch(`${EVENTS_URL}/api/v1/purchases/history/`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.results ?? data;
+    const params = new URLSearchParams();
+    if (options.status) params.set('status', options.status);
+    if (options.page) params.set('page', options.page);
+    if (options.page_size) params.set('page_size', options.page_size);
+    const query = params.toString() ? `?${params.toString()}` : '';
+
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/purchases/history/${query}`);
+    if (!res.ok) return { results: [], count: 0, page: 1, total_pages: 1 };
+    return await res.json();
   } catch (err) {
     console.error('getUserTickets error', err);
-    return [];
+    return { results: [], count: 0, page: 1, total_pages: 1 };
   }
+}
+
+export async function getPurchaseDetail(purchaseId) {
+  try {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/purchases/${purchaseId}/`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error('getPurchaseDetail error', err);
+    return null;
+  }
+}
+
+export async function downloadPurchasePDF(purchaseId, eventName) {
+  const res = await apiFetch(`${EVENTS_URL}/api/v1/purchases/${purchaseId}/download-pdf/`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'No se pudo descargar el PDF.');
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `entrada_${(eventName || 'evento').replace(/\s+/g, '_')}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
 }

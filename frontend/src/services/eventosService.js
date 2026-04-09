@@ -293,6 +293,44 @@ export const eventosService = {
     return true;
   },
 
+  realizarCompra: async (eventoId, ticketTypeId, quantity = 1) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/purchase/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_id: eventoId,
+        ticket_type_id: ticketTypeId,
+        quantity,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const error = new Error(data.error || data.detail || 'No se pudo procesar la compra.');
+      error.status = res.status;
+      error.errorCode = data.error_code;
+      throw error;
+    }
+    return data;
+  },
+
+  simularPago: async (purchaseId) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/purchase/${purchaseId}/simular_pago/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'No se pudo confirmar el pago.');
+    }
+    return data;
+  },
+
+  consultarEstadoCompra: async (purchaseId) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/purchase/${purchaseId}/status/`);
+    if (!res.ok) return null;
+    return await res.json();
+  },
+
   cancelEvento: async (id, reason = '') => {
     const res = await apiFetch(`${EVENTS_URL}/api/v1/events/${id}/cancel/`, {
       method: 'POST',

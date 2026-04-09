@@ -3,7 +3,7 @@ import Image from 'next/image';
 import { Link, useParams } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
 import VenueLayoutPreview from './VenueLayoutPreview';
-import ModalPagoQR from './ModalPagoQR'; // IMPORTAMOS NUESTRO MODAL REAL
+import ModalPagoQR from './ModalPagoQR';
 import './DetalleEvento.css';
 
 function DetalleEvento() {
@@ -11,10 +11,10 @@ function DetalleEvento() {
   const [evento, setEvento] = useState(null);
   const [cargando, setCargando] = useState(true);
 
-  // NUEVOS ESTADOS PARA LA COMPRA REAL
   const [cargandoCompra, setCargandoCompra] = useState(false);
-  const [datosQR, setDatosQR] = useState(null);
+  const [ordenCompra, setOrdenCompra] = useState(null);
   const [mostrarModal, setMostrarModal] = useState(false);
+  const [errorCompra, setErrorCompra] = useState('');
 
   useEffect(() => {
     const cargar = async () => {
@@ -30,40 +30,23 @@ function DetalleEvento() {
     cargar();
   }, [id]);
 
-  // FUNCIÓN REAL QUE LLAMA A TU BACKEND DE DJANGO
   const handlePagarConQR = async (ticketTypeId) => {
     setCargandoCompra(true);
-    
+    setErrorCompra('');
     try {
-      // Usamos el token real de tu sistema de login (ajusta esto si lo guardas distinto)
-      const token = localStorage.getItem('token'); 
-
-      const response = await fetch('http://127.0.0.1:8000/api/tickets/procesar_compra/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
-        body: JSON.stringify({
-          ticket_type_id: ticketTypeId, // El ID real de la entrada que clickeó
-          quantity: 1 
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        alert(data.error || "Hubo un error al procesar la compra");
+      const respuesta = await eventosService.realizarCompra(id, ticketTypeId, 1);
+      if (respuesta.status === 'waitlist') {
+        setErrorCompra('El evento está casi lleno. Has sido agregado a la lista de espera.');
         return;
       }
-
-      // Si todo sale bien, Django nos manda el QR y el tiempo de expiración
-      setDatosQR(data);
+      setOrdenCompra(respuesta.data);
       setMostrarModal(true);
-
     } catch (error) {
-      console.error("Error en la conexión:", error);
-      alert("No se pudo conectar con el servidor.");
+      if (error.status === 409 || error.errorCode === 'DUPLICATE_PURCHASE') {
+        setErrorCompra('🛑 Ya compraste una entrada para este evento. Revisa tu historial en "Mis Compras".');
+      } else {
+        setErrorCompra(error.message || 'No se pudo conectar con el servidor.');
+      }
     } finally {
       setCargandoCompra(false);
     }
@@ -130,6 +113,11 @@ function DetalleEvento() {
           {evento.tiposEntrada.length > 0 && (
             <div className="tipos-entrada">
               <h3>Tipos de entrada</h3>
+              {errorCompra && (
+                <div style={{ padding: '10px', background: '#f8d7da', color: '#721c24', borderRadius: '6px', marginBottom: '10px', border: '1px solid #f5c6cb' }}>
+                  {errorCompra}
+                </div>
+              )}
               {evento.tiposEntrada.map((t) => (
                 <div key={t.id} className="tipo-entrada-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #eee' }}>
                   <div>
@@ -173,11 +161,11 @@ function DetalleEvento() {
         </div>
       </div>
 
-      {/* RENDERIZAMOS EL MODAL SI HAY DATOS DEL BACKEND */}
-      {mostrarModal && datosQR && (
-        <ModalPagoQR 
-          qrData={datosQR} 
-          onCancel={() => setMostrarModal(false)} 
+      {/* MODAL DE PAGO QR */}
+      {mostrarModal && ordenCompra && (
+        <ModalPagoQR
+          ordenData={ordenCompra}
+          onCerrar={() => { setMostrarModal(false); setOrdenCompra(null); }}
         />
       )}
     </section>

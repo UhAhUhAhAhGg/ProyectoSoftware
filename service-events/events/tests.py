@@ -772,3 +772,125 @@ class SeatConfigurationPATestCase(APITestCase):
 
         # Verificar que no se crearon TicketTypes (todo fue rechazado)
         self.assertEqual(TicketType.objects.filter(event=self.event).count(), 0)
+
+
+class PurchaseHistoryPATestCase(APITestCase):
+    """PA Tests for TIC-32: Historial de compras."""
+
+    def setUp(self):
+        self.user_id = uuid.uuid4()
+        self.other_user_id = uuid.uuid4()
+        self.user = FakeUser(self.user_id)
+        self.other_user = FakeUser(self.other_user_id)
+
+        from .models import Category
+        cat = Category.objects.create(name='Concierto')
+        self.event1 = Event.objects.create(
+            name='Evento Reciente', description='Test', event_date='2026-06-15',
+            event_time='20:00:00', location='Estadio', capacity=500,
+            promoter_id=uuid.uuid4(), status='published', category=cat
+        )
+        self.event2 = Event.objects.create(
+            name='Evento Antiguo', description='Test2', event_date='2026-05-10',
+            event_time='18:00:00', location='Teatro', capacity=300,
+            promoter_id=uuid.uuid4(), status='published', category=cat
+        )
+        self.ticket1 = TicketType.objects.create(
+            event=self.event1, name='General', price=100, max_capacity=200,
+            zone_type='general', status='active'
+        )
+        self.ticket2 = TicketType.objects.create(
+            event=self.event2, name='VIP', price=500, max_capacity=50,
+            zone_type='vip', is_vip=True, status='active'
+        )
+        # Compra del usuario principal (la mas reciente)
+        self.purchase1 = Purchase.objects.create(
+            user_id=self.user_id, event=self.event1, ticket_type=self.ticket1,
+            quantity=1, total_price=100, backup_code='ABC123TEST',
+            status='active'
+        )
+        # Compra antigua del mismo usuario
+        self.purchase2 = Purchase.objects.create(
+            user_id=self.user_id, event=self.event2, ticket_type=self.ticket2,
+            quantity=1, total_price=500, backup_code='DEF456TEST',
+            status='used'
+        )
+        # Compra de OTRO usuario (no debe verse)
+        self.purchase_other = Purchase.objects.create(
+            user_id=self.other_user_id, event=self.event1, ticket_type=self.ticket1,
+            quantity=2, total_price=200, backup_code='OTHER789X',
+            status='active'
+        )
+
+    def test_tic285_user_only_sees_own_purchases(self):
+        """TIC-285: El usuario solo puede ver su propio historial."""
+        self.client.force_authenticate(user=self.user, token=FakeAuth('Comprador'))
+        res = self.client.get('/api/v1/purchases/history/')
+        self.assertEqual(res.status_code, 200)
+        results = res.data['results']
+        purchase_ids = [p['id'] for p in results]
+        self.assertIn(str(self.purchase1.id), purchase_ids)
+        self.assertIn(str(self.purchase2.id), purchase_ids)
+        self.assertNotIn(str(self.purchase_other.id), purchase_ids)
+
+    def test_tic285_cannot_access_other_user_purchase_detail(self):
+        """TIC-285: No puede ver detalle de compra ajena."""
+        self.client.force_authenticate(user=self.user, token=FakeAuth('Comprador'))
+        res = self.client.get(f'/api/v1/purchases/{self.purchase_other.id}/')
+        self.assertEqual(res.status_code, 403)
+
+    def test_tic286_purchase_shows_event_name_date_amount(self):
+        """TIC-286: Cada registro muestra nombre del evento, fecha y monto."""
+        self.client.force_authenticate(user=self.user, token=FakeAuth('Comprador'))
+        res = self.client.get('/api/v1/purchases/history/')
+        self.assertEqual(res.status_code, 200)
+        results = res.data['results']
+        self.assertTrue(len(results) >= 2)
+        for p in results:
+            self.assertIn('event_name', p)
+            self.assertIn('event_date', p)
+            self.assertIn('total_price', p)
+            self.assertIn('ticket_type', p)
+            self.assertIn('status', p)
+            self.assertIn('backup_code', p)
+            self.assertTrue(len(p['event_name']) > 0)
+
+    def test_tic287_purchase_detail_shows_full_info(self):
+        """TIC-287: Al seleccionar una compra, muestra detalles y codigo de acceso."""
+        self.client.force_authenticate(user=self.user, token=FakeAuth('Comprador'))
+        res = self.client.get(f'/api/v1/purchases/{self.purchase1.id}/')
+        self.assertEqual(res.status_code, 200)
+        data = res.data
+        self.assertEqual(data['event_name'], 'Evento Reciente')
+        self.assertEqual(data['backup_code'], 'ABC123TEST')
+        self.assertIn('event_location', data)
+        self.assertIn('zone_type', data)
+        self.assertIn('quantity', data)
+
+    def test_tic288_purchases_ordered_chronologically(self):
+        """TIC-288: Las compras estan ordenadas con la mas reciente primero."""
+        self.client.force_authenticate(user=self.user, token=FakeAuth('Comprador'))
+        res = self.client.get('/api/v1/purchases/history/')
+        self.assertEqual(res.status_code, 200)
+        results = res.data['results']
+        self.assertTrue(len(results) >= 2)
+        dates = [p['created_at'] for p in results]
+        self.assertEqual(dates, sorted(dates, reverse=True))
+
+    def test_pagination_works(self):
+        """Verifica que la paginacion funciona correctamente."""
+        self.client.force_authenticate(user=self.user, token=FakeAuth('Comprador'))
+        res = self.client.get('/api/v1/purchases/history/?page=1&page_size=1')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data['results']), 1)
+        self.assertEqual(res.data['count'], 2)
+        self.assertEqual(res.data['total_pages'], 2)
+
+    def test_filter_by_status(self):
+        """Verifica que el filtro por status funciona."""
+        self.client.force_authenticate(user=self.user, token=FakeAuth('Comprador'))
+        res = self.client.get('/api/v1/purchases/history/?status=used')
+        self.assertEqual(res.status_code, 200)
+        results = res.data['results']
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['status'], 'used')

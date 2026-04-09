@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CategoryViewSet, EventViewSet, TicketTypeViewSet, PurchaseView, SeatConfigurationView, ValidateTicketView, WaitlistView, LogoutView, PurchaseHistoryView
+from .views import CategoryViewSet, EventViewSet, TicketTypeViewSet, PurchaseView, SimularPagoView, PurchaseStatusView, SeatConfigurationView, ValidateTicketView, WaitlistView, LogoutView, PurchaseHistoryView, PurchaseDetailView, PurchaseDownloadPDFView
 
 app_name = 'events'
 
@@ -12,16 +12,20 @@ router.register(r'ticket-types', TicketTypeViewSet, basename='ticket-type')
 urlpatterns = [
     path('', include(router.urls)),
     
-    # ✅ endpoint de compra
+    # Compra: iniciar orden (→ pending) y confirmar pago
     path('purchase/', PurchaseView.as_view(), name='purchase'),
-    # ✅ endpoint de validación de entrada (puerta)
+    path('purchase/<uuid:purchase_id>/simular_pago/', SimularPagoView.as_view(), name='simular-pago'),
+    path('purchase/<uuid:purchase_id>/status/', PurchaseStatusView.as_view(), name='purchase-status'),
+    # Validación de entrada en puerta
     path('tickets/validate/', ValidateTicketView.as_view(), name='validate-ticket'),
-    # ✅ endpoint de configuración de asientos
+    # Configuración de asientos
     path('events/<uuid:event_id>/seat-config/', SeatConfigurationView.as_view(), name='seat-config'),
-    # ✅ endpoint de lista de espera
+    # Lista de espera
     path('waitlist/', WaitlistView.as_view(), name='waitlist'),
-    # ✅ endpoint de logout
+    # Logout
     path('auth/logout/', LogoutView.as_view(), name='logout'),
-    # ✅ endpoint de historial de compras
+    # Historial de compras
     path('purchases/history/', PurchaseHistoryView.as_view(), name='purchase-history'),
+    path('purchases/<uuid:purchase_id>/', PurchaseDetailView.as_view(), name='purchase-detail'),
+    path('purchases/<uuid:purchase_id>/download-pdf/', PurchaseDownloadPDFView.as_view(), name='purchase-download-pdf'),
 ]

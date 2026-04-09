@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Home from './pages/Home';
 import Registro from './pages/Registro';
@@ -12,6 +12,7 @@ import ListaEventos from './components/dashboard/eventos/ListaEventos';
 import FormularioEvento from './components/dashboard/eventos/FormularioEvento';
 import ExplorarEventos from './components/dashboard/eventos/ExplorarEventos';
 import DetalleEvento from './components/dashboard/eventos/DetalleEvento';
+import MisCompras from './pages/MisCompras';
 
 function App() {
   return (
@@ -32,6 +33,9 @@ function App() {
             <Route path="/dashboard/mis-eventos" element={<ListaEventos />} />
             <Route path="/dashboard/crear-evento" element={<FormularioEvento />} />
             <Route path="/dashboard/evento/:id/editar" element={<FormularioEvento />} />
+            <Route path="/dashboard/mis-compras" element={<MisCompras />} />
+            <Route path="/dashboard/boletos" element={<Navigate to="/dashboard/mis-compras" replace />} />
+            <Route path="/dashboard/historial" element={<Navigate to="/dashboard/mis-compras" replace />} />
           </Routes>
         </div>
       </Router>

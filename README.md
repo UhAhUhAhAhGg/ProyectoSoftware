@@ -253,7 +253,140 @@ docker compose exec service-auth python manage.py create_superadmin --email supe
 
 ---
 
-## 🛠️ Comandos útiles de Django (dentro de Docker)
+## 🎯 Guía de Pruebas — Sprint 2
+
+Esta sección resume cómo probar cada Historia de Usuario del Sprint 2. Para detalles completos, consulta la documentación en la carpeta `docs/`.
+
+### Prerrequisitos generales
+
+1. Levantar todos los servicios:
+   ```bash
+   docker compose up
+   ```
+2. Ejecutar los seeds (solo la primera vez):
+   ```bash
+   docker compose exec service-auth python seed_users.py
+   docker compose exec service-events python seed_categories.py
+   ```
+3. Crear al menos un evento como Promotor (ver más abajo)
+
+### Cuentas de prueba
+
+| Rol | Email | Contraseña |
+|-----|-------|------------|
+| Administrador | `admin@ticketproject.com` | `Admin1234!` |
+| Promotor | `promotor@ticketproject.com` | `Promotor1234!` |
+| Comprador | `comprador@ticketproject.com` | `Comprador1234!` |
+
+> **Nota:** Si quieres recibir el email con el ticket, registra una cuenta con tu correo real.
+
+### Preparación: Crear un evento de prueba
+
+1. Login como **Promotor** en http://localhost:3000
+2. Dashboard → "Crear Evento"
+3. Llenar datos: nombre, descripción, fecha futura, ubicación, imagen
+4. En "Gestión de Zonas/Entradas", agregar al menos una zona (ej: VIP, $500, 200 cupos)
+5. Guardar → Publicar el evento
+
+---
+
+### HU-9: Explorar Catálogo de Eventos 📖 [docs/HU-9_explorar_eventos.md](docs/HU-9_explorar_eventos.md)
+
+| # | Prueba | Pasos | Resultado esperado |
+|---|--------|-------|-------------------|
+| 1 | Ver listado | Login comprador → "Explorar Eventos" | Lista de eventos con imagen, nombre, fecha, ubicación |
+| 2 | Buscar | Escribir en el buscador | Lista se filtra por nombre, ubicación o ciudad en tiempo real |
+| 3 | Ver detalle | Click en un evento | Página con info completa y tipos de entrada |
+
+---
+
+### HU-10: Selección de Tipo de Entrada 📖 [docs/HU-10_seleccion_entradas.md](docs/HU-10_seleccion_entradas.md)
+
+| # | Prueba | Pasos | Resultado esperado |
+|---|--------|-------|-------------------|
+| 1 | Ver tipos | En detalle de evento, ver sección "Tipos de entrada" | Nombre, zona, precio, disponibilidad por cada tipo |
+| 2 | Seleccionar | Click "Pagar con QR" en un tipo | Se abre modal de pago con QR, resumen y temporizador |
+
+---
+
+### HU-13: Compra Única por Evento 📖 [docs/HU-13_compra_unica.md](docs/HU-13_compra_unica.md)
+
+| # | Prueba | Pasos | Resultado esperado |
+|---|--------|-------|-------------------|
+| 1 | Compra duplicada | Completar pago → volver al evento → intentar comprar de nuevo | Mensaje: "🛑 Ya compraste una entrada para este evento" |
+| 2 | Otro evento | Con la misma cuenta, comprar en un evento diferente | Compra se realiza normalmente |
+
+---
+
+### HU-15: Mis Entradas (Visualización) 📖 [docs/HU-15_mis_entradas.md](docs/HU-15_mis_entradas.md)
+
+| # | Prueba | Pasos | Resultado esperado |
+|---|--------|-------|-------------------|
+| 1 | Ver entradas | Comprar una entrada → sidebar "Mis Entradas" | Compra visible con estado, evento, precio |
+| 2 | Ver detalle | Click en una compra | Panel lateral con QR, código de respaldo, info completa |
+| 3 | Descargar PDF | En detalle, click "📄 Descargar entrada PDF" | Se descarga PDF con QR y código de acceso |
+| 4 | Filtrar | Click en filtros (Completadas, Pendientes, etc.) | Lista se filtra por estado |
+
+---
+
+### HU-17: Pago con QR 📖 [docs/HU-17_pago_qr.md](docs/HU-17_pago_qr.md)
+
+| # | Prueba | Pasos | Resultado esperado |
+|---|--------|-------|-------------------|
+| 1 | Iniciar pago | En evento → "Pagar con QR" | Modal con QR de pago, temporizador 15 min, botón simular |
+| 2 | Simular pago | Click "Simular pago aprobado" | 🎉 Pago Exitoso + QR de entrada + código de respaldo |
+| 3 | Email | Tras pago, si configuraste Gmail | Banner "📧 Ticket enviado a tu@correo.com" |
+| 4 | Expiración | Iniciar pago → NO pagar → esperar 15 min | Modal muestra "Tiempo Expirado", permite reintentar |
+
+**Configuración de Email (opcional):**
+Para recibir el ticket por correo, edita el archivo `.env` raíz:
+```env
+EMAIL_HOST_USER=tucorreo@gmail.com
+EMAIL_HOST_PASSWORD=tuapppassword16chars
+DEFAULT_FROM_EMAIL=TicketProject <tucorreo@gmail.com>
+```
+> Necesitas una [App Password de Google](https://myaccount.google.com/apppasswords) (16 caracteres sin espacios).
+
+---
+
+### HU-32: Historial de Compras 📖 [docs/HU-32_historial_compras.md](docs/HU-32_historial_compras.md)
+
+| # | Prueba | Pasos | Resultado esperado |
+|---|--------|-------|-------------------|
+| 1 | Historial | Varias compras → "Mis Entradas" | Todas las compras ordenadas por fecha |
+| 2 | Filtros | Click en Completadas/Pendientes/Canceladas | Solo compras del estado seleccionado |
+| 3 | Paginación | Más de 10 compras | Botones Anterior/Siguiente |
+
+---
+
+### Flujo completo de prueba (de inicio a fin)
+
+1. `docker compose up` + seeds
+2. Login como **Promotor** → Crear evento con zonas y precios → Publicar
+3. Login como **Comprador** → Explorar Eventos → Seleccionar evento
+4. Ver tipos de entrada → "Pagar con QR" → Simular pago
+5. Verificar: 🎉 Pago exitoso + QR + código + email (si configurado)
+6. Ir a "Mis Entradas" → Ver compra + descargar PDF
+7. Volver al evento → Intentar comprar de nuevo → Verificar bloqueo "Ya compraste"
+
+---
+
+## 📚 Documentación completa
+
+| Documento | Descripción |
+|-----------|-------------|
+| [docs/HU-9_explorar_eventos.md](docs/HU-9_explorar_eventos.md) | Explorar catálogo de eventos |
+| [docs/HU-10_seleccion_entradas.md](docs/HU-10_seleccion_entradas.md) | Selección de tipo de entrada |
+| [docs/HU-13_compra_unica.md](docs/HU-13_compra_unica.md) | Restricción de compra única |
+| [docs/HU-15_mis_entradas.md](docs/HU-15_mis_entradas.md) | Visualización de entradas compradas |
+| [docs/HU-17_pago_qr.md](docs/HU-17_pago_qr.md) | Pago con QR + email |
+| [docs/HU-32_historial_compras.md](docs/HU-32_historial_compras.md) | Historial de compras |
+| [docs/HU-1_registro.md](docs/HU-1_registro.md) | Registro de usuarios |
+| [docs/HU-2_login.md](docs/HU-2_login.md) | Inicio de sesión |
+| [docs/HU-7_gestion_eventos.md](docs/HU-7_gestion_eventos.md) | Gestión de eventos (Promotor) |
+| [docs/HU-8_gestion_entradas.md](docs/HU-8_gestion_entradas.md) | Gestión de entradas/zonas |
+
+---
 
 ### Crear un superusuario para el admin de Django
 ```bash

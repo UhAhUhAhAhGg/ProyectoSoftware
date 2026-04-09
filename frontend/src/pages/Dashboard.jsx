@@ -123,18 +123,14 @@ function Dashboard() {
             {isComprador ? (
               // Enlaces rápidos para comprador
               <>
-                <li><a href="/dashboard/eventos">🎫 Explorar Eventos</a></li>
-                <li><a href="/dashboard/boletos">🎟️ Mis Boletos</a></li>
-                <li><a href="/dashboard/favoritos">❤️ Favoritos</a></li>
-                <li><a href="/dashboard/historial">📜 Historial</a></li>
+                <li><Link to="/dashboard/eventos">🎫 Explorar Eventos</Link></li>
+                <li><Link to="/dashboard/mis-compras">🎟️ Mis Entradas</Link></li>
               </>
             ) : (
               // Enlaces rápidos para promotor
               <>
-                <li><a href="/dashboard/crear-evento">➕ Crear Evento</a></li>
-                <li><a href="/dashboard/mis-eventos">📋 Mis Eventos</a></li>
-                <li><a href="/dashboard/ventas">💰 Ventas</a></li>
-                <li><a href="/dashboard/estadisticas">📊 Estadísticas</a></li>
+                <li><Link to="/dashboard/crear-evento">➕ Crear Evento</Link></li>
+                <li><Link to="/dashboard/mis-eventos">📋 Mis Eventos</Link></li>
               </>
             )}
           </ul>
