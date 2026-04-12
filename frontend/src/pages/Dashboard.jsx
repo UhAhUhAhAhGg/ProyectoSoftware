@@ -89,7 +89,7 @@ function Dashboard() {
         </div>
         
         <div className="header-right">
-          <button onClick={toggleDarkMode} className="dark-mode-toggle" title="Cambiar tema">
+          <button onClick={toggleDarkMode} className="dashboard-theme-toggle" title="Cambiar tema">
             {darkMode ? '☀️' : '🌙'}
           </button>
 

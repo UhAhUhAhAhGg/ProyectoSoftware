@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from 'react-router-dom';
 import "./perfil.css";
 
 export default function PerfilPage() {
@@ -42,6 +43,7 @@ export default function PerfilPage() {
   return (
     <div className="perfil-container">
       <div className="perfil-box">
+        <Link to="/dashboard" className="perfil-back-link">← Volver al dashboard</Link>
 
         <h1>Mi Perfil</h1>
 

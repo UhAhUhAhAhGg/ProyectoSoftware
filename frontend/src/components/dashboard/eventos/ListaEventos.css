@@ -20,6 +20,19 @@
   font-size: 28px;
 }
 
+.btn-volver-dashboard {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 8px;
+  color: var(--color-marron);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.btn-volver-dashboard:hover {
+  text-decoration: underline;
+}
+
 .eventos-count {
   color: var(--color-verde-gris);
   margin: 0;

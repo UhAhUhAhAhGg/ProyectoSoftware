@@ -205,6 +205,7 @@ function AdminDashboard() {
           </div>
 
           <div className="header-actions">
+            <Link href="/" className="admin-back-link">← Inicio</Link>
             <div className="date-display">
               <span className="date-icon">📅</span>
               <span className="date-text">

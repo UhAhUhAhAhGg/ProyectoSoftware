@@ -10,6 +10,20 @@ body {
   margin: auto;
 }
 
+.eventos-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.eventos-back-link:hover {
+  text-decoration: underline;
+}
+
 .titulo {
   text-align: center;
   color: white;

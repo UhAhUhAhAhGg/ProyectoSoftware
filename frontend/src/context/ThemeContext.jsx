@@ -1,10 +1,14 @@
+ 'use client';
+
 import { createContext, useContext, useState, useEffect } from 'react';
 
 const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
   const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('ticketgo-dark-mode');
+    if (typeof window === 'undefined') return false;
+
+    const saved = window.localStorage.getItem('ticketgo-dark-mode');
     if (saved !== null) return saved === 'true';
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
@@ -15,7 +19,9 @@ export function ThemeProvider({ children }) {
     } else {
       document.body.classList.remove('dark-mode');
     }
-    localStorage.setItem('ticketgo-dark-mode', darkMode);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('ticketgo-dark-mode', String(darkMode));
+    }
   }, [darkMode]);
 
   const toggleDarkMode = () => setDarkMode(prev => !prev);

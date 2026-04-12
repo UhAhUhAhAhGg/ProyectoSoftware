@@ -1,5 +1,6 @@
 import './eventos.css';
 import { useState, useEffect } from "react";
+import { Link } from 'react-router-dom';
 
 const eventos = [
   {
@@ -62,6 +63,7 @@ export default function EventosPage() {
 
   return (
     <div className="container">
+      <Link to="/dashboard" className="eventos-back-link">← Volver al dashboard</Link>
 
       {/* 🔥 CARRUSEL PRO */}
       <div className="carrusel">

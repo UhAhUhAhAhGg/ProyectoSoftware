@@ -253,6 +253,16 @@
   gap: 20px;
 }
 
+.admin-back-link {
+  color: var(--color-marron);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.admin-back-link:hover {
+  text-decoration: underline;
+}
+
 .date-display {
   display: flex;
   align-items: center;

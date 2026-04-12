@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import TicketCard from '../../components/TicketCard';
+import { Link } from 'react-router-dom';
 // Importamos el hook que tienes en tu proyecto para la autenticación
 import { useAuth } from '../../context/AuthContext'; 
 
@@ -56,6 +57,9 @@ export default function MisBoletos() {
 
   return (
     <div className="mis-boletos-container" style={{ padding: '20px' }}>
+      <Link to="/dashboard" style={{ display: 'inline-flex', marginBottom: '10px', textDecoration: 'none', fontWeight: 600 }}>
+        ← Volver al dashboard
+      </Link>
       <h2>🎟️ Mis Boletos Activos</h2>
       <p>Presenta el código QR en la entrada del evento. Si falla, el guardia puede usar el código alfanumérico.</p>
       

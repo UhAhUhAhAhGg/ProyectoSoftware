@@ -106,8 +106,8 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, capacidadDispon
       nuevosErrores.precio = 'El precio es requerido';
     } else {
       const precio = parseFloat(formData.precio);
-      if (isNaN(precio) || precio < 0) {
-        nuevosErrores.precio = 'El precio debe ser un número positivo';
+      if (isNaN(precio) || precio <= 0) {
+        nuevosErrores.precio = 'El precio debe ser mayor a 0';
       } else if (precio > 100000) {
         nuevosErrores.precio = 'El precio no puede exceder $100,000';
       }
@@ -314,10 +314,10 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, capacidadDispon
                 name="precio"
                 value={formData.precio}
                 onChange={handleChange}
-                placeholder="Ej: 2500"
-                min="0"
+                placeholder="Ej: 2500.50"
+                min="0.01"
                 max="100000"
-                step="100"
+                step="0.01"
                 className={errores.precio ? 'error' : ''}
               />
               {errores.precio && <span className="error-mensaje">{errores.precio}</span>}

@@ -119,6 +119,7 @@ function ListaEventos() {
       {/* Header con acciones */}
       <div className="eventos-header">
         <div className="header-left">
+          <Link to="/dashboard" className="btn-volver-dashboard">← Volver al dashboard</Link>
           <h2>Mis Eventos</h2>
           <p className="eventos-count">{eventosFiltrados.length} eventos encontrados</p>
         </div>
