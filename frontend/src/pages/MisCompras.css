@@ -230,8 +230,69 @@
   .compra-detalle { position: static; max-height: none; order: -1; }
 }
 
-.compra-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+/* ── Dark Mode ── */
+body.dark-mode .mis-compras-page { color: #e0e0e0; }
+body.dark-mode .mis-compras-header h2 { color: #f0f0f0; }
+body.dark-mode .mis-compras-header p { color: #aaa; }
+
+body.dark-mode .filtro-btn {
+  background: #2a2a3a;
+  border-color: #444;
+  color: #ccc;
 }
+body.dark-mode .filtro-btn:hover { border-color: #6ca0dc; color: #6ca0dc; }
+body.dark-mode .filtro-btn.activo {
+  background: #3b6fb0;
+  color: #fff;
+  border-color: #3b6fb0;
+}
+
+body.dark-mode .compra-card {
+  background: #1e1e2e;
+  border-color: #3a3a4a;
+}
+body.dark-mode .compra-card:hover { background: #262640; border-color: #5a6a8a; }
+body.dark-mode .compra-card-selected {
+  background: #1a2a40;
+  border-color: #3b6fb0;
+}
+body.dark-mode .compra-title { color: #f0f0f0; }
+body.dark-mode .compra-meta { color: #aaa; }
+body.dark-mode .compra-fecha-compra { color: #888; }
+body.dark-mode .compra-amount { color: #e0e0e0; }
+
+body.dark-mode .compras-loading,
+body.dark-mode .compras-empty { color: #888; }
+body.dark-mode .compras-empty h3 { color: #ccc; }
+
+body.dark-mode .compra-detalle {
+  background: #1e1e2e;
+  border-color: #3a3a4a;
+}
+body.dark-mode .detalle-content h3 { color: #f0f0f0; }
+body.dark-mode .detalle-section { border-top-color: #333; }
+body.dark-mode .detalle-section h4 { color: #aaa; }
+body.dark-mode .detalle-section p { color: #ddd; }
+body.dark-mode .detalle-evento-nombre { color: #f0f0f0; }
+body.dark-mode .detalle-codigo {
+  background: #2a2a3a;
+  border-color: #555;
+  color: #e0e0e0;
+}
+body.dark-mode .detalle-meta code { background: #2a2a3a; color: #ccc; }
+body.dark-mode .detalle-placeholder { color: #666; }
+body.dark-mode .detalle-placeholder h3 { color: #888; }
+
+body.dark-mode .compras-pagination button {
+  background: #2a2a3a;
+  border-color: #444;
+  color: #ccc;
+}
+body.dark-mode .compras-pagination span { color: #aaa; }
+
+body.dark-mode .btn-secundario {
+  background: #2a2a3a;
+  border-color: #444;
+  color: #ccc;
+}
+body.dark-mode .btn-secundario:hover { background: #333; }

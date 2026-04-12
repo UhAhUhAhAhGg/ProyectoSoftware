@@ -1,28 +1,11 @@
 import { Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useTheme } from '../context/ThemeContext';
 import './Home.css';
 
-const getInitialDarkMode = () => {
-  if (typeof window === 'undefined') return false;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
-};
-
 function Home() {
-  const [darkMode, setDarkMode] = useState(getInitialDarkMode);
+  const { darkMode, toggleDarkMode } = useTheme();
   const [menuAbierto, setMenuAbierto] = useState(false);
-
-  // Aplicar modo oscuro
-  useEffect(() => {
-    if (darkMode) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
-  }, [darkMode]);
-
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-  };
 
   const toggleMenu = () => {
     setMenuAbierto(!menuAbierto);

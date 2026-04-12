@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import OpcionesComprador from '../components/dashboard/OpcionesComprador';
@@ -8,6 +9,7 @@ import './Dashboard.css';
 
 function Dashboard() {
   const { user, isAuthenticated, isComprador, isPromotor, isAdministrador, logout } = useAuth();
+  const { darkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const [sidebarAbierto, setSidebarAbierto] = useState(false);
   const [notificaciones, setNotificaciones] = useState([
@@ -87,6 +89,10 @@ function Dashboard() {
         </div>
         
         <div className="header-right">
+          <button onClick={toggleDarkMode} className="dark-mode-toggle" title="Cambiar tema">
+            {darkMode ? '☀️' : '🌙'}
+          </button>
+
           {/* Notificaciones */}
           <div className="notificaciones-dropdown">
             <button className="btn-notificaciones" onClick={marcarComoLeidas}>

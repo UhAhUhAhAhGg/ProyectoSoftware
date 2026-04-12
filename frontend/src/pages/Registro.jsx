@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import './Registro.css';
 
 function Registro() {
@@ -15,9 +16,9 @@ function Registro() {
 
   const navigate = useNavigate();
   const { login } = useAuth();
+  const { darkMode, toggleDarkMode } = useTheme();
 
   const [errores, setErrores] = useState({});
-  const [darkMode, setDarkMode] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
@@ -34,21 +35,6 @@ function Registro() {
     { id: 'number', label: 'Al menos un número', test: (pwd) => /[0-9]/.test(pwd) },
     { id: 'special', label: 'Al menos un carácter especial (@, #, $, etc.)', test: (pwd) => /[^A-Za-z0-9]/.test(pwd) }
   ];
-
-  // Verificar preferencia del sistema al cargar
-  useEffect(() => {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setDarkMode(prefersDark);
-  }, []);
-
-  // Aplicar o quitar la clase dark-mode al body
-  useEffect(() => {
-    if (darkMode) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
-  }, [darkMode]);
 
   // Evaluar fortaleza de la contraseña
   useEffect(() => {
@@ -173,10 +159,6 @@ function Registro() {
     } else {
       setErrores(nuevosErrores);
     }
-  };
-
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
   };
 
   const closeModal = () => {

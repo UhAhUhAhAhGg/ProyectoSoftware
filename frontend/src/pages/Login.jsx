@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../services/authService';
 import './Login.css';
@@ -14,16 +15,10 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
-  const [darkMode, setDarkMode] = useState(false);
+  const { darkMode, toggleDarkMode } = useTheme();
 
   const { login, isAuthenticated, isComprador, isPromotor, isAdministrador, sessionExpired, clearSessionExpired } = useAuth();
   const navigate = useNavigate();
-
-  // Verificar preferencia del sistema para modo oscuro
-  useEffect(() => {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setDarkMode(prefersDark);
-  }, []);
 
   // Redirigir según el rol
   useEffect(() => {
@@ -38,15 +33,6 @@ function Login() {
       }
     }
   }, [isAuthenticated, isAdministrador, isPromotor, isComprador, navigate]);
-
-  // Aplicar modo oscuro
-  useEffect(() => {
-    if (darkMode) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
-  }, [darkMode]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -66,8 +52,8 @@ function Login() {
   // Prellenar según el rol seleccionado
   const handleRoleChange = (role) => {
     const credentials = {
-      comprador: { email: 'comprador@ticketgo.com', password: 'Comprador123!' },
-      promotor: { email: 'promotor@ticketgo.com', password: 'Promotor123!' }
+      comprador: { email: 'gustavo.quisbert.c@ucb.edu.bo', password: 'Cromotor1234!' },
+      promotor: { email: 'promotor@ticketproject.com', password: 'Promotor1234!' }
     };
 
     setFormData({
@@ -121,10 +107,6 @@ function Login() {
     } else {
       setErrores(nuevosErrores);
     }
-  };
-
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
   };
 
   const getRoleStyle = (role) => {

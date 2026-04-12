@@ -116,3 +116,28 @@
     transform: rotate(360deg);
   }
 }
+
+/* ── Dark Mode ── */
+body.dark-mode .explorar-eventos { color: #e0e0e0; }
+body.dark-mode .explorar-header h2 { color: #f0f0f0; }
+body.dark-mode .explorar-header p { color: #aaa; }
+body.dark-mode .busqueda-wrapper input {
+  background: #2a2a3a;
+  border-color: #444;
+  color: #e0e0e0;
+}
+body.dark-mode .evento-card-comprador {
+  background: #1e1e2e;
+  border-color: #3a3a4a;
+}
+body.dark-mode .card-body h3 { color: #f0f0f0; }
+body.dark-mode .meta { color: #aaa; }
+body.dark-mode .descripcion { color: #bbb; }
+body.dark-mode .card-footer { border-top-color: #3a3a4a; }
+body.dark-mode .precio { color: #d4a86a; }
+body.dark-mode .empty-state,
+body.dark-mode .loading-state {
+  background: #1e1e2e;
+  border-color: #3a3a4a;
+  color: #aaa;
+}

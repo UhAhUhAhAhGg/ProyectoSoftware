@@ -4,25 +4,20 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { authService } from '../services/authService';
 import './AdminLogin.css';
 
 function AdminLogin() {
-  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [formData, setFormData] = useState({ email: 'admin@ticketproject.com', password: 'Admin1234!' });
   const [errores, setErrores] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
-  const [darkMode, setDarkMode] = useState(false);
+  const { darkMode, toggleDarkMode } = useTheme();
 
   const { login, isAuthenticated, isAdministrador, sessionExpired, clearSessionExpired } = useAuth();
   const router = useRouter();
-
-  // Detectar preferencia de modo oscuro del sistema
-  useEffect(() => {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setDarkMode(prefersDark);
-  }, []);
 
   // Redirigir si ya está autenticado
   useEffect(() => {
@@ -32,15 +27,6 @@ function AdminLogin() {
       router.replace('/dashboard');
     }
   }, [isAuthenticated, isAdministrador, router]);
-
-  // Aplicar clase dark-mode al body
-  useEffect(() => {
-    if (darkMode) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
-  }, [darkMode]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -86,7 +72,7 @@ function AdminLogin() {
 
   return (
     <div className="admin-login-container">
-      <button onClick={() => setDarkMode(!darkMode)} className="dark-mode-toggle">
+      <button onClick={toggleDarkMode} className="dark-mode-toggle">
         {darkMode ? '☀️ Modo Claro' : '🌙 Modo Oscuro'}
       </button>
 
@@ -128,7 +114,7 @@ function AdminLogin() {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
-                placeholder="admin@ticketgo.com"
+                placeholder="admin@ticketproject.com"
                 className={errores.email ? 'error' : ''}
                 disabled={loading}
               />

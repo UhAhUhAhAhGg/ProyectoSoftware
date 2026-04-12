@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authService } from '../services/authService';
-import './AdminLogin.css'; // Reutiliza el diseño del AdminLogin
+import { useTheme } from '../context/ThemeContext';
+import './AdminLogin.css';
 
 function AdminRegister() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams.get('token'); // Lee el token de invitación de la URL (?token=...)
+  const token = searchParams.get('token');
+  const { darkMode, toggleDarkMode } = useTheme();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -23,14 +25,7 @@ function AdminRegister() {
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
   const [tokenValido, setTokenValido] = useState(true);
-
-  // Detectar modo oscuro del sistema
-  useEffect(() => {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setDarkMode(prefersDark);
-  }, []);
 
   // Verificar que haya token en la URL
   useEffect(() => {
@@ -38,15 +33,6 @@ function AdminRegister() {
       setTokenValido(false);
     }
   }, [token]);
-
-  // Aplicar dark mode
-  useEffect(() => {
-    if (darkMode) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
-  }, [darkMode]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -153,7 +139,7 @@ function AdminRegister() {
 
   return (
     <div className="admin-login-container">
-      <button onClick={() => setDarkMode(!darkMode)} className="dark-mode-toggle">
+      <button onClick={toggleDarkMode} className="dark-mode-toggle">
         {darkMode ? '☀️ Modo Claro' : '🌙 Modo Oscuro'}
       </button>
 
