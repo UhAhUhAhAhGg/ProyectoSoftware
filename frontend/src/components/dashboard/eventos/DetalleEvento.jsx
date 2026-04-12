@@ -5,13 +5,11 @@ import { eventosService } from '../../../services/eventosService';
 import VenueLayoutPreview from './VenueLayoutPreview';
 import ModalPagoQR from './ModalPagoQR';
 import './DetalleEvento.css';
-import TicketView from '../../TicketView';
 
 function DetalleEvento() {
   const { id } = useParams();
   const [evento, setEvento] = useState(null);
   const [cargando, setCargando] = useState(true);
-  const [ticket, setTicket] = useState(null);
 
   const [cargandoCompra, setCargandoCompra] = useState(false);
   const [ordenCompra, setOrdenCompra] = useState(null);
@@ -184,32 +182,6 @@ function DetalleEvento() {
               <div className="fill" style={{ width: `${porcentaje}%` }}></div>
             </div>
           </div>
-
-<<<<<<< HEAD
-          {/* 🟢 BOTÓN DEMO */}
-          <button
-            type="button"
-            className="btn-seleccionar"
-            onClick={() => {
-              const ticketDemo = {
-                evento: evento.nombre,
-                usuario: "Usuario Demo",
-                fecha: new Date().toLocaleDateString(),
-                codigo: "ABC123XYZ",
-                qr: "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Demo",
-                pdf: "#"
-              };
-              setTicket(ticketDemo);
-            }}
-          >
-            Comprar entrada
-          </button>
-
-          {/* 🟢 TICKET */}
-          {ticket && <TicketView ticket={ticket} />}
-
-=======
->>>>>>> main
         </div>
       </div>
 
