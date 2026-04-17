@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getUserTickets, downloadPurchasePDF } from '../services/profileService';
+import { eventosService } from '../services/eventosService';
 import './MisCompras.css';
 
 const STATUS_LABELS = {
@@ -21,6 +22,7 @@ export default function MisCompras() {
   const [totalPages, setTotalPages] = useState(1);
   const [count, setCount] = useState(0);
   const [descargando, setDescargando] = useState(false);
+  const [cancelandoId, setCancelandomId] = useState(null);
 
   const cargar = async (p = 1, statusFilter = '', sort = sortBy, order = sortType) => {
     setLoading(true);
@@ -70,6 +72,20 @@ export default function MisCompras() {
       alert(err.message || 'Error al descargar la entrada.');
     } finally {
       setDescargando(false);
+    }
+  };
+
+  const handleCancelarPendiente = async (purchase) => {
+    if (!window.confirm(`¿Cancelar la compra de "${purchase.event_name}"? Podrás volver a comprar una entrada para este evento.`)) return;
+    setCancelandomId(purchase.id);
+    try {
+      await eventosService.cancelarCompra(purchase.id);
+      setSelected(null);
+      cargar(page, filtro, sortBy, sortType);
+    } catch (err) {
+      alert(err.message || 'No se pudo cancelar la compra.');
+    } finally {
+      setCancelandomId(null);
     }
   };
 
@@ -232,7 +248,21 @@ const getBadge = (status) => {
               </div>
 
               <div className="detalle-acciones">
-                {selected.status !== 'cancelled' && (
+                {selected.status === 'pending' && (
+                  <>
+                    <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 8, padding: '10px 14px', marginBottom: 12, color: '#856404', fontSize: '0.9rem' }}>
+                      ⚠️ Esta compra está <strong>pendiente de pago</strong>. Si no la completaste, pues cancelarla para poder comprar otra entrada.
+                    </div>
+                    <button
+                      className="btn-cancelar-compra"
+                      onClick={() => handleCancelarPendiente(selected)}
+                      disabled={cancelandoId === selected.id}
+                    >
+                      {cancelandoId === selected.id ? 'Cancelando...' : '❌ Cancelar esta compra'}
+                    </button>
+                  </>
+                )}
+                {selected.status !== 'cancelled' && selected.status !== 'pending' && (
                   <button
                     className="btn-principal"
                     onClick={() => handleDescargar(selected)}

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import Image from 'next/image';
 import { Link, useParams } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
 import VenueLayoutPreview from './VenueLayoutPreview';
@@ -19,33 +18,8 @@ function DetalleEvento() {
   useEffect(() => {
     const cargar = async () => {
       try {
-        // 🔵 CÓDIGO REAL (cuando backend esté listo)
-        // const data = await eventosService.getEventoById(id);
-        // setEvento(data);
-
-        // 🟡 DEMO TEMPORAL
-        const data = {
-          id: 1,
-          nombre: "Evento Demo",
-          descripcion: "Evento de prueba",
-          fecha: new Date(),
-          hora: "20:00",
-          ubicacion: "La Paz",
-          estado: "activo",
-          capacidad: 100,
-          boletosVendidos: 20,
-          tiposEntrada: [
-            {
-              id: 1,
-              nombre: "General",
-              precio: 50,
-              disponibles: 80
-            }
-          ]
-        };
-
+        const data = await eventosService.getEventoById(id);
         setEvento(data);
-
       } catch {
         setEvento(null);
       } finally {
@@ -108,13 +82,11 @@ function DetalleEvento() {
 
       <div className="detalle-card">
         {evento.imagen && (
-          <Image
+          <img
             src={evento.imagen}
             alt={evento.nombre}
-            width={1600}
-            height={320}
-            unoptimized
             className="detalle-imagen"
+            onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; }}
           />
         )}
 

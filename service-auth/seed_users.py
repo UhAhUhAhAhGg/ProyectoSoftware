@@ -16,7 +16,7 @@ users_to_create = [
     {'email': 'admin@ticketproject.com',     'password': 'Admin1234!',      'role': 'Administrador', 'is_staff': True},
     {'email': 'comprador@ticketproject.com', 'password': 'Comprador1234!',  'role': 'Comprador',     'is_staff': False},
     {'email': 'promotor@ticketproject.com',  'password': 'Promotor1234!',   'role': 'Promotor',      'is_staff': False},
-    {'email': 'gustavo.quisbert.c@ucb.edu.bo',  'password': 'Cromotor1234!',   'role': 'Comprador',      'is_staff': False},
+    {'email': 'gustavo.quisbert.c@ucb.edu.bo',  'password': 'Comprador1234!',   'role': 'Comprador',      'is_staff': False},
 ]
 
 for u in users_to_create:

@@ -4,6 +4,30 @@
   padding: 1.5rem 1rem 2rem;
 }
 
+.explorar-header-nav {
+  margin-bottom: 1rem;
+}
+
+.btn-volver-dashboard {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #ad8149;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: opacity 0.2s;
+}
+
+.btn-volver-dashboard:hover {
+  opacity: 0.75;
+  text-decoration: underline;
+}
+
+body.dark-mode .btn-volver-dashboard {
+  color: #d4a86a;
+}
+
 .explorar-header h2 {
   margin: 0;
   color: #2f2a22;
