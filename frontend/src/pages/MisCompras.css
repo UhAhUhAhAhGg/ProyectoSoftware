@@ -212,6 +212,21 @@
 .btn-secundario:hover { background: #eee; }
 .btn-secundario.small { padding: 6px 14px; font-size: 0.85rem; }
 
+.btn-cancelar-compra {
+  padding: 10px 20px;
+  background: #fff;
+  color: #c62828;
+  border: 1.5px solid #c62828;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  width: 100%;
+}
+.btn-cancelar-compra:hover { background: #fce4ec; }
+.btn-cancelar-compra:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Spinner */
 .spinner {
   width: 32px;

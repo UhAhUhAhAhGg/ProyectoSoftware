@@ -343,4 +343,16 @@ export const eventosService = {
     }
     return await res.json();
   },
+
+  cancelarCompra: async (purchaseId) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/purchase/${purchaseId}/cancel/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'No se pudo cancelar la compra.');
+    }
+    return data;
+  },
 };
