@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CategoryViewSet, EventViewSet, TicketTypeViewSet, PurchaseView, SimularPagoView, PurchaseStatusView, SeatConfigurationView, ValidateTicketView, WaitlistView, LogoutView, PurchaseHistoryView, PurchaseDetailView, PurchaseDownloadPDFView
+from .views import CategoryViewSet, EventViewSet, TicketTypeViewSet, PurchaseView, SimularPagoView, PurchaseStatusView, SeatConfigurationView, ValidateTicketView, WaitlistView, LogoutView, PurchaseHistoryView, PurchaseDetailView, PurchaseDownloadPDFView, PurchaseCancelView
 
 app_name = 'events'
 
@@ -16,6 +16,7 @@ urlpatterns = [
     path('purchase/', PurchaseView.as_view(), name='purchase'),
     path('purchase/<uuid:purchase_id>/simular_pago/', SimularPagoView.as_view(), name='simular-pago'),
     path('purchase/<uuid:purchase_id>/status/', PurchaseStatusView.as_view(), name='purchase-status'),
+    path('purchase/<uuid:purchase_id>/cancel/', PurchaseCancelView.as_view(), name='purchase-cancel'),
     # Validación de entrada en puerta
     path('tickets/validate/', ValidateTicketView.as_view(), name='validate-ticket'),
     # Configuración de asientos

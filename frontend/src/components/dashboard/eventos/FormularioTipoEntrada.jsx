@@ -36,7 +36,7 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, capacidadDispon
     tipoZona: 'general',
     esVIP: false,
     descripcion: '',
-    precio: '',
+    precio: '0',
     filas: '',
     asientosPorFila: '',
   });
@@ -315,9 +315,9 @@ function FormularioTipoEntrada({ eventoId, evento, tipoEditando, capacidadDispon
                 value={formData.precio}
                 onChange={handleChange}
                 placeholder="Ej: 2500.50"
-                min="0.01"
+                min="0"
                 max="100000"
-                step="0.01"
+                step="10"
                 className={errores.precio ? 'error' : ''}
               />
               {errores.precio && <span className="error-mensaje">{errores.precio}</span>}

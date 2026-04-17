@@ -47,6 +47,10 @@ function ExplorarEventos() {
 
   return (
     <section className="explorar-eventos">
+      <div className="explorar-header-nav">
+        <Link to="/dashboard" className="btn-volver-dashboard">← Volver al dashboard</Link>
+      </div>
+
       <header className="explorar-header">
         <h2>Eventos Disponibles</h2>
         <p>Selecciona un evento para ver su detalle y elegir el de tu interés.</p>

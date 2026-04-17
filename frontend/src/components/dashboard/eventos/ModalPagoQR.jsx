@@ -8,6 +8,7 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
   const [estadoPago, setEstadoPago] = useState('pending'); // pending | active | cancelled | expired
   const [datosTicket, setDatosTicket] = useState(null);
   const [simulando, setSimulando] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   // Cronómetro de expiración
@@ -59,6 +60,22 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
     } finally {
       setSimulando(false);
     }
+  };
+
+  const handleCancelar = async () => {
+    // Solo cancelar si la compra aún está pendiente
+    if (estadoPago === 'pending' && ordenData?.purchase_id) {
+      setCancelando(true);
+      try {
+        await eventosService.cancelarCompra(ordenData.purchase_id);
+      } catch {
+        // Ignorar error: aunque falle, cerramos el modal 
+        // La compra expirará sola en 15 min por el backend
+      } finally {
+        setCancelando(false);
+      }
+    }
+    onCerrar();
   };
 
   const handleVerMisCompras = () => {
@@ -125,7 +142,13 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
               </button>
             </div>
 
-            <button onClick={onCerrar} style={btnStyle('#6c757d')}>Cancelar</button>
+            <button
+              onClick={handleCancelar}
+              disabled={cancelando}
+              style={btnStyle('#6c757d')}
+            >
+              {cancelando ? 'Cancelando...' : 'Cancelar'}
+            </button>
           </>
         )}
 
@@ -184,7 +207,7 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
             <div style={{ fontSize: '3rem', marginBottom: 8 }}>⏱️</div>
             <h2 style={{ margin: '0 0 8px 0' }}>Tiempo Expirado</h2>
             <p>El código QR ya no es válido. Por favor, genera una nueva orden de compra.</p>
-            <button onClick={onCerrar} style={btnStyle('#6c757d')}>Volver al evento</button>
+            <button onClick={handleCancelar} style={btnStyle('#6c757d')}>Volver al evento</button>
           </div>
         )}
 

@@ -428,6 +428,7 @@ function FormularioEvento() {
                   placeholder="Ej: 500"
                   min="10"
                   max="10000"
+                  step="10"
                   className={errores.capacidad ? 'error' : ''}
                 />
                 {errores.capacidad && <span className="error-mensaje">{errores.capacidad}</span>}

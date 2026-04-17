@@ -1000,3 +1000,38 @@ class PurchaseDownloadPDFView(APIView):
             return response
         except Exception as e:
             return Response({"error": f"Error generando el PDF: {str(e)}"}, status=500)
+
+
+class PurchaseCancelView(APIView):
+    """
+    POST /api/v1/purchase/<purchase_id>/cancel/
+    Cancela una compra pendiente iniciada por el usuario.
+    Solo se puede cancelar si el estado es 'pending' y pertenece al usuario autenticado.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, purchase_id):
+        user_id = request.user.id
+        purchase = get_object_or_404(Purchase, id=purchase_id)
+
+        if str(purchase.user_id) != str(user_id):
+            return Response({"error": "No tienes permiso para cancelar esta compra."}, status=403)
+
+        if purchase.status == 'cancelled':
+            return Response({"message": "La compra ya estaba cancelada."}, status=200)
+
+        if purchase.status != 'pending':
+            return Response(
+                {"error": f"No se puede cancelar una compra con estado '{purchase.status}'. Solo se pueden cancelar compras pendientes."},
+                status=400
+            )
+
+        purchase.status = 'cancelled'
+        purchase.save()
+
+        return Response({
+            "status": "success",
+            "message": "Compra cancelada correctamente. Puedes volver a comprar entradas para este evento.",
+            "purchase_id": str(purchase.id),
+        }, status=200)
+
