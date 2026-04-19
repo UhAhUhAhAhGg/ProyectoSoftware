@@ -127,23 +127,34 @@ class TicketTypeCreateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         instance = getattr(self, 'instance', None)
         max_capacity = attrs.get('max_capacity', getattr(instance, 'max_capacity', None))
-        seat_rows = attrs.get('seat_rows', getattr(instance, 'seat_rows', None))
-        seats_per_row = attrs.get('seats_per_row', getattr(instance, 'seats_per_row', None))
         current_sold = getattr(instance, 'current_sold', 0)
         zone_type = attrs.get('zone_type', getattr(instance, 'zone_type', 'general'))
         is_vip = attrs.get('is_vip', getattr(instance, 'is_vip', False))
 
-        if (seat_rows is None) != (seats_per_row is None):
-            raise serializers.ValidationError(
-                'Debes enviar filas y asientos por fila para configurar la distribución de la zona.'
-            )
+        # Determinar si los campos de layout llegaron explícitamente en el request.
+        # En PATCH parcial, solo validamos si el cliente los envió intencionalmente.
+        request = self.context.get('request')
+        request_data = getattr(request, 'data', {}) if request else attrs
 
-        if seat_rows is not None and seats_per_row is not None:
-            configured_seats = seat_rows * seats_per_row
-            if configured_seats != max_capacity:
+        seat_rows_in_request = 'seat_rows' in request_data
+        seats_per_row_in_request = 'seats_per_row' in request_data
+
+        seat_rows = attrs.get('seat_rows', getattr(instance, 'seat_rows', None))
+        seats_per_row = attrs.get('seats_per_row', getattr(instance, 'seats_per_row', None))
+
+        # Solo validar layout si ambos campos vienen en el request
+        if seat_rows_in_request or seats_per_row_in_request:
+            if (seat_rows is None) != (seats_per_row is None):
                 raise serializers.ValidationError(
-                    'La capacidad de la zona debe coincidir exactamente con filas x asientos por fila.'
+                    'Debes enviar filas y asientos por fila juntos para configurar la distribución.'
                 )
+
+            if seat_rows is not None and seats_per_row is not None:
+                configured_seats = seat_rows * seats_per_row
+                if configured_seats != max_capacity:
+                    raise serializers.ValidationError(
+                        'La capacidad de la zona debe coincidir exactamente con filas x asientos por fila.'
+                    )
 
         if max_capacity is not None and max_capacity < current_sold:
             raise serializers.ValidationError(

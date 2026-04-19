@@ -26,7 +26,7 @@ from django.db.models import Max
 from datetime import timedelta
 from .permissions import IsAdministrador, IsPromotor, IsComprador
 from .services import TicketGenerationService, send_ticket_email
-from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken
+from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat
 from .serializers import (
     CategorySerializer,
     EventSerializer,
@@ -681,10 +681,45 @@ class PurchaseStatusView(APIView):
 
 
 class SeatConfigurationView(APIView):
-
+    """
+    GET  /api/v1/events/<event_id>/seat-config/  — Devuelve zonas + disponibilidad
+    POST /api/v1/events/<event_id>/seat-config/  — Crea/reemplaza zonas del evento
+    """
     permission_classes = [IsAuthenticated]
 
+    def get(self, request, event_id):
+        """Retorna las zonas (TicketType) del evento con sus campos de asiento."""
+        event = get_object_or_404(Event, id=event_id)
+        tickets = TicketType.objects.filter(event=event).order_by('zone_type', 'name')
+
+        data = []
+        for t in tickets:
+            data.append({
+                "id": str(t.id),
+                "name": t.name,
+                "description": t.description,
+                "price": float(t.price),
+                "max_capacity": t.max_capacity,
+                "current_sold": t.current_sold,
+                "available_capacity": t.available_capacity,
+                "zone_type": t.zone_type,
+                "is_vip": t.is_vip,
+                "seat_rows": t.seat_rows,
+                "seats_per_row": t.seats_per_row,
+                "configured_seats": t.configured_seats,
+                "status": t.status,
+            })
+
+        return Response({
+            "status": "success",
+            "event_id": str(event.id),
+            "event_name": event.name,
+            "event_capacity": event.capacity,
+            "zones": data,
+        }, status=200)
+
     def post(self, request, event_id):
+        """Crea o reemplaza la configuración de zonas. Protege zonas con ventas."""
         event = get_object_or_404(Event, id=event_id)
 
         zones = request.data.get("zones", [])
@@ -713,15 +748,26 @@ class SeatConfigurationView(APIView):
 
         for i, z in enumerate(zones):
             if z.get("price", 0) <= 0:
-                errors.append(f"Zona[{i}] tiene precio invÃ¡lido")
+                errors.append(f"Zona[{i}] tiene precio inválido")
 
         total_capacity = sum([z.get("max_capacity", 0) for z in zones])
-
         if total_capacity > event.capacity:
             errors.append("La suma de capacidades supera el aforo del evento")
 
         if errors:
             return Response({"status": "error", "errors": errors}, status=422)
+
+        # Advertencia A2: Proteger zonas con ventas activas
+        tickets_con_ventas = TicketType.objects.filter(
+            event=event, current_sold__gt=0
+        )
+        if tickets_con_ventas.exists():
+            nombres = [t.name for t in tickets_con_ventas]
+            return Response({
+                "status": "error",
+                "message": "No se puede reconfigurar el recinto porque hay zonas con entradas vendidas.",
+                "zones_with_sales": nombres,
+            }, status=409)
 
         with transaction.atomic():
             TicketType.objects.filter(event=event).delete()
@@ -734,12 +780,15 @@ class SeatConfigurationView(APIView):
                     price=z["price"],
                     max_capacity=z["max_capacity"],
                     zone_type=z["zone_type"],
-                    status='active'
+                    seat_rows=z.get("seat_rows"),
+                    seats_per_row=z.get("seats_per_row"),
+                    is_vip=z.get("is_vip", z.get("zone_type") == "vip"),
+                    status='active',
                 )
 
         return Response({
             "status": "success",
-            "message": "ConfiguraciÃ³n de asientos guardada correctamente"
+            "message": "Configuración de asientos guardada correctamente"
         }, status=201)
 
 
@@ -797,6 +846,127 @@ class ValidateTicketView(APIView):
             }
         }, status=status.HTTP_200_OK)
 
+
+
+
+class SeatListView(APIView):
+    """
+    GET /api/v1/seats/?ticket_type_id=<uuid>
+    Devuelve todos los asientos de una zona con su estado actual.
+    Si la zona no tiene asientos generados aún, los genera automáticamente.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        ticket_type_id = request.query_params.get('ticket_type_id')
+        if not ticket_type_id:
+            return Response(
+                {'error': 'ticket_type_id es requerido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        ticket_type = get_object_or_404(TicketType, id=ticket_type_id)
+
+        # Si no hay asientos generados y el TicketType tiene layout configurado,
+        # los generamos automáticamente (una sola vez).
+        if not Seat.objects.filter(ticket_type=ticket_type).exists():
+            if ticket_type.seat_rows and ticket_type.seats_per_row:
+                seats_to_create = []
+                for row_idx in range(ticket_type.seat_rows):
+                    row_label = chr(65 + row_idx)  # A, B, C...
+                    for seat_num in range(1, ticket_type.seats_per_row + 1):
+                        seats_to_create.append(Seat(
+                            ticket_type=ticket_type,
+                            seat_code=f"{row_label}-{seat_num}",
+                            row_label=row_label,
+                            seat_number=seat_num,
+                            status='available',
+                        ))
+                Seat.objects.bulk_create(seats_to_create)
+
+        seats = Seat.objects.filter(ticket_type=ticket_type).order_by('row_label', 'seat_number')
+
+        data = [{
+            'id': str(s.id),
+            'seat_code': s.seat_code,
+            'row_label': s.row_label,
+            'seat_number': s.seat_number,
+            'status': s.status,
+            'reserved_at': s.reserved_at.isoformat() if s.reserved_at else None,
+        } for s in seats]
+
+        return Response({
+            'ticket_type_id': str(ticket_type.id),
+            'ticket_type_name': ticket_type.name,
+            'zone_type': ticket_type.zone_type,
+            'total': len(data),
+            'available': sum(1 for s in seats if s.status == 'available'),
+            'reserved': sum(1 for s in seats if s.status == 'reserved'),
+            'sold': sum(1 for s in seats if s.status == 'sold'),
+            'seats': data,
+        }, status=200)
+
+
+class SeatReserveView(APIView):
+    """
+    POST /api/v1/seats/<seat_id>/reserve/
+    Reserva un asiento de forma atómica (select_for_update evita doble reserva).
+    La reserva expira si no se confirma el pago (ver TIC-20 para el scheduler).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, seat_id):
+        user_id = request.user.id
+
+        with transaction.atomic():
+            # select_for_update: bloquea la fila mientras la transacción está activa
+            # garantizando que dos usuarios simultáneos no reserven el mismo asiento
+            try:
+                seat = Seat.objects.select_for_update(nowait=True).get(id=seat_id)
+            except Seat.DoesNotExist:
+                return Response({'error': 'Asiento no encontrado'}, status=404)
+            except Exception:
+                # nowait=True lanza error si el registro está bloqueado
+                return Response(
+                    {'error': 'El asiento está siendo reservado por otro usuario. Intenta de nuevo.'},
+                    status=409
+                )
+
+            if seat.status == 'sold':
+                return Response({'error': 'Este asiento ya fue vendido.'}, status=409)
+
+            if seat.status == 'reserved':
+                # Verificar si la reserva expiró (más de 15 min)
+                if seat.reserved_at:
+                    expiracion = seat.reserved_at + timedelta(minutes=15)
+                    if timezone.now() < expiracion:
+                        return Response(
+                            {'error': 'Este asiento ya está reservado. Intenta con otro.'},
+                            status=409
+                        )
+                    # Reserva expirada: liberar y tomar
+                seat.status = 'available'
+
+            if seat.status != 'available':
+                return Response({'error': 'El asiento no está disponible.'}, status=409)
+
+            seat.status = 'reserved'
+            seat.reserved_at = timezone.now()
+            seat.reserved_by = user_id
+            seat.save()
+
+        return Response({
+            'status': 'success',
+            'message': 'Asiento reservado. Tienes 15 minutos para completar el pago.',
+            'seat': {
+                'id': str(seat.id),
+                'seat_code': seat.seat_code,
+                'row_label': seat.row_label,
+                'seat_number': seat.seat_number,
+                'status': seat.status,
+                'reserved_at': seat.reserved_at.isoformat(),
+            }
+        }, status=200)
 
 
 class WaitlistView(APIView):

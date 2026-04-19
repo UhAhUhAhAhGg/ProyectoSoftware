@@ -9,17 +9,32 @@ const STATUS_MAP = {
   completed: 'finalizado',
 };
 
+const TICKET_STATUS_MAP = {
+  active: 'activo',
+  inactive: 'eliminado',
+  sold_out: 'agotado',
+};
+
+// mapTipoEntrada debe declararse ANTES de mapEvento (const no se hoistea)
+const mapTipoEntrada = (t) => ({
+  id: t.id,
+  nombre: t.name,
+  descripcion: t.description,
+  precio: parseFloat(t.price),
+  cupoMaximo: t.max_capacity,
+  cupoVendido: t.current_sold ?? 0,
+  estado: TICKET_STATUS_MAP[t.status] ?? t.status,
+  disponibles: t.available_capacity ?? (t.max_capacity - (t.current_sold ?? 0)),
+  tipoZona: t.zone_type ?? 'general',
+  esVIP: t.is_vip ?? false,
+  filas: t.seat_rows ?? null,
+  asientosPorFila: t.seats_per_row ?? null,
+});
+
 const mapEvento = (e) => {
-  const tiposEntrada = (e.tickets ?? []).map(t => ({
-    id: t.id,
-    nombre: t.name,
-    descripcion: t.description,
-    precio: parseFloat(t.price),
-    cupoMaximo: t.max_capacity,
-    cupoVendido: t.current_sold ?? 0,
-    estado: TICKET_STATUS_MAP[t.status] ?? t.status,
-    disponibles: t.available_capacity ?? (t.max_capacity - (t.current_sold ?? 0)),
-  }));
+  // Delega en mapTipoEntrada para que tipoZona, esVIP, filas, asientosPorFila
+  // estén disponibles en getEventosDisponibles y getEventosByPromotor también.
+  const tiposEntrada = (e.tickets ?? []).map(mapTipoEntrada);
   const activos = tiposEntrada.filter(t => t.estado === 'activo');
   const precio = activos.length > 0 ? Math.min(...activos.map(t => t.precio)) : 0;
   return {
@@ -42,27 +57,6 @@ const mapEvento = (e) => {
     tiposEntrada,
   };
 };
-
-const TICKET_STATUS_MAP = {
-  active: 'activo',
-  inactive: 'eliminado',
-  sold_out: 'agotado',
-};
-
-const mapTipoEntrada = (t) => ({
-  id: t.id,
-  nombre: t.name,
-  descripcion: t.description,
-  precio: parseFloat(t.price),
-  cupoMaximo: t.max_capacity,
-  cupoVendido: t.current_sold ?? 0,
-  estado: TICKET_STATUS_MAP[t.status] ?? t.status,
-  disponibles: t.available_capacity ?? (t.max_capacity - (t.current_sold ?? 0)),
-  tipoZona: t.zone_type ?? 'general',
-  esVIP: t.is_vip ?? false,
-  filas: t.seat_rows ?? null,
-  asientosPorFila: t.seats_per_row ?? null,
-});
 
 export const eventosService = {
   getCategorias: async () => {

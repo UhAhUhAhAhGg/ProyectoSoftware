@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CategoryViewSet, EventViewSet, TicketTypeViewSet, PurchaseView, SimularPagoView, PurchaseStatusView, SeatConfigurationView, ValidateTicketView, WaitlistView, LogoutView, PurchaseHistoryView, PurchaseDetailView, PurchaseDownloadPDFView, PurchaseCancelView
+from .views import CategoryViewSet, EventViewSet, TicketTypeViewSet, PurchaseView, SimularPagoView, PurchaseStatusView, SeatConfigurationView, ValidateTicketView, WaitlistView, LogoutView, PurchaseHistoryView, PurchaseDetailView, PurchaseDownloadPDFView, PurchaseCancelView, SeatListView, SeatReserveView
 
 app_name = 'events'
 
@@ -29,4 +29,7 @@ urlpatterns = [
     path('purchases/history/', PurchaseHistoryView.as_view(), name='purchase-history'),
     path('purchases/<uuid:purchase_id>/', PurchaseDetailView.as_view(), name='purchase-detail'),
     path('purchases/<uuid:purchase_id>/download-pdf/', PurchaseDownloadPDFView.as_view(), name='purchase-download-pdf'),
+    # Asientos individuales (TIC-11)
+    path('seats/', SeatListView.as_view(), name='seat-list'),
+    path('seats/<uuid:seat_id>/reserve/', SeatReserveView.as_view(), name='seat-reserve'),
 ]
