@@ -2,11 +2,12 @@
 
 export default function QueueStatus() {
   return (
-    <div>
-      <h2>Fila virtual</h2>
-      <p>Cargando información de la cola...</p>
-      <p>Posición en cola: --</p>
-      <p>Tiempo estimado: --</p>
+    <div style={{ textAlign: "center", padding: "20px" }}>
+      <h2>Fila virtual de espera</h2>
+      <p>Estamos procesando tu acceso...</p>
+
+      <p><strong>Posición en cola:</strong> --</p>
+      <p><strong>Tiempo estimado:</strong> -- minutos</p>
     </div>
   );
 }
