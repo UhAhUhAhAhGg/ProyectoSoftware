@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
 import VenueLayoutPreview from './VenueLayoutPreview';
 import ModalPagoQR from './ModalPagoQR';
 import './DetalleEvento.css';
+import WaitlistBanner from '../../WaitlistBanner';
 
 function DetalleEvento() {
   const { id } = useParams();
@@ -14,6 +15,8 @@ function DetalleEvento() {
   const [ordenCompra, setOrdenCompra] = useState(null);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [errorCompra, setErrorCompra] = useState('');
+  const [waitlistInfo, setWaitlistInfo] = useState(null);
+  const waitlistPollRef = useRef(null);
 
   useEffect(() => {
     const cargar = async () => {
@@ -34,10 +37,13 @@ function DetalleEvento() {
     setErrorCompra('');
     try {
       const respuesta = await eventosService.realizarCompra(id, ticketTypeId, 1);
-      if (respuesta.status === 'waitlist') {
-        setErrorCompra('El evento está casi lleno. Has sido agregado a la lista de espera.');
+            if (respuesta.status === 'waitlist') {
+        const purchaseId = respuesta.data?.id || respuesta.data?.purchase_id || respuesta.data?.purchaseId;
+        const position = respuesta.data?.queue_position ?? null;
+        setWaitlistInfo({ purchaseId, position });
+        startWaitlistPolling(purchaseId);
         return;
-      }
+            }
       setOrdenCompra(respuesta.data);
       setMostrarModal(true);
     } catch (error) {
@@ -51,6 +57,52 @@ function DetalleEvento() {
     }
   };
 
+  const stopWaitlistPolling = () => {
+    if (waitlistPollRef.current) {
+      clearInterval(waitlistPollRef.current);
+      waitlistPollRef.current = null;
+    }
+  };
+
+  const startWaitlistPolling = (purchaseId) => {
+    stopWaitlistPolling();
+    if (!purchaseId) return;
+    waitlistPollRef.current = setInterval(async () => {
+      try {
+        const status = await eventosService.consultarEstadoCompra(purchaseId);
+        if (!status) return;
+        if (status.queue_position !== undefined) {
+          setWaitlistInfo((prev) => ({ ...(prev || {}), position: status.queue_position }));
+        }
+        const s = status.status || status.state || null;
+        if (s === 'confirmed' || s === 'completed' || s === 'paid' || s === 'success') {
+          stopWaitlistPolling();
+          setWaitlistInfo(null);
+          setOrdenCompra(status.data ?? status.purchase ?? status);
+          setMostrarModal(true);
+        } else if (s === 'cancelled' || s === 'failed') {
+          stopWaitlistPolling();
+          setWaitlistInfo(null);
+          setErrorCompra('Tu posición en la cola fue cancelada.');
+        }
+      } catch (err) {
+        console.error('Error consultando estado de compra:', err);
+      }
+    }, 5000);
+  };
+
+  const handleCancelWaitlist = async () => {
+    if (!waitlistInfo?.purchaseId) return;
+    try {
+      stopWaitlistPolling();
+      await eventosService.cancelarCompra(waitlistInfo.purchaseId);
+      setWaitlistInfo(null);
+      setErrorCompra('Has salido de la cola.');
+    } catch (err) {
+      console.error('Error cancelando espera:', err);
+      setErrorCompra('No se pudo salir de la cola. Intenta nuevamente.');
+    }
+  };
   if (cargando) {
     return (
       <section className="detalle-evento estado-vacio">
@@ -110,6 +162,9 @@ function DetalleEvento() {
           {evento.tiposEntrada?.length > 0 && (
             <div className="tipos-entrada">
               <h3>Tipos de entrada</h3>
+              {waitlistInfo && (
+                <WaitlistBanner position={waitlistInfo.position} onCancel={handleCancelWaitlist} />
+              )}
               {errorCompra && (
                 <div style={{ padding: '10px', background: '#f8d7da', color: '#721c24', borderRadius: '6px', marginBottom: '10px', border: '1px solid #f5c6cb' }}>
                   {errorCompra}
