@@ -9,46 +9,13 @@ const STATUS_MAP = {
   completed: 'finalizado',
 };
 
-const mapEvento = (e) => {
-  const tiposEntrada = (e.tickets ?? []).map(t => ({
-    id: t.id,
-    nombre: t.name,
-    descripcion: t.description,
-    precio: parseFloat(t.price),
-    cupoMaximo: t.max_capacity,
-    cupoVendido: t.current_sold ?? 0,
-    estado: TICKET_STATUS_MAP[t.status] ?? t.status,
-    disponibles: t.available_capacity ?? (t.max_capacity - (t.current_sold ?? 0)),
-  }));
-  const activos = tiposEntrada.filter(t => t.estado === 'activo');
-  const precio = activos.length > 0 ? Math.min(...activos.map(t => t.precio)) : 0;
-  return {
-    id: e.id,
-    nombre: e.name,
-    descripcion: e.description,
-    fecha: e.event_date,
-    hora: e.event_time,
-    ubicacion: e.location,
-    ciudad: e.location,
-    direccion: e.location,
-    capacidad: e.capacity,
-    boletosVendidos: 0,
-    precio,
-    imagen: e.image || null,
-    estado: STATUS_MAP[e.status] ?? e.status,
-    promotorId: e.promoter_id,
-    categoria: e.category ?? null,
-    categoriaNombre: e.category_name ?? null,
-    tiposEntrada,
-  };
-};
-
 const TICKET_STATUS_MAP = {
   active: 'activo',
   inactive: 'eliminado',
   sold_out: 'agotado',
 };
 
+// mapTipoEntrada debe declararse ANTES de mapEvento (const no se hoistea)
 const mapTipoEntrada = (t) => ({
   id: t.id,
   nombre: t.name,
@@ -63,6 +30,33 @@ const mapTipoEntrada = (t) => ({
   filas: t.seat_rows ?? null,
   asientosPorFila: t.seats_per_row ?? null,
 });
+
+const mapEvento = (e) => {
+  // Delega en mapTipoEntrada para que tipoZona, esVIP, filas, asientosPorFila
+  // estén disponibles en getEventosDisponibles y getEventosByPromotor también.
+  const tiposEntrada = (e.tickets ?? []).map(mapTipoEntrada);
+  const activos = tiposEntrada.filter(t => t.estado === 'activo');
+  const precio = activos.length > 0 ? Math.min(...activos.map(t => t.precio)) : 0;
+  return {
+    id: e.id,
+    nombre: e.name,
+    descripcion: e.description,
+    fecha: e.event_date,
+    hora: e.event_time,
+    ubicacion: e.location,
+    ciudad: e.location,
+    direccion: e.location,
+    capacidad: e.capacity,
+    boletosVendidos: tiposEntrada.reduce((sum, t) => sum + (t.cupoVendido || 0), 0),
+    precio,
+    imagen: e.image || null,
+    estado: STATUS_MAP[e.status] ?? e.status,
+    promotorId: e.promoter_id,
+    categoria: e.category ?? null,
+    categoriaNombre: e.category_name ?? null,
+    tiposEntrada,
+  };
+};
 
 export const eventosService = {
   getCategorias: async () => {
@@ -291,6 +285,22 @@ export const eventosService = {
       throw new Error(err.message || 'No se pudo eliminar el tipo de entrada.');
     }
     return true;
+  },
+
+  lockSeats: async (eventId, seatIds, timeout = 120) => {
+    // Reserves a batch of seats atomically
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/seats/bulk-reserve/`, {
+      method: 'POST',
+      body: JSON.stringify({ seat_ids: seatIds }),
+    });
+    
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const error = new Error(data.error || 'No se pudieron reservar los asientos.');
+      error.status = res.status;
+      throw error;
+    }
+    return { success: true };
   },
 
   realizarCompra: async (eventoId, ticketTypeId, quantity = 1) => {

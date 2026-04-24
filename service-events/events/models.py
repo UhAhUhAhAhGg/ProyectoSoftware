@@ -277,3 +277,55 @@ class TicketInstance(models.Model):
 
     def __str__(self):
         return f"Ticket {self.backup_code} - {self.event.name}"
+
+
+# ─── TIC-11: Gestión de asientos individuales ────────────────────────────────
+
+class Seat(models.Model):
+    """
+    Representa un asiento físico individual dentro de una zona (TicketType).
+    Los asientos se generan automáticamente al configurar filas x asientos_por_fila
+    en un TicketType. Esta tabla es la fuente de verdad del estado de cada asiento.
+    """
+    STATUS_CHOICES = [
+        ('available', 'Available'),
+        ('reserved', 'Reserved'),    # Reserva temporal (sin pago confirmado)
+        ('sold', 'Sold'),            # Pago confirmado
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    ticket_type = models.ForeignKey(
+        TicketType,
+        on_delete=models.CASCADE,
+        related_name='seats',
+    )
+    # Código legible: "A-1", "B-5", etc.
+    seat_code = models.CharField(max_length=20)
+    row_label = models.CharField(max_length=5)       # "A", "B", "C"...
+    seat_number = models.PositiveIntegerField()       # 1, 2, 3...
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='available',
+        db_index=True,
+    )
+
+    # Timestamp de reserva (para liberar si no se confirma el pago)
+    reserved_at = models.DateTimeField(null=True, blank=True)
+    # Quién lo reservó (UUID lógico, sin FK entre microservicios)
+    reserved_by = models.UUIDField(null=True, blank=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Seat'
+        verbose_name_plural = 'Seats'
+        unique_together = ('ticket_type', 'seat_code')
+        ordering = ['row_label', 'seat_number']
+        indexes = [
+            models.Index(fields=['ticket_type', 'status']),
+        ]
+
+    def __str__(self):
+        return f"{self.seat_code} ({self.get_status_display()}) — {self.ticket_type.name}"
