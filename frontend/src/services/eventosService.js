@@ -47,7 +47,7 @@ const mapEvento = (e) => {
     ciudad: e.location,
     direccion: e.location,
     capacidad: e.capacity,
-    boletosVendidos: 0,
+    boletosVendidos: tiposEntrada.reduce((sum, t) => sum + (t.cupoVendido || 0), 0),
     precio,
     imagen: e.image || null,
     estado: STATUS_MAP[e.status] ?? e.status,
@@ -285,6 +285,22 @@ export const eventosService = {
       throw new Error(err.message || 'No se pudo eliminar el tipo de entrada.');
     }
     return true;
+  },
+
+  lockSeats: async (eventId, seatIds, timeout = 120) => {
+    // Reserves a batch of seats atomically
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/seats/bulk-reserve/`, {
+      method: 'POST',
+      body: JSON.stringify({ seat_ids: seatIds }),
+    });
+    
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const error = new Error(data.error || 'No se pudieron reservar los asientos.');
+      error.status = res.status;
+      throw error;
+    }
+    return { success: true };
   },
 
   realizarCompra: async (eventoId, ticketTypeId, quantity = 1) => {

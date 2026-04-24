@@ -99,6 +99,12 @@ function VenueLayoutPreview({
           const theme = ZONE_THEMES[tipo.tipoZona] || { accent: '#ad8149', tint: 'rgba(173, 129, 73, 0.14)' };
           const rowsPreview = getSeatRowsPreview(tipo.filas, tipo.asientosPorFila, compact);
 
+          const cupoVendido = parseInt(tipo.cupoVendido, 10) || 0;
+          const soldPercentage = cupoMaximo > 0 ? (cupoVendido / cupoMaximo) : 0;
+          const totalGridSeats = rowsPreview.reduce((sum, r) => sum + r.seats.length, 0);
+          const seatsToDim = Math.round(totalGridSeats * soldPercentage);
+          let currentDimmed = 0;
+
           return (
             <article
               key={tipo.id}
@@ -137,13 +143,18 @@ function VenueLayoutPreview({
                   <div className="venue-seat-row" key={`${tipo.id}-${row.label}`}>
                     <span className="venue-seat-row-label">{row.label}</span>
                     <div className="venue-seat-row-dots">
-                      {row.seats.map((seatId) => (
-                        <span
-                          key={seatId}
-                          className={`venue-seat-dot ${tipo.esVIP ? 'vip' : ''}`}
-                          title={seatId}
-                        ></span>
-                      ))}
+                      {row.seats.map((seatId) => {
+                        const isDimmed = currentDimmed < seatsToDim;
+                        if (isDimmed) currentDimmed++;
+                        return (
+                          <span
+                            key={seatId}
+                            className={`venue-seat-dot ${tipo.esVIP ? 'vip' : ''} ${isDimmed ? 'occupied' : ''}`}
+                            title={isDimmed ? 'Vendido' : seatId}
+                            style={isDimmed ? { opacity: 0.25, background: '#3a3a48', borderColor: '#222' } : {}}
+                          ></span>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}

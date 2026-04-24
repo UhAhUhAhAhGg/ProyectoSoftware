@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
 import VenueLayoutPreview from './VenueLayoutPreview';
 import ModalPagoQR from './ModalPagoQR';
+import SeatMapModal from '../../eventos/SeatMapModal';
 import './DetalleEvento.css';
 
 function DetalleEvento() {
@@ -15,11 +16,30 @@ function DetalleEvento() {
   const [mostrarModal, setMostrarModal] = useState(false);
   const [errorCompra, setErrorCompra] = useState('');
 
+  // Estados para el mapa de asientos interactivo
+  const [selectedTicketType, setSelectedTicketType] = useState(null);
+  const [mostrarSeatMap, setMostrarSeatMap] = useState(false);
+  const [yaCompro, setYaCompro] = useState(false);
+
   useEffect(() => {
     const cargar = async () => {
       try {
         const data = await eventosService.getEventoById(id);
         setEvento(data);
+
+        const token = localStorage.getItem('token');
+        if (token) {
+          try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002'}/api/v1/purchases/history/?event_id=${id}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+              const history = await res.json();
+              const hasBought = history.results && history.results.some(p => p.event_id === id && (p.status === 'active' || p.status === 'pending'));
+              setYaCompro(hasBought);
+            }
+          } catch (err) { /* ignorar error de red en historial */ }
+        }
       } catch {
         setEvento(null);
       } finally {
@@ -29,23 +49,23 @@ function DetalleEvento() {
     cargar();
   }, [id]);
 
-  const handlePagarConQR = async (ticketTypeId) => {
+  const handlePagarConQR = async (ticketTypeId, quantity = 1) => {
     setCargandoCompra(true);
     setErrorCompra('');
     try {
-      const respuesta = await eventosService.realizarCompra(id, ticketTypeId, 1);
+      const respuesta = await eventosService.realizarCompra(id, ticketTypeId, quantity);
       if (respuesta.status === 'waitlist') {
-        setErrorCompra('El evento está casi lleno. Has sido agregado a la lista de espera.');
+        const msg = 'El evento está casi lleno. Has sido agregado a la lista de espera.';
+        setErrorCompra(msg);
+        alert(msg);
         return;
       }
       setOrdenCompra(respuesta.data);
       setMostrarModal(true);
     } catch (error) {
-      if (error.status === 409 || error.errorCode === 'DUPLICATE_PURCHASE') {
-        setErrorCompra('🛑 Ya compraste una entrada para este evento. Revisa tu historial en "Mis Compras".');
-      } else {
-        setErrorCompra(error.message || 'No se pudo conectar con el servidor.');
-      }
+      const msg = error.response?.data?.error || error.message || 'Error al iniciar la compra';
+      setErrorCompra(msg);
+      alert('Aviso: ' + msg);
     } finally {
       setCargandoCompra(false);
     }
@@ -125,20 +145,27 @@ function DetalleEvento() {
                     </span>
                   </div>
                   
-                  {/* AQUÍ ESTÁ EL BOTÓN DE COMPRA REAL POR CADA TIPO DE ENTRADA */}
+                  {/* AQUÍ ESTÁ EL BOTÓN DE COMPRA O SELECCIÓN DE ASIENTOS */}
                   <button 
-                    onClick={() => handlePagarConQR(t.id)}
-                    disabled={cargandoCompra || t.disponibles <= 0}
+                    onClick={() => {
+                      if (t.filas && t.asientosPorFila) {
+                        setSelectedTicketType(t);
+                        setMostrarSeatMap(true);
+                      } else {
+                        handlePagarConQR(t.id, 1);
+                      }
+                    }}
+                    disabled={cargandoCompra || t.disponibles <= 0 || yaCompro}
                     style={{
                       padding: '8px 16px',
-                      background: (cargandoCompra || t.disponibles <= 0) ? '#ccc' : '#28a745',
+                      background: (cargandoCompra || t.disponibles <= 0 || yaCompro) ? '#ccc' : '#28a745',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
-                      cursor: (cargandoCompra || t.disponibles <= 0) ? 'not-allowed' : 'pointer'
+                      cursor: (cargandoCompra || t.disponibles <= 0 || yaCompro) ? 'not-allowed' : 'pointer'
                     }}
                   >
-                    {cargandoCompra ? 'Procesando...' : 'Pagar con QR'}
+                    {cargandoCompra ? 'Procesando...' : (yaCompro ? 'Ya compraste entrada' : (t.filas && t.asientosPorFila ? 'Seleccionar Asientos' : 'Comprar'))}
                   </button>
                 </div>
               ))}
@@ -162,6 +189,20 @@ function DetalleEvento() {
         <ModalPagoQR
           ordenData={ordenCompra}
           onCerrar={() => { setMostrarModal(false); setOrdenCompra(null); }}
+        />
+      )}
+
+      {/* MODAL DE SELECCIÓN DE ASIENTOS INTERACTIVO */}
+      {mostrarSeatMap && selectedTicketType && (
+        <SeatMapModal
+          open={mostrarSeatMap}
+          onClose={() => { setMostrarSeatMap(false); setSelectedTicketType(null); }}
+          eventId={id}
+          ticketType={selectedTicketType}
+          onConfirm={(selectedSeats) => {
+            setMostrarSeatMap(false);
+            handlePagarConQR(selectedTicketType.id, selectedSeats.length || 1);
+          }}
         />
       )}
     </section>

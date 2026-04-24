@@ -607,6 +607,13 @@ class SimularPagoView(APIView):
         purchase.qr_code = qr_code_base64
         purchase.save()
 
+        # Marcar los asientos reservados por este usuario como vendidos
+        Seat.objects.filter(
+            ticket_type=purchase.ticket_type,
+            reserved_by=purchase.user_id,
+            status='reserved'
+        ).update(status='sold')
+
         ticket = purchase.ticket_type
         ticket.current_sold += purchase.quantity
         ticket.save()
@@ -663,6 +670,13 @@ class PurchaseStatusView(APIView):
         if purchase.status == 'pending' and timezone.now() > expires_at:
             purchase.status = 'cancelled'
             purchase.save()
+            
+            # Liberar asientos si la compra expiró por tiempo
+            Seat.objects.filter(
+                ticket_type=purchase.ticket_type,
+                reserved_by=purchase.user_id,
+                status='reserved'
+            ).update(status='available', reserved_by=None, reserved_at=None)
 
         data = {
             "purchase_id": str(purchase.id),
@@ -968,6 +982,51 @@ class SeatReserveView(APIView):
             }
         }, status=200)
 
+class SeatBulkReserveView(APIView):
+    """
+    POST /api/v1/seats/bulk-reserve/
+    body: {"seat_ids": [uuid1, uuid2]}
+    Reserva múltiples asientos de forma atómica. Si uno falla, toda la transacción se revierte.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user_id = request.user.id
+        seat_ids = request.data.get('seat_ids', [])
+
+        if not seat_ids or not isinstance(seat_ids, list):
+            return Response({'error': 'se requiere una lista de seat_ids'}, status=400)
+
+        with transaction.atomic():
+            # select_for_update bloquea todos los asientos de la lista de forma atómica
+            try:
+                # order_by('id') previene deadlocks al bloquear múltiples filas
+                seats = Seat.objects.select_for_update(nowait=True).filter(id__in=seat_ids).order_by('id')
+                if len(seats) != len(seat_ids):
+                    return Response({'error': 'Algunos asientos no fueron encontrados'}, status=404)
+            except Exception:
+                return Response({'error': 'Algunos asientos están siendo reservados por otro usuario. Intenta de nuevo.'}, status=409)
+
+            for seat in seats:
+                if seat.status == 'sold':
+                    return Response({'error': f'El asiento {seat.seat_code} ya fue vendido.'}, status=409)
+                if seat.status == 'reserved':
+                    if seat.reserved_at:
+                        expiracion = seat.reserved_at + timedelta(minutes=15)
+                        if timezone.now() < expiracion:
+                            return Response({'error': f'El asiento {seat.seat_code} ya está reservado.'}, status=409)
+                    # Expiró, podemos tomarlo
+                elif seat.status != 'available':
+                    return Response({'error': f'El asiento {seat.seat_code} no está disponible.'}, status=409)
+
+            now = timezone.now()
+            for seat in seats:
+                seat.status = 'reserved'
+                seat.reserved_at = now
+                seat.reserved_by = user_id
+                seat.save()
+
+        return Response({'status': 'success', 'message': f'{len(seats)} asientos reservados.'}, status=200)
 
 class WaitlistView(APIView):
     """Endpoint para gestionar lista de espera."""
@@ -1042,6 +1101,11 @@ class PurchaseHistoryView(APIView):
         status_filter = request.query_params.get('status')
         if status_filter and status_filter in ('active', 'used', 'pending', 'cancelled'):
             qs = qs.filter(status=status_filter)
+
+        # ── Filtro por evento ──
+        event_filter = request.query_params.get('event_id')
+        if event_filter:
+            qs = qs.filter(event_id=event_filter)
 
         # ── Filtro por rango de precio ──
         min_price = request.query_params.get('minPrice')
@@ -1198,6 +1262,13 @@ class PurchaseCancelView(APIView):
 
         purchase.status = 'cancelled'
         purchase.save()
+
+        # Liberar los asientos reservados por este usuario para esta compra cancelada
+        Seat.objects.filter(
+            ticket_type=purchase.ticket_type,
+            reserved_by=purchase.user_id,
+            status='reserved'
+        ).update(status='available', reserved_by=None, reserved_at=None)
 
         return Response({
             "status": "success",

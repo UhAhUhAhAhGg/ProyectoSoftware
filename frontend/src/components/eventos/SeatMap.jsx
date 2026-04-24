@@ -7,7 +7,7 @@ const DEFAULT_PER_ROW = 10;
 
 function idFromPos(r, c) {
   const letter = String.fromCharCode(65 + r); // A, B, C...
-  return `${letter}${c + 1}`;
+  return `${letter}-${c + 1}`;
 }
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -35,6 +35,7 @@ export default function SeatMap({ eventId, ticketType, onConfirm, onCancel }) {
   const wsRef = useRef(null);
   const pollRef = useRef(null);
   const lockRef = useRef({ id: null, timer: null });
+  const seatMapRef = useRef({});
 
   useEffect(() => {
     let mounted = true;
@@ -77,10 +78,19 @@ export default function SeatMap({ eventId, ticketType, onConfirm, onCancel }) {
         // initial fetch and polling fallback
         const fetchSeats = async () => {
           try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002'}/api/v1/events/${eventId}/seat-map/?ticket_type=${ticketType?.id}`);
+            const token = localStorage.getItem('token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            const res = await fetch(`${process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002'}/api/v1/seats/?ticket_type_id=${ticketType?.id}`, { headers });
             if (res.ok) {
               const data = await res.json();
-              if (mounted) setOccupiedSet(new Set((data.occupiedSeats || []).map(String)));
+              if (mounted && data.seats) {
+                const occupied = new Set();
+                data.seats.forEach(s => {
+                  seatMapRef.current[s.seat_code] = s.id;
+                  if (s.status !== 'available') occupied.add(s.seat_code);
+                });
+                setOccupiedSet(occupied);
+              }
             } else {
               // generate mock
               const s = new Set();
@@ -120,39 +130,46 @@ export default function SeatMap({ eventId, ticketType, onConfirm, onCancel }) {
     };
   }, [eventId, ticketType, rows, perRow]);
 
-  // Auto-lock selected seats: refresh lock while selection exists
-  useEffect(() => {
-    let cancelled = false;
-    async function lockSeats() {
-      if (!selected || selected.length === 0) return;
-      try {
-        const resp = await eventosService.lockSeats(eventId, selected, 120);
-        // backend may return lock id or success body
-        lockRef.current.id = resp?.lock_id || resp?.id || null;
-        // refresh every 45s
-        if (lockRef.current.timer) clearTimeout(lockRef.current.timer);
-        lockRef.current.timer = setTimeout(() => lockSeats(), 45000);
-      } catch (err) {
-        // if conflict, notify and refresh seat map
-        if (!cancelled) {
-          console.warn('Lock failed', err);
-          if (err && err.status === 409) {
-            alert('Algunos asientos se ocuparon mientras seleccionaba. Se actualizará la vista.');
-            // force a manual fetch to update occupied seats
-            try {
-              const res = await fetch(`${process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002'}/api/v1/events/${eventId}/seat-map/?ticket_type=${ticketType?.id}`);
-              if (res.ok) {
-                const data = await res.json();
-                setOccupiedSet(new Set((data.occupiedSeats || []).map(String)));
-              }
-            } catch (e) { /* ignore */ }
-          }
-        }
+  // Se elimina el auto-lock. El bloqueo se hará explícitamente al confirmar.
+  const MAX_SEATS = 5;
+
+  const handleConfirm = async () => {
+    if (selected.length === 0) return;
+    try {
+      setLoading(true);
+      const uuids = selected.map(s => seatMapRef.current[s]).filter(Boolean);
+      if (uuids.length > 0) {
+        await eventosService.lockSeats(eventId, uuids, 120);
       }
+      onConfirm && onConfirm(selected);
+    } catch (err) {
+      if (err.status === 409) {
+        alert('Algunos asientos seleccionados acaban de ser ocupados por otra persona. El mapa se actualizará.');
+        // Refetch de asientos
+        try {
+          const token = localStorage.getItem('token');
+          const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+          const res = await fetch(`${process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002'}/api/v1/seats/?ticket_type_id=${ticketType?.id}`, { headers });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.seats) {
+              const occupied = new Set();
+              data.seats.forEach(s => {
+                seatMapRef.current[s.seat_code] = s.id;
+                if (s.status !== 'available') occupied.add(s.seat_code);
+              });
+              setOccupiedSet(occupied);
+              setSelected(prev => prev.filter(sel => !occupied.has(sel)));
+            }
+          }
+        } catch (e) { /* ignore */ }
+      } else {
+        alert('Error al reservar asientos: ' + err.message);
+      }
+    } finally {
+      setLoading(false);
     }
-    lockSeats();
-    return () => { cancelled = true; if (lockRef.current.timer) clearTimeout(lockRef.current.timer); };
-  }, [selected, eventId, ticketType]);
+  };
 
   useEffect(() => {
     const onUp = () => {
@@ -168,12 +185,15 @@ export default function SeatMap({ eventId, ticketType, onConfirm, onCancel }) {
     setSelected((prev) => {
       const exists = prev.includes(seatId);
       if (force === 'select') {
-        if (exists) return prev; else return [...prev, seatId];
+        if (exists) return prev; 
+        if (prev.length >= MAX_SEATS) { alert(`Puedes seleccionar máximo ${MAX_SEATS} asientos a la vez.`); return prev; }
+        return [...prev, seatId];
       }
       if (force === 'deselect') {
         if (!exists) return prev; else return prev.filter(s => s !== seatId);
       }
       if (exists) return prev.filter(s => s !== seatId);
+      if (prev.length >= MAX_SEATS) { alert(`Puedes seleccionar máximo ${MAX_SEATS} asientos a la vez.`); return prev; }
       return [...prev, seatId];
     });
   }
@@ -264,7 +284,6 @@ export default function SeatMap({ eventId, ticketType, onConfirm, onCancel }) {
                       <button
                         key={id}
                         className={`seat ${cls}`}
-                        onClick={() => toggleSeat(id)}
                         onPointerDown={(e) => onSeatPointerDown(e, id)}
                         onPointerEnter={() => onSeatPointerEnter(id)}
                         disabled={occupied}
@@ -285,12 +304,14 @@ export default function SeatMap({ eventId, ticketType, onConfirm, onCancel }) {
       <div className="seatmap-actions">
         <div className="selected-count">Seleccionados: {selected.length}</div>
         <div className="actions">
-          <button className="btn cancelar" onClick={onCancel}>Cancelar</button>
+          <button className="btn cancelar" onClick={onCancel} disabled={loading}>Cancelar</button>
           <button
             className="btn confirmar"
-            onClick={() => onConfirm && onConfirm(selected)}
-            disabled={selected.length === 0}
-          >Comprar {selected.length > 0 ? `(${selected.length})` : ''}</button>
+            onClick={handleConfirm}
+            disabled={selected.length === 0 || loading}
+          >
+            {loading ? 'Procesando...' : `Comprar ${selected.length > 0 ? `(${selected.length})` : ''}`}
+          </button>
         </div>
       </div>
     </div>
