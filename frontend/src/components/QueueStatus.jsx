@@ -1,9 +1,16 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 export default function QueueStatus() {
   const [position, setPosition] = useState(120);
   const [progress, setProgress] = useState(0);
+
+  const prevPosition = useRef(position);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    audioRef.current = new Audio("/sounds/notification.mp3");
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -13,6 +20,19 @@ export default function QueueStatus() {
 
     return () => clearInterval(interval);
   }, []);
+
+  // 🔥 AQUÍ detectamos salida de cola
+  useEffect(() => {
+    if (prevPosition.current > 1 && position === 1) {
+      // sonido
+      audioRef.current?.play();
+
+      // notificación visual
+      alert("🎉 ¡Es tu turno!");
+    }
+
+    prevPosition.current = position;
+  }, [position]);
 
   return (
     <div style={{ textAlign: "center", padding: "20px" }}>
