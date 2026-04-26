@@ -186,6 +186,31 @@ class EventViewSet(viewsets.ModelViewSet):
         event.status = 'published'
         event.save()
         return Response({'success': 'Event published'})
+    @action(detail=True, methods=['get'], url_path='queue-config')
+    def queue_config(self, request, pk=None):
+        """
+        HU: Configurar umbral de usuarios simultáneos.
+        Obtener la configuración actual de la fila virtual (lista de espera) del evento.
+        Endpoint: GET /events/{id}/queue-config/
+        """
+        event = self.get_object()
+
+        # Seguridad: Solo el promotor dueño del evento puede ver esta configuración
+        if str(event.promoter_id) != str(request.user.id):
+            return Response({
+                "status": "error",
+                "message": "No tienes permisos. Solo el promotor de este evento puede ver su configuración de fila virtual."
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # Devolvemos solo la data estrictamente necesaria para este módulo
+        return Response({
+            "status": "success",
+            "data": {
+                "event_id": str(event.id),
+                "waitlist_threshold": event.waitlist_threshold,
+                "waitlist_active": event.waitlist_active
+            }
+        }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
