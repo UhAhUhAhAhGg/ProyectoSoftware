@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { authService } from '../services/authService';
 import { apiFetch } from '../services/apiHelper';
 
@@ -47,6 +48,7 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
+  const router = useRouter();
   const storedSession = getStoredSession();
   const [user, setUser] = useState(storedSession.user);
   const [loading, setLoading] = useState(false);
@@ -57,13 +59,15 @@ export const AuthProvider = ({ children }) => {
   const timeoutRef = useRef(getInactivityTimeout());
 
   const logout = useCallback(() => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    localStorage.removeItem('refresh');
-    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-  }, []);
+  setUser(null);
+  setToken(null);
+  localStorage.removeItem('user');
+  localStorage.removeItem('token');
+  localStorage.removeItem('refresh');
+  if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+
+  router.push('/login'); 
+}, [router]);
 
   // --- Cierre automático por inactividad ---
   const resetInactivityTimer = useCallback(() => {
