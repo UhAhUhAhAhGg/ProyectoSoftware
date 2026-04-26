@@ -479,7 +479,7 @@ class PurchaseView(APIView):
     POST /api/v1/purchase/
     Inicia el proceso de compra: crea una Purchase con status='pending' y devuelve
     un QR de pago (contiene el purchase_id) con 15 minutos de expiración.
-    El pago debe confirmarse via SimularPagoView (desarrollo) o webhook bancario (producción).
+    Si el evento supera el umbral, redirige a la fila virtual.
     """
     permission_classes = [IsAuthenticated]
 
@@ -491,31 +491,63 @@ class PurchaseView(APIView):
         try:
             quantity = int(request.data.get("quantity", 1))
         except (ValueError, TypeError):
-            return Response({"error": "Cantidad invalida"}, status=400)
+            return Response({"error": "Cantidad invalida"}, status=status.HTTP_400_BAD_REQUEST)
 
         if quantity <= 0:
-            return Response({"error": "Cantidad debe ser mayor a 0"}, status=400)
+            return Response({"error": "Cantidad debe ser mayor a 0"}, status=status.HTTP_400_BAD_REQUEST)
 
         event = get_object_or_404(Event, id=event_id)
         ticket = get_object_or_404(TicketType, id=ticket_type_id)
+        # 1. Calculamos el total de entradas vendidas actualmente
+        total_sold = sum(t.current_sold for t in event.ticket_types.all())
 
-        if event.waitlist_active:
+        # 2. Evaluamos si el evento tiene la fila activa Y superó el umbral
+        if event.waitlist_active and (total_sold + quantity) >= event.waitlist_threshold:
+            
+            with transaction.atomic():
+                # Verificamos si el usuario ya está en la fila
+                waitlist_entry = Waitlist.objects.filter(event=event, user_id=user_id).first()
+                
+                if not waitlist_entry:
+                    # Buscamos la última posición asignada para darle la siguiente
+                    last_position = Waitlist.objects.filter(event=event).aggregate(Max('position'))['position__max'] or 0
+                    
+                    waitlist_entry = Waitlist.objects.create(
+                        event=event,
+                        user_id=user_id,
+                        position=last_position + 1,
+                        status='waiting' # Estado "en_cola" según el ticket
+                    )
+                    
+                    mensaje = "El evento ha superado el umbral de capacidad simultánea. Has sido colocado en la fila virtual."
+                    status_code = status.HTTP_202_ACCEPTED
+                else:
+                    mensaje = "Ya te encuentras en la fila virtual para este evento."
+                    status_code = status.HTTP_200_OK
+
             return Response({
-                "status": "waitlist",
-                "message": "El evento está casi lleno. Has sido redirigido a la lista de espera."
-            }, status=200)
+                "status": "queue",
+                "message": mensaje,
+                "data": {
+                    "event_id": str(event.id),
+                    "queue_position": waitlist_entry.position,
+                    "queue_status": waitlist_entry.status
+                }
+            }, status=status_code)
+        # --- FIN LÓGICA DE FILA VIRTUAL ---
 
+        # Validaciones estándar de compra
         if event.status == 'cancelled':
-            return Response({"error": "No puedes comprar entradas para un evento cancelado"}, status=400)
+            return Response({"error": "No puedes comprar entradas para un evento cancelado"}, status=status.HTTP_400_BAD_REQUEST)
 
         if event.status != 'published':
-            return Response({"error": "El evento no esta disponible para compra"}, status=400)
+            return Response({"error": "El evento no esta disponible para compra"}, status=status.HTTP_400_BAD_REQUEST)
 
         if ticket.status != 'active':
-            return Response({"error": "Este tipo de entrada no esta disponible"}, status=400)
+            return Response({"error": "Este tipo de entrada no esta disponible"}, status=status.HTTP_400_BAD_REQUEST)
 
         if ticket.available_capacity < quantity:
-            return Response({"error": "No hay suficientes entradas disponibles"}, status=400)
+            return Response({"error": "No hay suficientes entradas disponibles"}, status=status.HTTP_400_BAD_REQUEST)
 
         existing_purchase = Purchase.objects.filter(
             user_id=user_id,
@@ -527,7 +559,7 @@ class PurchaseView(APIView):
             return Response({
                 "error": "Ya tienes una entrada para este evento. Revisa tu historial de compras.",
                 "error_code": "DUPLICATE_PURCHASE"
-            }, status=409)
+            }, status=status.HTTP_409_CONFLICT)
 
         total_price = ticket.price * quantity
         expires_at = timezone.now() + timedelta(minutes=15)
@@ -563,7 +595,6 @@ class PurchaseView(APIView):
                 "ticket_type_name": ticket.name,
             }
         }, status=status.HTTP_201_CREATED)
-
 
 class SimularPagoView(APIView):
     """
