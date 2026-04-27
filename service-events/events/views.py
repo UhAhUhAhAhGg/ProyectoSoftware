@@ -1,4 +1,5 @@
 from rest_framework import viewsets, status
+from django.db import transaction
 from rest_framework.decorators import action
 from django.db import transaction
 from rest_framework.response import Response
@@ -1001,7 +1002,14 @@ class PurchaseDownloadPDFView(APIView):
         except Exception as e:
             return Response({"error": f"Error generando el PDF: {str(e)}"}, status=500)
 
+from django.db import transaction
 
+with transaction.atomic():
+    purchase.status = 'cancelled'
+    purchase.save()
+
+    # 🔥 LIBERAR ASIENTOS
+    purchase.release_seats()
 class PurchaseCancelView(APIView):
     """
     POST /api/v1/purchase/<purchase_id>/cancel/
