@@ -15,6 +15,6 @@ urlpatterns = [
     path('api/v1/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     # Auth endpoints
     path('api/v1/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),  # Endpoint de refresh de token ya implementado mediante SimpleJWT (TokenRefreshView)
     path('api/v1/', include('users.urls')),
 ]
