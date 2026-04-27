@@ -55,7 +55,10 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(storedSession.token);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [inactivityMinutes, setInactivityMinutes] = useState(storedSession.inactivityMinutes);
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  
   const inactivityTimer = useRef(null);
+  const warningTimer = useRef(null);
   const timeoutRef = useRef(getInactivityTimeout());
 
   const logout = useCallback(() => {
@@ -65,6 +68,8 @@ export const AuthProvider = ({ children }) => {
   localStorage.removeItem('token');
   localStorage.removeItem('refresh');
   if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+  if (warningTimer.current) clearTimeout(warningTimer.current);
+  setShowWarningModal(false);
 
   router.push('/login'); 
 }, [router]);
@@ -72,13 +77,31 @@ export const AuthProvider = ({ children }) => {
   // --- Cierre automático por inactividad ---
   const resetInactivityTimer = useCallback(() => {
     if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+    if (warningTimer.current) clearTimeout(warningTimer.current);
+    
+    // Si ya estamos mostrando el modal, no reiniciar al mover el mouse
+    if (showWarningModal) return;
+
+    const totalTime = timeoutRef.current;
+    const warningTime = 2 * 60 * 1000; // 2 minutos antes
+    const waitTime = totalTime > warningTime ? totalTime - warningTime : totalTime;
+
     inactivityTimer.current = setTimeout(() => {
       if (localStorage.getItem('token')) {
-        setSessionExpired(true);
-        logout();
+        setShowWarningModal(true);
+        // Empezar cuenta regresiva final de 2 minutos
+        warningTimer.current = setTimeout(() => {
+           setSessionExpired(true);
+           logout();
+        }, warningTime);
       }
-    }, timeoutRef.current);
-  }, [logout]);
+    }, waitTime);
+  }, [logout, showWarningModal]);
+
+  const continueSession = () => {
+    setShowWarningModal(false);
+    resetInactivityTimer();
+  };
 
   // Permitir al admin cambiar el timeout desde Configuración Global
   const updateInactivityTimeout = useCallback((minutes) => {
@@ -86,15 +109,8 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('inactivity_timeout_minutes', String(mins));
     timeoutRef.current = mins * 60 * 1000;
     setInactivityMinutes(mins);
-    // Reiniciar el timer con el nuevo valor
-    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-    inactivityTimer.current = setTimeout(() => {
-      if (localStorage.getItem('token')) {
-        setSessionExpired(true);
-        logout();
-      }
-    }, timeoutRef.current);
-  }, [logout]);
+    resetInactivityTimer();
+  }, [resetInactivityTimer]);
 
   useEffect(() => {
     if (!user) return;
@@ -206,6 +222,42 @@ export const AuthProvider = ({ children }) => {
   return (
     <AuthContext.Provider value={value}>
       {children}
+      {/* Modal de Advertencia de Sesión */}
+      {showWarningModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: '#1E1E1E', padding: '2rem', borderRadius: '10px',
+            textAlign: 'center', maxWidth: '400px', color: '#fff',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
+          }}>
+            <h3 style={{ marginBottom: '1rem', color: '#FFB800' }}>⚠️ Inactividad Detectada</h3>
+            <p style={{ marginBottom: '2rem' }}>Tu sesión expirará en 2 minutos. ¿Deseas continuar navegando?</p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button 
+                onClick={logout}
+                style={{
+                  padding: '10px 20px', borderRadius: '5px', border: 'none',
+                  backgroundColor: '#444', color: '#fff', cursor: 'pointer'
+                }}>
+                Cerrar Sesión
+              </button>
+              <button 
+                onClick={continueSession}
+                style={{
+                  padding: '10px 20px', borderRadius: '5px', border: 'none',
+                  backgroundColor: '#007BFF', color: '#fff', cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}>
+                Continuar Sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AuthContext.Provider>
   );
 };
