@@ -60,6 +60,7 @@ class Event(models.Model):
     # Lista de espera
     waitlist_threshold = models.IntegerField(default=90)  # porcentaje
     waitlist_active = models.BooleanField(default=False)
+    queue_timeout = models.IntegerField(default=10) # minutos para entrar cuando es su turno
 
     class Meta:
         verbose_name = 'Event'

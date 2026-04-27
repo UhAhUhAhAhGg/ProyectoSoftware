@@ -284,6 +284,7 @@ class EventViewSet(viewsets.ModelViewSet):
                     "event_id": str(event.id),
                     "waitlist_threshold": event.waitlist_threshold,
                     "waitlist_active": event.waitlist_active,
+                    "queue_timeout": event.queue_timeout,
                     "event_capacity": event.capacity # Útil para que el Frontend valide también
                 }
             }, status=status.HTTP_200_OK)
@@ -292,6 +293,7 @@ class EventViewSet(viewsets.ModelViewSet):
         elif request.method == 'PUT':
             threshold_input = request.data.get('waitlist_threshold')
             is_active_input = request.data.get('waitlist_active', event.waitlist_active)
+            timeout_input = request.data.get('queue_timeout', event.queue_timeout)
 
             # Validación A: Que el dato exista
             if threshold_input is None:
@@ -323,6 +325,20 @@ class EventViewSet(viewsets.ModelViewSet):
                     "message": f"El umbral ({threshold}) no puede superar la capacidad máxima del evento ({event.capacity} personas)."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
+            # Validación para queue_timeout
+            try:
+                q_timeout = int(timeout_input)
+                if q_timeout <= 0:
+                    return Response({
+                        "status": "error",
+                        "message": "El tiempo de espera (timeout) debe ser mayor a cero."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            except ValueError:
+                return Response({
+                    "status": "error",
+                    "message": "El tiempo de espera (timeout) debe ser un número entero válido."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             # Manejo seguro del booleano para 'waitlist_active'
             if isinstance(is_active_input, str):
                 is_active = is_active_input.lower() == 'true'
@@ -332,6 +348,7 @@ class EventViewSet(viewsets.ModelViewSet):
             # Guardado final
             event.waitlist_threshold = threshold
             event.waitlist_active = is_active
+            event.queue_timeout = q_timeout
             event.save()
 
             return Response({
@@ -339,7 +356,8 @@ class EventViewSet(viewsets.ModelViewSet):
                 "message": "Configuración de la fila virtual actualizada y validada correctamente.",
                 "data": {
                     "waitlist_threshold": event.waitlist_threshold,
-                    "waitlist_active": event.waitlist_active
+                    "waitlist_active": event.waitlist_active,
+                    "queue_timeout": event.queue_timeout
                 }
             }, status=status.HTTP_200_OK)
 
