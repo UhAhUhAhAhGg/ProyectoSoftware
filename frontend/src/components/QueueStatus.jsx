@@ -6,11 +6,19 @@ export default function QueueStatus() {
   const [progress, setProgress] = useState(0);
 
   const prevPosition = useRef(position);
-  const audioRef = useRef(null);
 
-  useEffect(() => {
-    audioRef.current = new Audio("/sounds/notification.mp3");
-  }, []);
+  //  sonido sin archivo (beep)
+  const playBeep = () => {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+    oscillator.connect(audioCtx.destination);
+    oscillator.start();
+
+    setTimeout(() => oscillator.stop(), 200);
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -21,13 +29,11 @@ export default function QueueStatus() {
     return () => clearInterval(interval);
   }, []);
 
-  // 🔥 AQUÍ detectamos salida de cola
+  // 🔥 detectar salida de cola
   useEffect(() => {
     if (prevPosition.current > 1 && position === 1) {
-      // sonido
-      audioRef.current?.play();
+      playBeep(); // 👈 aquí usamos el beep
 
-      // notificación visual
       alert("🎉 ¡Es tu turno!");
     }
 
