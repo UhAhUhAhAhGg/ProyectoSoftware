@@ -56,10 +56,18 @@ export const AuthProvider = ({ children }) => {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [inactivityMinutes, setInactivityMinutes] = useState(storedSession.inactivityMinutes);
   const [showWarningModal, setShowWarningModal] = useState(false);
+  const [countdown, setCountdown] = useState(0);
   
   const inactivityTimer = useRef(null);
   const warningTimer = useRef(null);
+  const countdownInterval = useRef(null);
+  const isRefreshing = useRef(false);
   const timeoutRef = useRef(getInactivityTimeout());
+
+  const showWarningModalRef = useRef(false);
+  useEffect(() => {
+    showWarningModalRef.current = showWarningModal;
+  }, [showWarningModal]);
 
   const logout = useCallback(() => {
   setUser(null);
@@ -69,7 +77,9 @@ export const AuthProvider = ({ children }) => {
   localStorage.removeItem('refresh');
   if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
   if (warningTimer.current) clearTimeout(warningTimer.current);
+  if (countdownInterval.current) clearInterval(countdownInterval.current);
   setShowWarningModal(false);
+  showWarningModalRef.current = false;
 
   router.push('/login'); 
 }, [router]);
@@ -78,10 +88,8 @@ export const AuthProvider = ({ children }) => {
   const resetInactivityTimer = useCallback(() => {
     if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     if (warningTimer.current) clearTimeout(warningTimer.current);
+    if (countdownInterval.current) clearInterval(countdownInterval.current);
     
-    // Si ya estamos mostrando el modal, no reiniciar al mover el mouse
-    if (showWarningModal) return;
-
     const totalTime = timeoutRef.current;
     const warningTime = 2 * 60 * 1000; // 2 minutos antes
     // Evitar que waitTime sea negativo si totalTime es menor a 2 minutos
@@ -90,24 +98,41 @@ export const AuthProvider = ({ children }) => {
     inactivityTimer.current = setTimeout(() => {
       if (localStorage.getItem('token')) {
         setShowWarningModal(true);
+        showWarningModalRef.current = true;
         // Empezar cuenta regresiva final de 2 minutos (o el total si es muy corto)
         const finalTime = totalTime > warningTime ? warningTime : 10000;
+        setCountdown(Math.floor(finalTime / 1000));
+        
+        countdownInterval.current = setInterval(() => {
+           setCountdown((prev) => {
+             if (prev <= 1) {
+                clearInterval(countdownInterval.current);
+                return 0;
+             }
+             return prev - 1;
+           });
+        }, 1000);
+
         warningTimer.current = setTimeout(() => {
            setSessionExpired(true);
            logout();
         }, finalTime);
       }
     }, waitTime);
-  }, [logout, showWarningModal]);
+  }, [logout]);
 
   const continueSession = async () => {
+    if (isRefreshing.current) return;
+    isRefreshing.current = true;
     setShowWarningModal(false);
+    showWarningModalRef.current = false;
     try {
       // Forzamos la renovación del token en el backend para que coincida con el frontend
       await refreshAccessToken();
     } catch (error) {
       console.error("Error al renovar la sesión:", error);
     }
+    isRefreshing.current = false;
     resetInactivityTimer();
   };
 
@@ -124,7 +149,13 @@ export const AuthProvider = ({ children }) => {
     if (!user) return;
 
     const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
-    const handleActivity = () => resetInactivityTimer();
+    const handleActivity = () => {
+      if (showWarningModalRef.current) {
+        continueSession();
+      } else {
+        resetInactivityTimer();
+      }
+    };
 
     events.forEach((e) => window.addEventListener(e, handleActivity));
     resetInactivityTimer(); // iniciar el timer al montar
@@ -243,7 +274,16 @@ export const AuthProvider = ({ children }) => {
             boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
           }}>
             <h3 style={{ marginBottom: '1rem', color: '#FFB800' }}>⚠️ Inactividad Detectada</h3>
-            <p style={{ marginBottom: '2rem' }}>Tu sesión expirará en 2 minutos. ¿Deseas continuar navegando?</p>
+            <p style={{ marginBottom: '1rem' }}>Tu sesión expirará por seguridad en:</p>
+            <div style={{ 
+              fontSize: '2rem', fontWeight: 'bold', color: '#FF4444', 
+              marginBottom: '2rem', fontFamily: 'monospace' 
+            }}>
+              {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+            </div>
+            <p style={{ marginBottom: '2rem', fontSize: '0.9rem', color: '#aaa' }}>
+              Mueve el mouse o haz clic para mantener la sesión activa.
+            </p>
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
               <button 
                 onClick={logout}
