@@ -1,3 +1,7 @@
+# pyright: reportAttributeAccessIssue=false
+# pyright: reportOptionalMemberAccess=false
+# pyright: reportArgumentType=false
+# pyright: reportUndefinedVariable=false
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from django.db import transaction
@@ -149,6 +153,74 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response({"status": orden.status}, status=status.HTTP_200_OK)
         except PaymentOrder.DoesNotExist:
             return Response({"error": "Orden no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+        
+    @action(detail=True, methods=['get'], url_path='queue-status')
+    def queue_status(self, request, pk=None):
+        """
+        HU: Asignar lugar y mostrar tiempo estimado de espera.
+        GET /events/{id}/queue-status/
+        Calcula la posición en tiempo real y el promedio dinámico de espera (max 15 min).
+        """
+        event = self.get_object()
+        user_id = request.user.id
+
+        # 1. Verificar si el usuario realmente está en la fila
+        waitlist_entry = Waitlist.objects.filter(event=event, user_id=user_id).first()
+        
+        if not waitlist_entry:
+            return Response({
+                "status": "error",
+                "message": "No te encuentras en la fila virtual para este evento."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        if waitlist_entry.status != 'waiting':
+            return Response({
+                "status": "success",
+                "message": f"Tu estado en la fila es: {waitlist_entry.status}. Ya puedes proceder a comprar.",
+                "data": {"queue_status": waitlist_entry.status}
+            }, status=status.HTTP_200_OK)
+
+        # 2. Calcular cuántas personas están estrictamente delante de este usuario
+        people_ahead = Waitlist.objects.filter(
+            event=event,
+            status='waiting',
+            position__lt=waitlist_entry.position
+        ).count()
+        # Tomamos una muestra de las últimas 20 compras confirmadas del evento
+        recent_purchases = list(Purchase.objects.filter(
+            event=event, 
+            status='active'
+        ).order_by('-created_at')[:20])
+
+        average_time_minutes = 5.0  # Tiempo por defecto si no hay data histórica suficiente
+
+        if len(recent_purchases) >= 2:
+            # Diferencia de tiempo entre la compra más reciente y la más antigua de la muestra
+            newest_purchase = recent_purchases[0].created_at
+            oldest_purchase = recent_purchases[-1].created_at
+            
+            time_diff_seconds = (newest_purchase - oldest_purchase).total_seconds()
+            
+            if time_diff_seconds > 0:
+                # Calculamos cuánto toma en promedio despachar 1 compra (en minutos)
+                calc_average = (time_diff_seconds / 60.0) / len(recent_purchases)
+                
+                # Regla de Negocio: Mínimo 1 minuto, Máximo 15 minutos (por expiración del QR)
+                average_time_minutes = min(max(calc_average, 1.0), 15.0)
+
+        estimated_wait_time = int(people_ahead * average_time_minutes)
+
+        return Response({
+            "status": "success",
+            "data": {
+                "event_id": str(event.id),
+                "queue_status": waitlist_entry.status,
+                "your_position": waitlist_entry.position,
+                "people_ahead": people_ahead,
+                "dynamic_average_per_purchase": round(average_time_minutes, 2),
+                "estimated_wait_time_minutes": estimated_wait_time
+            }
+        }, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'])
     def upcoming(self, request):
