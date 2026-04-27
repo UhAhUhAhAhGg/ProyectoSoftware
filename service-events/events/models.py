@@ -25,6 +25,32 @@ class Category(models.Model):
     def __str__(self):
         return self.name
 
+class Seat(models.Model):
+    STATUS_CHOICES = [
+        ('available', 'Available'),
+        ('reserved', 'Reserved'),
+        ('sold', 'Sold'),
+    ]
+
+    ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE, related_name='seats')
+    row = models.PositiveIntegerField()
+    number = models.PositiveIntegerField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='available')
+    
+    # Relación con la compra actual (si está reservado o vendido)
+    purchase = models.ForeignKey(
+        'Purchase', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='allocated_seats'
+    )
+
+    class Meta:
+        unique_together = ('ticket_type', 'row', 'number')
+
+    def __str__(self):
+        return f"{self.ticket_type.name} - Fila {self.row} Asiento {self.number}"
 
 class Event(models.Model):
     STATUS_CHOICES = [
@@ -199,6 +225,20 @@ class Purchase(models.Model):
                 name='unique_active_purchase_per_user_event'
             )
         ]
+    def release_seats(self):
+        """
+        HU Subtarea: Liberar asientos.
+        Cambia el estado de los asientos vinculados de 'reserved' a 'available'
+        y elimina la referencia a esta compra.
+        """
+        # Verifica si existe la relación inversa 'allocated_seats' desde el modelo Seat
+        if hasattr(self, 'allocated_seats'):
+            seats = self.allocated_seats.all()
+            if seats.exists():
+                seats.update(status='available', purchase=None)
+                return True
+        return False
+
     def check_expiration(self):
         """
         HU: Liberar asientos si no se completó el pago.
@@ -207,8 +247,13 @@ class Purchase(models.Model):
         timeout_limit = self.created_at + timedelta(minutes=15)
         
         if self.status == 'pending' and timezone.now() > timeout_limit:
+            # 1. Marcamos la compra como expirada
             self.status = 'expired'
-            self.save()
+            self.save(update_fields=['status'])  # Optimización: guardamos solo el estado
+            
+            # 2. 🚀 Liberamos los asientos vinculados
+            self.release_seats()
+            
             return True
             
         return False
@@ -274,6 +319,7 @@ class PaymentOrder(models.Model):
 
 
 class TicketInstance(models.Model):
+    
     STATUS_CHOICES = [
         ('valid', 'Válida'),
         ('used', 'Usada'),
