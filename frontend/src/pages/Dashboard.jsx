@@ -27,33 +27,7 @@ function Dashboard() {
     }
   }, [isAuthenticated, isAdministrador, navigate]);
 
-  useEffect(() => {
-  let timeout;
 
-  const resetTimer = () => {
-    clearTimeout(timeout);
-
-    timeout = setTimeout(() => {
-      logout(); // cierra sesión
-      navigate('/login'); // redirige
-    }, 60000); // 60 segundos (1 minuto para prueba)
-  };
-
-  // Eventos que reinician actividad
-  window.addEventListener('mousemove', resetTimer);
-  window.addEventListener('keydown', resetTimer);
-  window.addEventListener('click', resetTimer);
-
-  // Iniciar timer
-  resetTimer();
-
-  return () => {
-    clearTimeout(timeout);
-    window.removeEventListener('mousemove', resetTimer);
-    window.removeEventListener('keydown', resetTimer);
-    window.removeEventListener('click', resetTimer);
-  };
-}, [logout, navigate]);
 
   // Marcar notificaciones como leídas
   const marcarComoLeidas = () => {

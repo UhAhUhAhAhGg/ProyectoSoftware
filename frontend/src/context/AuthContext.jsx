@@ -3,7 +3,7 @@
 import { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { authService } from '../services/authService';
-import { apiFetch } from '../services/apiHelper';
+import { apiFetch, refreshAccessToken } from '../services/apiHelper';
 
 const AuthContext = createContext();
 
@@ -84,22 +84,30 @@ export const AuthProvider = ({ children }) => {
 
     const totalTime = timeoutRef.current;
     const warningTime = 2 * 60 * 1000; // 2 minutos antes
-    const waitTime = totalTime > warningTime ? totalTime - warningTime : totalTime;
+    // Evitar que waitTime sea negativo si totalTime es menor a 2 minutos
+    const waitTime = totalTime > warningTime ? totalTime - warningTime : Math.max(0, totalTime - 10000);
 
     inactivityTimer.current = setTimeout(() => {
       if (localStorage.getItem('token')) {
         setShowWarningModal(true);
-        // Empezar cuenta regresiva final de 2 minutos
+        // Empezar cuenta regresiva final de 2 minutos (o el total si es muy corto)
+        const finalTime = totalTime > warningTime ? warningTime : 10000;
         warningTimer.current = setTimeout(() => {
            setSessionExpired(true);
            logout();
-        }, warningTime);
+        }, finalTime);
       }
     }, waitTime);
   }, [logout, showWarningModal]);
 
-  const continueSession = () => {
+  const continueSession = async () => {
     setShowWarningModal(false);
+    try {
+      // Forzamos la renovación del token en el backend para que coincida con el frontend
+      await refreshAccessToken();
+    } catch (error) {
+      console.error("Error al renovar la sesión:", error);
+    }
     resetInactivityTimer();
   };
 
