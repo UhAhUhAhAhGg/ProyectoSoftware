@@ -128,3 +128,144 @@ class QueueHealthView(APIView):
             "status": "healthy",
             "version": "1.0.0",
         }, status=200)
+
+
+from django.utils import timezone
+from .models import QueueEntry
+
+
+def _calculate_avg_transaction_time(event_id: str) -> float:
+    """
+    TIC-311: Calcula el tiempo promedio (en minutos) que tardan los últimos
+    20 usuarios admitidos en completar su transacción para este evento.
+    Si no hay historial suficiente, usa payment_timeout_minutes/2 como fallback.
+    """
+    # Fallback desde la configuración del evento
+    try:
+        config = QueueConfig.objects.get(event_id=event_id)
+        default_minutes = config.payment_timeout_minutes / 2.0  # ej. 7.5 min si timeout=15
+    except QueueConfig.DoesNotExist:
+        default_minutes = 7.5
+
+    # Calcular promedio real con las últimas 20 admisiones completadas
+    admitted = QueueEntry.objects.filter(
+        event_id=event_id,
+        status='admitted',
+        accessed_at__isnull=False,
+        notified_at__isnull=False,
+    ).order_by('-accessed_at')[:20]
+
+    if admitted.exists():
+        times = [
+            (e.accessed_at - e.notified_at).total_seconds() / 60.0
+            for e in admitted
+            if e.accessed_at and e.notified_at and e.accessed_at > e.notified_at
+        ]
+        if times:
+            avg = sum(times) / len(times)
+            return max(1.0, avg)  # Mínimo 1 minuto por usuario
+
+    return default_minutes
+
+
+class QueuePositionView(APIView):
+    """
+    TIC-309: GET /api/v1/queue/{event_id}/position/
+    Retorna la posición actual del usuario en la cola y el ETA calculado dinámicamente.
+    Si el usuario no está en cola, retorna queued=False.
+    Si fue admitido, lo indica para que el frontend lo redirija.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, event_id):
+        user_id = str(request.user.id)
+        event_id_str = str(event_id)
+
+        try:
+            my_entry = QueueEntry.objects.get(
+                user_id=user_id,
+                event_id=event_id_str,
+            )
+        except QueueEntry.DoesNotExist:
+            return Response({"queued": False, "message": "No estás en la cola."}, status=200)
+
+        # Si ya fue admitido, notificar al frontend
+        if my_entry.status == 'admitted':
+            # Verificar si no expiró su tiempo máximo
+            if my_entry.accessed_at:
+                try:
+                    config = QueueConfig.objects.get(event_id=event_id_str)
+                    elapsed = (timezone.now() - my_entry.accessed_at).total_seconds() / 60.0
+                    if elapsed > config.payment_timeout_minutes:
+                        my_entry.status = 'expired'
+                        my_entry.save()
+                        return Response({
+                            "queued": False,
+                            "status": "expired",
+                            "error": "Tu tiempo para comprar ha expirado."
+                        }, status=200)
+                except QueueConfig.DoesNotExist:
+                    pass
+            return Response({
+                "queued": False,
+                "status": "admitted",
+                "message": "¡Eres el siguiente! Ya puedes seleccionar tus asientos.",
+            }, status=200)
+
+        # Si expiró o se fue voluntariamente
+        if my_entry.status in ('expired', 'left'):
+            return Response({
+                "queued": False,
+                "status": my_entry.status,
+            }, status=200)
+
+        # Calcular posición real: cuántos 'waiting' con joined_at anterior al mío
+        position = QueueEntry.objects.filter(
+            event_id=event_id_str,
+            status='waiting',
+            joined_at__lt=my_entry.joined_at,
+        ).count() + 1
+
+        # Calcular ETA dinámico (TIC-311)
+        avg_minutes = _calculate_avg_transaction_time(event_id_str)
+        eta_minutes = round(position * avg_minutes)
+
+        # Total en cola (para la barra de progreso del frontend)
+        total_waiting = QueueEntry.objects.filter(
+            event_id=event_id_str,
+            status='waiting',
+        ).count()
+
+        return Response({
+            "queued": True,
+            "status": "waiting",
+            "position": position,
+            "total_waiting": total_waiting,
+            "estimated_wait_minutes": eta_minutes,
+            "joined_at": my_entry.joined_at.isoformat(),
+        }, status=200)
+
+
+class QueueLeaveView(APIView):
+    """
+    DELETE /api/v1/queue/{event_id}/leave/
+    Permite al usuario salir voluntariamente de la cola.
+    Marca su QueueEntry como 'left' y libera su cupo.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, event_id):
+        user_id = str(request.user.id)
+        event_id_str = str(event_id)
+
+        try:
+            entry = QueueEntry.objects.get(
+                user_id=user_id,
+                event_id=event_id_str,
+                status__in=['waiting', 'admitted'],
+            )
+            entry.status = 'left'
+            entry.save()
+            return Response({"message": "Has salido de la cola exitosamente."}, status=200)
+        except QueueEntry.DoesNotExist:
+            return Response({"error": "No se encontró una entrada activa en la cola."}, status=404)
