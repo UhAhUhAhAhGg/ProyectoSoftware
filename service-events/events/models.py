@@ -101,7 +101,7 @@ class TicketType(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='ticket_types')
+    event = models.ForeignKey('Event', on_delete=models.CASCADE, related_name='ticket_types')
     name = models.CharField(max_length=100)
     description = models.TextField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -111,6 +111,9 @@ class TicketType(models.Model):
     seat_rows = models.PositiveIntegerField(null=True, blank=True)
     seats_per_row = models.PositiveIntegerField(null=True, blank=True)
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='active')
+    
+    # Este campo lo mantenemos para fines de registro histórico, pero ya no 
+    # dependeremos de él para bloquear ventas.
     current_sold = models.IntegerField(default=0)
 
     class Meta:
@@ -128,7 +131,19 @@ class TicketType(models.Model):
 
     @property
     def available_capacity(self):
-        return self.max_capacity - self.current_sold
+        """
+        HU: Liberar asientos si no se completó el pago.
+        Calcula la capacidad real consultando en tiempo real las compras.
+        Suma solo las compras 'active' (pagadas) y 'pending' (dentro de los 15 min).
+        Las compras 'expired' son ignoradas, liberando su espacio automáticamente.
+        """
+        vendidos_o_reservados = self.purchase_set.filter(
+            status__in=['active', 'pending']
+        ).aggregate(
+            total=models.Sum('quantity')
+        )['total'] or 0
+        
+        return self.max_capacity - vendidos_o_reservados
 
     @property
     def configured_seats(self):
@@ -146,6 +161,7 @@ class Purchase(models.Model):
         ('used', 'Used'),
         ('pending', 'Pending'),
         ('cancelled', 'Cancelled'),
+        ('expired', 'Expired'),  # 🚀 NUEVO: Estado necesario para liberar asientos
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -183,6 +199,19 @@ class Purchase(models.Model):
                 name='unique_active_purchase_per_user_event'
             )
         ]
+    def check_expiration(self):
+        """
+        HU: Liberar asientos si no se completó el pago.
+        Verifica si la compra superó el tiempo máximo de 15 minutos en estado pendiente.
+        """
+        timeout_limit = self.created_at + timedelta(minutes=15)
+        
+        if self.status == 'pending' and timezone.now() > timeout_limit:
+            self.status = 'expired'
+            self.save()
+            return True
+            
+        return False
 
 
 class Waitlist(models.Model):
