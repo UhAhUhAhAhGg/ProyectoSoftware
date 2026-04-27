@@ -187,7 +187,7 @@ class Purchase(models.Model):
         ('used', 'Used'),
         ('pending', 'Pending'),
         ('cancelled', 'Cancelled'),
-        ('expired', 'Expired'),  # 🚀 NUEVO: Estado necesario para liberar asientos
+        ('expired', 'Expired'), 
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -225,6 +225,7 @@ class Purchase(models.Model):
                 name='unique_active_purchase_per_user_event'
             )
         ]
+
     def release_seats(self):
         """
         HU Subtarea: Liberar asientos.
@@ -251,11 +252,85 @@ class Purchase(models.Model):
             self.status = 'expired'
             self.save(update_fields=['status'])  # Optimización: guardamos solo el estado
             
-            # 2. 🚀 Liberamos los asientos vinculados
             self.release_seats()
             
             return True
+    def get_user_email(self):
+        """
+        Hace una petición interna HTTP a service-profiles para obtener el email.
+        """
+        base_url = getattr(settings, 'PROFILE_SERVICE_URL', 'http://localhost:8002')
+        # Asumimos que tu ruta en urls.py es algo como /api/profiles/<user_id>/
+        url = f"{base_url}/api/profiles/{self.user_id}/" 
+        
+        try:
+            # Hacemos la petición con un timeout corto para no bloquear el sistema
+            response = requests.get(url, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                # Dependiendo de tu Serializer, el email puede venir directo o anidado
+                return data.get('email') or data.get('user', {}).get('email')
+            else:
+                logger.error(f"Error HTTP {response.status_code} al consultar el perfil {self.user_id}")
+        except requests.RequestException as e:
+            logger.error(f"Error de conexión con service-profiles: {e}")
             
+        return None
+
+    def send_expiration_email(self):
+        """
+        HU Subtarea: Enviar notificación por email al usuario que perdió asientos.
+        """
+        # 1. Obtenemos el correo real del microservicio de perfiles
+        user_email = self.get_user_email()
+        
+        if not user_email:
+            logger.warning(f"No se pudo enviar el correo de expiración: Email no encontrado para user_id {self.user_id}")
+            return False
+            
+        asunto = "Tiempo agotado - Asientos liberados"
+        mensaje = (
+            f"Hola,\n\n"
+            f"Te informamos que el tiempo de 15 minutos para completar el pago de tu "
+            f"orden para el evento '{self.event.name}' ha concluido.\n\n"
+            f"Por tal motivo, los asientos han sido liberados y tu orden ha sido cancelada.\n"
+            f"Si aún deseas asistir, por favor genera una nueva compra en la plataforma.\n\n"
+            f"Saludos,\n"
+            f"El equipo de Tickets"
+        )
+
+        try:
+            send_mail(
+                subject=asunto,
+                message=mensaje,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user_email],
+                fail_silently=False,
+            )
+            logger.info(f"Correo de expiración enviado con éxito a {user_email}")
+            return True
+        except Exception as e:
+            logger.error(f"Error al enviar email de expiración a {user_email}: {str(e)}")
+            return False
+
+    def check_expiration(self):
+        """
+        HU: Liberar asientos y notificar al usuario.
+        """
+        timeout_limit = self.created_at + timedelta(minutes=15)
+        
+        if self.status == 'pending' and timezone.now() > timeout_limit:
+            self.status = 'expired'
+            self.save(update_fields=['status']) 
+            
+            # 1. Liberamos los asientos (método que creamos en la tarea anterior)
+            self.release_seats()
+            
+            # 2. Enviamos el correo consultando primero al service-profiles
+            self.send_expiration_email()
+            
+            return True
+    
         return False
 
 
