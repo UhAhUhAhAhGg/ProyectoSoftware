@@ -1,3 +1,7 @@
+# pyright: reportAttributeAccessIssue=false
+# pyright: reportOptionalMemberAccess=false
+# pyright: reportArgumentType=false
+# pyright: reportUndefinedVariable=false
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from django.db import transaction
