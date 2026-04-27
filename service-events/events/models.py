@@ -284,7 +284,7 @@ class Purchase(models.Model):
         """
         HU: Liberar asientos y notificar al usuario.
         """
-        timeout_limit = self.created_at + timedelta(minutes=15)
+        timeout_limit = self.created_at + timedelta(minutes=1)
         
         if self.status == 'pending' and timezone.now() > timeout_limit:
             self.status = 'expired'

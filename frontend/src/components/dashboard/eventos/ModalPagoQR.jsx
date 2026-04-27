@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 export default function ModalPagoQR({ ordenData, onCerrar }) {
   const navigate = useNavigate();
-  const [tiempoRestante, setTiempoRestante] = useState('15:00');
+  const [tiempoRestante, setTiempoRestante] = useState('1:00');
   const [estadoPago, setEstadoPago] = useState('pending'); // pending | active | cancelled | expired
   const [datosTicket, setDatosTicket] = useState(null);
   const [simulando, setSimulando] = useState(false);
@@ -24,7 +24,7 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
       } else {
         const m = Math.floor(diff / 60000);
         const s = Math.floor((diff % 60000) / 1000);
-        setTiempoRestante(`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`);
+        setTiempoRestante(`${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
       }
     }, 1000);
     return () => clearInterval(intervalo);
@@ -205,16 +205,16 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
         {estadoPago === 'expired' && (
           <div style={{ color: '#991b1b', background: '#fee2e2', padding: 20, borderRadius: 8, border: '1px solid #fca5a5' }}>
             <div style={{ fontSize: '3rem', marginBottom: 8 }}>⚠️</div>
-            
+
             {/* Texto exacto requerido por la Historia de Usuario */}
             <h2 style={{ margin: '0 0 8px 0', fontSize: '1.3rem' }}>
               Tiempo para pagar agotado, asientos liberados
             </h2>
-            
+
             <p style={{ color: '#7f1d1d', marginBottom: '15px' }}>
               El tiempo de reserva de 15 minutos ha concluido. Por favor, intenta comprar de nuevo si aún hay asientos disponibles.
             </p>
-            
+
             <button onClick={handleCancelar} style={btnStyle('#6c757d')}>
               Volver al evento
             </button>
