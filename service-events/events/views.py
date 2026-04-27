@@ -186,6 +186,89 @@ class EventViewSet(viewsets.ModelViewSet):
         event.status = 'published'
         event.save()
         return Response({'success': 'Event published'})
+    
+    @action(detail=True, methods=['get', 'put'], url_path='queue-config')
+    def queue_config(self, request, pk=None):
+        """
+        HU: Configurar umbral de usuarios simultáneos.
+        GET: Obtener la configuración actual.
+        PUT: Actualizar la configuración con validaciones estrictas.
+        """
+        event = self.get_object()
+
+        # 1. Seguridad base para ambos métodos
+        if str(event.promoter_id) != str(request.user.id):
+            return Response({
+                "status": "error",
+                "message": "No tienes permisos. Solo el promotor de este evento puede gestionar la fila virtual."
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. Manejo de la petición GET (Lo que hicimos en la subtarea anterior)
+        if request.method == 'GET':
+            return Response({
+                "status": "success",
+                "data": {
+                    "event_id": str(event.id),
+                    "waitlist_threshold": event.waitlist_threshold,
+                    "waitlist_active": event.waitlist_active,
+                    "event_capacity": event.capacity # Útil para que el Frontend valide también
+                }
+            }, status=status.HTTP_200_OK)
+
+        # 3. Manejo de la petición PUT (La nueva subtarea de validación)
+        elif request.method == 'PUT':
+            threshold_input = request.data.get('waitlist_threshold')
+            is_active_input = request.data.get('waitlist_active', event.waitlist_active)
+
+            # Validación A: Que el dato exista
+            if threshold_input is None:
+                return Response({
+                    "status": "error",
+                    "message": "El campo 'waitlist_threshold' es obligatorio."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validación B: Que sea un número entero
+            try:
+                threshold = int(threshold_input)
+            except ValueError:
+                return Response({
+                    "status": "error",
+                    "message": "El umbral debe ser un número entero válido."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validación C: Entero positivo (> 0)
+            if threshold <= 0:
+                return Response({
+                    "status": "error",
+                    "message": "El umbral debe ser un número entero positivo mayor a cero."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validación D: <= capacidad del evento (El Core de tu ticket)
+            if threshold > event.capacity:
+                return Response({
+                    "status": "error",
+                    "message": f"El umbral ({threshold}) no puede superar la capacidad máxima del evento ({event.capacity} personas)."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Manejo seguro del booleano para 'waitlist_active'
+            if isinstance(is_active_input, str):
+                is_active = is_active_input.lower() == 'true'
+            else:
+                is_active = bool(is_active_input)
+
+            # Guardado final
+            event.waitlist_threshold = threshold
+            event.waitlist_active = is_active
+            event.save()
+
+            return Response({
+                "status": "success",
+                "message": "Configuración de la fila virtual actualizada y validada correctamente.",
+                "data": {
+                    "waitlist_threshold": event.waitlist_threshold,
+                    "waitlist_active": event.waitlist_active
+                }
+            }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
