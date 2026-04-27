@@ -14,8 +14,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar código
 COPY . .
 
+# Script de arranque: lanza el barrendero en background y luego runserver
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Exponer puerto
 EXPOSE 8000
 
-# Comando por defecto
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Entrypoint que lanza barrendero + servidor
+ENTRYPOINT ["/entrypoint.sh"]

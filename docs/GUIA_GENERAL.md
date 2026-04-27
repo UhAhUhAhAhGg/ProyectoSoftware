@@ -1,49 +1,49 @@
-# TicketGo - Guia General del Proyecto
+# TicketGo — Guía General del Proyecto
 
-## Que es TicketGo?
+> Plataforma de venta de entradas para eventos. Permite a **Promotores** crear y gestionar eventos, a **Compradores** explorar y comprar entradas, y a **Administradores** supervisar la plataforma.
 
-Plataforma de venta de tickets/entradas para eventos. Permite a promotores crear y gestionar eventos, a compradores explorar y (proximamente) comprar entradas, y a administradores supervisar la plataforma.
+---
 
-## Arquitectura
+## 📐 Arquitectura del Sistema
 
 ```
-                    ┌──────────────────┐
-                    │   Frontend (3000) │
-                    │   Next.js + React │
-                    └────────┬─────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              ▼              ▼              ▼
-     ┌────────────┐  ┌────────────┐  ┌────────────┐
-     │ service-auth│  │ service-   │  │ service-   │
-     │   (8000)   │  │ profiles   │  │ events     │
-     │            │  │   (8001)   │  │   (8002)   │
-     └─────┬──────┘  └─────┬──────┘  └─────┬──────┘
-           ▼               ▼               ▼
-     ┌──────────┐   ┌──────────┐   ┌──────────┐
-     │ auth_db  │   │profiles_db│   │ events_db│
-     │  (5432)  │   │  (5433)  │   │  (5434)  │
-     └──────────┘   └──────────┘   └──────────┘
+                    ┌──────────────────────┐
+                    │   Frontend React     │
+                    │   (localhost:3000)   │
+                    └──────────┬───────────┘
+                               │
+          ┌────────────────────┼────────────────────┐
+          ▼                    ▼                    ▼                    ▼
+ ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+ │ service-auth │    │service-events│    │service-queue │    │service-profiles│
+ │   (8000)     │    │   (8002)     │    │   (8003)     │    │   (8001)     │
+ └──────┬───────┘    └──────┬───────┘    └──────┬───────┘    └──────┬───────┘
+        ▼                   ▼                   ▼                   ▼
+  ┌──────────┐       ┌──────────┐        ┌──────────┐       ┌──────────┐
+  │ auth_db  │       │events_db │        │ queue_db │       │profiles_db│
+  │  (5432)  │       │  (5434)  │        │  (5435)  │       │  (5433)  │
+  └──────────┘       └──────────┘        └──────────┘       └──────────┘
 ```
 
-### Stack tecnologico
+### Stack Tecnológico
 
-| Componente | Tecnologia |
+| Componente | Tecnología |
 |------------|-----------|
-| Frontend | Next.js 16, React 19, Tailwind CSS |
-| Backend | Django 4.2, Django REST Framework |
-| Autenticacion | JWT (djangorestframework-simplejwt) |
-| Base de datos | PostgreSQL (3 instancias) |
-| Orquestacion | Docker Compose |
-| Imagenes | Pillow + ImageField (service-events) |
+| Frontend | React 19 + React Router |
+| Backend | Django 4.2 + Django REST Framework |
+| Autenticación | JWT (djangorestframework-simplejwt) |
+| Base de datos | PostgreSQL (4 instancias) |
+| Orquestación | Docker Compose |
 
-## Inicio rapido
+---
+
+## 🚀 Inicio Rápido
 
 ### Requisitos
 - Docker y Docker Compose instalados
 - Git
 
-### Levantar el proyecto
+### Levantar el Proyecto
 
 ```bash
 # Clonar el repositorio
@@ -58,19 +58,20 @@ docker compose exec service-auth python seed_users.py
 docker compose exec service-events python seed_categories.py
 ```
 
-### URLs del sistema
+### URLs del Sistema
 
 | Servicio | URL |
 |----------|-----|
-| Frontend (app principal) | http://localhost:3000 |
-| Login publico | http://localhost:3000/login |
+| Frontend | http://localhost:3000 |
+| Login público | http://localhost:3000/login |
 | Registro | http://localhost:3000/registro |
 | Login admin | http://localhost:3000/admin/login |
 | API Auth | http://localhost:8000/api/v1/ |
 | API Events | http://localhost:8002/api/v1/ |
+| API Queue | http://localhost:8003/api/v1/ |
 | Swagger Events | http://localhost:8002/api/schema/swagger-ui/ |
 
-### Usuarios de prueba
+### Usuarios de Prueba (seed)
 
 | Email | Password | Rol |
 |-------|----------|-----|
@@ -78,215 +79,212 @@ docker compose exec service-events python seed_categories.py
 | `comprador@ticketproject.com` | `Comprador1234!` | Comprador |
 | `promotor@ticketproject.com` | `Promotor1234!` | Promotor |
 
-## Roles y funcionalidades
+---
+
+## 👥 Roles y Funcionalidades
 
 ### Administrador
 - Login exclusivo en `/admin/login`
-- Dashboard en `/admin/dashboard`
-- Gestionar usuarios (aprobar/rechazar admins)
-- Configurar timeout de inactividad
-- Invitar nuevos administradores
+- Aprobar/rechazar nuevos administradores
+- Configurar timeout de inactividad de sesión
+- Invitar nuevos administradores por email
 
 ### Promotor
 - Crear, editar y eliminar eventos
-- Gestionar tipos de entrada (VIP, General, etc.)
-- Ver sus eventos con estado y precios
-- Subir imagenes para eventos
+- Gestionar tipos de entrada (VIP, General, etc.) con precios y cupos
+- Configurar mapa de asientos (filas × asientos por fila)
+- **[Sprint 3]** Configurar la cola virtual por evento (umbral, timeout)
+- Subir imágenes para eventos
 
 ### Comprador
-- Explorar eventos disponibles
-- Filtrar por nombre, ciudad o ubicacion
-- Ver detalle de eventos con tipos de entrada
-- Gestionar su perfil (nombre, telefono, foto)
+- Explorar y filtrar eventos disponibles
+- Ver detalle de eventos con mapa de asientos
+- Seleccionar asientos y pagar con QR
+- Ver historial de compras
+- **[Sprint 3]** Entrar a la cola virtual si el evento tiene alta demanda
 
-## Estructura de carpetas
+---
+
+## 🔑 Autenticación JWT
+
+- **Access Token:** 5 minutos de vida (renovable automáticamente si hay actividad)
+- **Refresh Token:** 1 día de vida
+- Claims personalizados: `email`, `role`, `user_id`
+- Los microservicios validan el token **directamente** sin consultar `auth_db` (arquitectura desacoplada)
+- El frontend almacena tokens en `localStorage` (`token`, `refresh`, `user`)
+- El `AuthContext` gestiona la inactividad: avisa a los 8 min y cierra sesión a los 10 min
+
+---
+
+## 🛡️ Seguridad Implementada
+
+| Feature | Detalles |
+|---------|---------|
+| Passwords | PBKDF2 + SHA256 + sal aleatoria (Django default) |
+| Bloqueo de admin | 3 intentos fallidos → bloqueo 15 min |
+| Timeout de inactividad | Configurable 1-60 min. Modal de advertencia con cronómetro a los 2 min previos |
+| Anti-enumeración | Mensajes genéricos en password reset |
+| Permisos por rol | `IsAdministrador`, `IsPromotor`, `IsComprador` en cada servicio |
+| Auditoría | `AccountDeletionLog` en eliminaciones de cuentas |
+| Cola virtual | Limitación de usuarios simultáneos en selección de asientos (Sprint 3) |
+
+---
+
+## 📁 Estructura de Carpetas
 
 ```
 ProyectoSoftware/
 ├── docker-compose.yml
-├── requirements.txt
 │
-├── service-auth/                   # Microservicio de autenticacion
-│   ├── auth_config/settings.py     # Config Django + JWT + Email
-│   ├── users/
-│   │   ├── models.py               # User, Role, UserProfile, AccountDeletionLog
-│   │   ├── views.py                # Login, registro, admin, perfil, password reset
-│   │   ├── serializers.py          # Serializadores DRF
-│   │   ├── signals.py              # Auto-crear UserProfile
-│   │   └── permissions.py          # Clases de permisos por rol
-│   └── seed_users.py               # Datos iniciales de usuarios
+├── service-auth/               # Microservicio de autenticación (puerto 8000)
+│   ├── auth_config/settings.py
+│   ├── users/models.py         # User, AccountDeletionLog
+│   ├── users/views.py          # Login, registro, admin, perfil, password reset
+│   └── seed_users.py           # Datos iniciales
 │
-├── service-profiles/               # Microservicio de perfiles
-│   ├── profiles/
-│   │   ├── models.py               # AdminProfile, CompradorProfile, PromotorProfile
-│   │   └── permissions.py          # Permisos por rol
-│   └── profiles_config/
+├── service-profiles/           # Microservicio de perfiles (puerto 8001)
+│   └── profiles/models.py      # AdminProfile, CompradorProfile, PromotorProfile
 │
-├── service-events/                 # Microservicio de eventos
-│   ├── events/
-│   │   ├── models.py               # Event, TicketType, Category
-│   │   ├── views.py                # CRUD eventos + tickets
-│   │   ├── serializers.py          # Serializadores con context de imagenes
-│   │   ├── permissions.py          # IsPromotor, IsAdministrador
-│   │   └── authentication.py       # Autenticador JWT cross-service
-│   ├── media/                      # Imagenes subidas
-│   └── seed_categories.py          # Categorias iniciales
+├── service-events/             # Microservicio de eventos y compras (puerto 8002)
+│   ├── events/models.py        # Event, TicketType, Category, Purchase, Seat
+│   ├── events/views.py         # CRUD eventos + compras + asientos + cola config
+│   └── seed_categories.py      # Categorías iniciales
 │
-├── frontend/                       # Next.js 16
-│   ├── src/
-│   │   ├── app/                    # App Router (Next.js)
-│   │   │   ├── layout.page.tsx     # Layout raiz con AuthProvider
-│   │   │   ├── [[...slug]]/        # Catch-all -> React Router
-│   │   │   └── admin/              # Rutas admin (App Router)
-│   │   │       ├── login/
-│   │   │       ├── dashboard/
-│   │   │       └── register/
-│   │   ├── components/
-│   │   │   └── dashboard/
-│   │   │       ├── OpcionesComprador.jsx
-│   │   │       ├── OpcionesPromotor.jsx
-│   │   │       ├── admin/          # AdminConfiguracion, AdminUsuarios, etc.
-│   │   │       └── eventos/        # CRUD eventos, explorar, detalle
-│   │   ├── context/
-│   │   │   └── AuthContext.jsx     # Estado global auth + inactividad
-│   │   ├── pages/                  # Paginas principales
-│   │   │   ├── Login.jsx
-│   │   │   ├── AdminLogin.jsx
-│   │   │   ├── Dashboard.jsx
-│   │   │   ├── PerfilUsuario.jsx
-│   │   │   ├── RecuperarPassword.jsx
-│   │   │   └── ResetPassword.jsx
-│   │   └── services/
-│   │       ├── authService.js      # Llamadas API auth
-│   │       ├── eventosService.js   # Llamadas API eventos + mapeo
-│   │       └── apiHelper.js        # Fetch wrapper con JWT
-│   └── package.json
+├── service-queue/              # Microservicio de fila virtual (puerto 8003) [Sprint 3]
+│   ├── queue_app/models.py     # QueueConfig, QueueEntry, SeatReservation, QueueLog
+│   ├── queue_app/views.py      # Endpoints de cola
+│   ├── queue_app/active_users.py  # Tracking en memoria de usuarios activos
+│   ├── queue_app/middleware.py    # Middleware de actividad
+│   ├── queue_app/management/commands/barrendero.py  # Job de limpieza
+│   └── entrypoint.sh           # Arranca barrendero + Django
 │
-└── docs/                           # Documentacion tecnica
-    ├── GUIA_GENERAL.md             # [Este archivo]
-    ├── HU-1_registro.md
-    ├── HU-2_login.md
-    ├── HU-3_dashboard_roles.md
-    ├── HU-4_administrador.md
-    ├── HU-5_seguridad_roles.md
-    ├── HU-6_recuperacion_password.md
-    ├── HU-7_gestion_eventos.md
-    ├── HU-8_gestion_entradas.md
-    ├── HU-12_explorar_eventos.md
-    ├── HU-28_perfil_usuario.md
-    ├── HU-29_eliminar_cuenta.md
-    ├── HU-31_seguridad_contrasenas.md
-    └── swagger_documentation.md
+├── frontend/src/
+│   ├── context/AuthContext.jsx # Estado global auth + inactividad + modal
+│   ├── pages/Dashboard.jsx     # Vista principal con sidebar
+│   ├── components/dashboard/eventos/
+│   │   ├── DetalleEvento.jsx   # Detalle con verificación de cola
+│   │   ├── ColaEspera.jsx      # Pantalla de espera en la cola [Sprint 3]
+│   │   └── SeatMapModal.jsx    # Mapa de asientos interactivo
+│   └── services/
+│       ├── authService.js
+│       ├── eventosService.js
+│       └── apiHelper.js        # Fetch wrapper con JWT + refresh automático
+│
+└── docs/                       # Documentación técnica
+    ├── GUIA_GENERAL.md         # [Este archivo] — Visión general del proyecto
+    ├── API_ENDPOINTS.md        # Referencia completa de todos los endpoints
+    ├── SEAT_MAP_API.md         # API del mapa de asientos (US11)
+    ├── US14_service_queue_bootstrap.md  # Setup del microservicio de cola
+    ├── US16_timeout_sesion.md  # Seguridad de sesiones JWT
+    ├── US18_activar_cola_virtual.md     # Fila virtual y middleware
+    ├── US19_posicion_eta_cola.md        # Posición y ETA en cola
+    ├── US20_barrendero_cron_job.md      # Job de limpieza de reservas
+    └── SWAGGER_SETUP_GUIDE.md  # Configuración de Swagger/OpenAPI
 ```
 
-## Enrutamiento hibrido (Next.js + React Router)
+---
 
-El frontend usa dos sistemas de enrutamiento:
-
-| Sistema | Rutas | Razon |
-|---------|-------|-------|
-| **Next.js App Router** | `/admin/*` | Aislamiento de seguridad para admin |
-| **React Router (BrowserRouter)** | Todo lo demas (`/login`, `/dashboard`, `/perfil`, etc.) | Flujo SPA para usuarios |
-
-- `src/app/[[...slug]]/page.page.tsx` es un catch-all que renderiza `App.jsx` con React Router
-- `src/app/admin/*/page.page.jsx` son rutas directas del App Router
-- **Importante:** Para navegar de React Router a App Router (ej: de `/dashboard` a `/admin/dashboard`), se debe usar `window.location.href` en vez de `navigate()` de React Router
-
-## API Endpoints principales
+## 🌐 API Endpoints Principales
 
 ### service-auth (puerto 8000)
 
-| Endpoint | Metodo | Descripcion |
-|----------|--------|-------------|
-| `/api/v1/users/register/` | POST | Registro de usuario |
-| `/api/v1/users/login/` | POST | Login general (JWT) |
-| `/api/v1/users/admin_login/` | POST | Login exclusivo admin (con bloqueo) |
-| `/api/v1/users/me/` | GET | Obtener perfil |
-| `/api/v1/users/me/` | PATCH | Actualizar perfil |
-| `/api/v1/users/me/` | DELETE | Eliminar cuenta |
-| `/api/v1/users/password_reset_request/` | POST | Solicitar recuperacion |
-| `/api/v1/users/password_reset_confirm/` | POST | Confirmar nueva password |
-| `/api/v1/users/invite_admin/` | POST | Invitar administrador |
-| `/api/v1/users/apply_admin/` | POST | Aplicar como admin (con token) |
-| `/api/v1/users/pending_admins/` | GET | Listar admins pendientes |
-| `/api/v1/users/<id>/approve_admin/` | PATCH | Aprobar admin |
-| `/api/v1/users/<id>/reject_admin/` | DELETE | Rechazar admin |
+| Endpoint | Método | Descripción | Rol |
+|----------|--------|-------------|-----|
+| `/api/v1/users/register/` | POST | Registro de usuario | Público |
+| `/api/v1/users/login/` | POST | Login con JWT | Público |
+| `/api/v1/users/admin_login/` | POST | Login exclusivo admin | Público |
+| `/api/v1/users/me/` | GET/PATCH/DELETE | Perfil propio | Autenticado |
+| `/api/v1/users/password_reset_request/` | POST | Solicitar recuperación | Público |
+| `/api/v1/users/password_reset_confirm/` | POST | Confirmar nueva password | Público |
+| `/api/v1/users/invite_admin/` | POST | Invitar administrador | Admin |
+| `/api/v1/users/pending_admins/` | GET | Listar pendientes | Admin |
+| `/api/v1/users/<id>/approve_admin/` | PATCH | Aprobar admin | Admin |
 
 ### service-events (puerto 8002)
 
-| Endpoint | Metodo | Descripcion |
-|----------|--------|-------------|
-| `/api/v1/events/` | GET/POST | Listar/crear eventos |
-| `/api/v1/events/<id>/` | GET/PATCH/DELETE | Detalle/editar/eliminar evento |
-| `/api/v1/events/by_promoter/` | GET | Eventos de un promotor |
-| `/api/v1/events/<id>/tickets/` | GET | Tickets de un evento |
-| `/api/v1/ticket-types/` | POST | Crear tipo de entrada |
-| `/api/v1/ticket-types/<id>/` | PATCH/DELETE | Editar/eliminar tipo de entrada |
-| `/api/v1/categories/` | GET | Listar categorias |
+| Endpoint | Método | Descripción | Rol |
+|----------|--------|-------------|-----|
+| `/api/v1/events/` | GET | Listar eventos activos | Público |
+| `/api/v1/events/<id>/` | GET/PATCH/DELETE | Detalle/editar/eliminar | Mixto |
+| `/api/v1/events/by_promoter/` | GET | Mis eventos | Promotor |
+| `/api/v1/events/<id>/queue-config/` | GET/PUT | Config de cola virtual | Promotor |
+| `/api/v1/ticket-types/` | POST | Crear tipo de entrada | Promotor |
+| `/api/v1/seats/` | GET | Listar asientos de evento | Autenticado |
+| `/api/v1/seats/bulk-reserve/` | POST | Reservar asientos | Comprador |
+| `/api/v1/seats/release-expired/` | POST | Liberar asientos expirados | Interno |
+| `/api/v1/purchase/` | POST | Iniciar compra | Comprador |
+| `/api/v1/purchase/<id>/simular_pago/` | POST | Simular pago QR | Comprador |
+| `/api/v1/purchases/history/` | GET | Historial de compras | Comprador |
 
-## Autenticacion JWT
+### service-queue (puerto 8003) — Sprint 3
 
-- **Access Token:** 15 minutos de vida
-- **Refresh Token:** 1 dia de vida
-- Los tokens incluyen claims personalizados: `email` y `role`
-- Los microservicios (events, profiles) validan el token directamente sin consultar auth_db
-- El frontend almacena tokens en `localStorage` (`token`, `refresh`, `user`)
+| Endpoint | Método | Descripción | Rol |
+|----------|--------|-------------|-----|
+| `/api/v1/queue-config/<event_id>/` | GET/POST | Config umbral de cola | Promotor |
+| `/api/v1/queue/<event_id>/enter/` | POST | Entrar al evento o cola | Comprador |
+| `/api/v1/queue/<event_id>/status/` | GET | Estado actual de la cola | Comprador |
+| `/api/v1/queue/<event_id>/position/` | GET | Posición y ETA en cola | Comprador |
+| `/api/v1/queue/<event_id>/leave/` | DELETE | Abandonar la cola | Comprador |
+| `/api/v1/health/` | GET | Health check del servicio | Público |
 
-## Seguridad implementada
+---
 
-1. **Passwords cifradas:** PBKDF2 + SHA256 + sal aleatoria (Django default)
-2. **Bloqueo por intentos:** 3 intentos fallidos en admin login -> bloqueo 15 min
-3. **Timeout de inactividad:** Configurable (1-60 min) desde panel admin
-4. **Anti-enumeracion:** Mensajes genericos en password reset y admin login
-5. **Permisos por rol:** Classes `IsAdministrador`, `IsPromotor`, `IsComprador` en cada microservicio
-6. **Auditoria:** `AccountDeletionLog` registra eliminaciones de cuentas
-
-## Comandos utiles
+## 🔧 Comandos Útiles
 
 ```bash
-# Levantar todo
+# Levantar todo el sistema
 docker compose up --build
 
 # Levantar en background
 docker compose up -d
 
 # Ver logs de un servicio
-docker compose logs -f service-auth
+docker compose logs -f service-queue
 
 # Reiniciar un servicio
-docker compose restart service-auth
+docker compose restart service-events
 
 # Ejecutar seeds
 docker compose exec service-auth python seed_users.py
 docker compose exec service-events python seed_categories.py
 
+# Aplicar migraciones manualmente
+docker compose exec service-events python manage.py migrate
+docker compose exec service-queue python manage.py migrate
+
+# Ejecutar el barrendero una sola vez (para pruebas)
+docker compose exec service-queue python manage.py barrendero
+
+# Ejecutar barrendero en modo daemon manual
+docker compose exec service-queue python manage.py barrendero --daemon --interval 30
+
 # Shell de Django
 docker compose exec service-auth python manage.py shell
-
-# Ver passwords hasheadas en BD
-docker compose exec service-auth python manage.py shell -c "from users.models import User; [print(u.email, '->', u.password) for u in User.objects.all()]"
-
-# Ver logs de eliminacion de cuentas
-docker compose exec service-auth python manage.py shell -c "from users.models import AccountDeletionLog; [print(l.user_email, l.deleted_at) for l in AccountDeletionLog.objects.all()]"
 
 # Eliminar todo (incluyendo datos)
 docker compose down -v
 ```
 
-## Indice de documentacion
+---
 
-| Documento | Historia de Usuario | Descripcion |
-|-----------|-------------------|-------------|
-| [HU-1_registro.md](HU-1_registro.md) | HU-1 | Registro de usuarios |
-| [HU-2_login.md](HU-2_login.md) | HU-2 | Login con JWT |
-| [HU-3_dashboard_roles.md](HU-3_dashboard_roles.md) | HU-3 | Dashboard diferenciado por rol |
-| [HU-4_administrador.md](HU-4_administrador.md) | HU-4 | Acceso y gestion de administradores |
-| [HU-5_seguridad_roles.md](HU-5_seguridad_roles.md) | HU-5 | Seguridad y permisos entre microservicios |
-| [HU-6_recuperacion_password.md](HU-6_recuperacion_password.md) | HU-6 | Recuperacion de contrasena |
-| [HU-7_gestion_eventos.md](HU-7_gestion_eventos.md) | HU-7 | CRUD de eventos (Promotor) |
-| [HU-8_gestion_entradas.md](HU-8_gestion_entradas.md) | HU-8 | Gestion de tipos de entrada |
-| [HU-12_explorar_eventos.md](HU-12_explorar_eventos.md) | HU-12 | Explorar eventos (Comprador) |
-| [HU-28_perfil_usuario.md](HU-28_perfil_usuario.md) | HU-28 | Actualizar perfil de usuario |
-| [HU-29_eliminar_cuenta.md](HU-29_eliminar_cuenta.md) | HU-29 | Eliminar cuenta voluntariamente |
-| [HU-31_seguridad_contrasenas.md](HU-31_seguridad_contrasenas.md) | HU-31 | Cifrado de contrasenas |
-| [swagger_documentation.md](swagger_documentation.md) | - | Documentacion API automatica |
+## 📚 Índice de Documentación
+
+| Documento | Sprint | Descripción |
+|-----------|--------|-------------|
+| [GUIA_GENERAL.md](GUIA_GENERAL.md) | — | **Este archivo** — Visión general |
+| [API_ENDPOINTS.md](API_ENDPOINTS.md) | — | Referencia completa de endpoints |
+| **Sprints anteriores** | | |
+| [HU-1_registro.md](HU-1_registro.md) | 1 | Registro de usuarios |
+| [HU-2_login.md](HU-2_login.md) | 1 | Login con JWT |
+| [HU-4_administrador.md](HU-4_administrador.md) | 1 | Panel de administrador |
+| [HU-7_gestion_eventos.md](HU-7_gestion_eventos.md) | 1 | CRUD de eventos |
+| [HU-17_pago_qr.md](HU-17_pago_qr.md) | 2 | Pago con QR |
+| [HU-32_historial_compras.md](HU-32_historial_compras.md) | 2 | Historial de compras |
+| **Sprint 3 — Fila Virtual** | | |
+| [US16_timeout_sesion.md](US16_timeout_sesion.md) | 3 | Seguridad JWT e inactividad |
+| [SEAT_MAP_API.md](SEAT_MAP_API.md) | 3 | API del mapa de asientos |
+| [US14_service_queue_bootstrap.md](US14_service_queue_bootstrap.md) | 3 | Setup del microservicio de cola |
+| [US18_activar_cola_virtual.md](US18_activar_cola_virtual.md) | 3 | Fila virtual y middleware |
+| [US19_posicion_eta_cola.md](US19_posicion_eta_cola.md) | 3 | Posición y ETA en cola |
+| [US20_barrendero_cron_job.md](US20_barrendero_cron_job.md) | 3 | Job de limpieza de reservas |
+| [SWAGGER_SETUP_GUIDE.md](SWAGGER_SETUP_GUIDE.md) | — | Configuración de Swagger |
