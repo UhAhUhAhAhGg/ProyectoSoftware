@@ -16,7 +16,7 @@ COPY . .
 
 # Script de arranque: lanza el barrendero en background y luego runserver
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 # Exponer puerto
 EXPOSE 8000
