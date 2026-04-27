@@ -1481,3 +1481,53 @@ class PurchaseCancelView(APIView):
             "purchase_id": str(purchase.id),
         }, status=200)
 
+
+class SeatReleaseExpiredView(APIView):
+    """
+    TIC-335, TIC-338: POST /api/v1/seats/release-expired/
+    Endpoint interno para que el barrendero (service-queue) libere un asiento expirado.
+    Recibe el seat_id y lo marca como 'available'.
+    Solo accesible desde microservicios internos (verificado por JWT de servicio).
+    """
+    permission_classes = []  # Llamada interna entre microservicios
+    authentication_classes = []
+
+    def post(self, request):
+        seat_id = request.data.get('seat_id')
+        if not seat_id:
+            return Response({"error": "seat_id es requerido."}, status=400)
+
+        try:
+            seat = Seat.objects.get(id=seat_id)
+        except Seat.DoesNotExist:
+            return Response({"error": f"Asiento {seat_id} no encontrado."}, status=404)
+
+        if seat.status == 'available':
+            # Ya está disponible, idempotente
+            return Response({"status": "ok", "message": "El asiento ya estaba disponible."}, status=200)
+
+        # Registrar en audit log antes de liberar (TIC-339)
+        purchase = getattr(seat, 'purchase', None)
+        SeatAuditLog.objects.create(
+            seat=seat,
+            purchase=purchase,
+            action='released',
+            reason='Liberado por barrendero (timeout expirado)',
+        )
+
+        # Liberar el asiento (TIC-335, TIC-338)
+        seat.status = 'available'
+        seat.reserved_by = None
+        if hasattr(seat, 'reserved_at'):
+            seat.reserved_at = None
+        if hasattr(seat, 'purchase'):
+            seat.purchase = None
+        seat.save()
+
+        return Response({
+            "status": "ok",
+            "seat_id": str(seat_id),
+            "message": "Asiento liberado correctamente.",
+        }, status=200)
+
+
