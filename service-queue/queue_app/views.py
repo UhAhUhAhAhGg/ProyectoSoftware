@@ -210,6 +210,33 @@ def _calculate_avg_transaction_time(event_id: str) -> float:
     return default_minutes
 
 
+class QueueStatusView(APIView):
+    """
+    GET /api/v1/queue/{event_id}/status/
+    Retorna el estado actual de la cola para que el frontend decida qué mostrar.
+    No requiere que el usuario esté en la cola — es informativo.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, event_id):
+        event_id = str(event_id)
+
+        try:
+            config = QueueConfig.objects.get(event_id=event_id)
+        except QueueConfig.DoesNotExist:
+            return Response({"is_queue_active": False, "users_waiting": 0}, status=200)
+
+        users_waiting = QueueEntry.objects.filter(event_id=event_id, status='waiting').count()
+        active_count = get_active_users_count(event_id)
+
+        return Response({
+            "is_queue_active": config.is_queue_active or active_count >= config.max_concurrent_users,
+            "users_waiting": users_waiting,
+            "users_admitted": active_count,
+            "max_concurrent_users": config.max_concurrent_users
+        }, status=200)
+
+
 class QueuePositionView(APIView):
     """
     TIC-309: GET /api/v1/queue/{event_id}/position/
