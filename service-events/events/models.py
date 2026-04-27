@@ -4,6 +4,11 @@ from django.db import models
 from django.db import models
 from django.utils import timezone
 from datetime import timedelta
+from django.conf import settings
+import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def generate_backup_code():
@@ -227,18 +232,26 @@ class Purchase(models.Model):
         ]
 
     def release_seats(self):
-        """
-        HU Subtarea: Liberar asientos.
-        Cambia el estado de los asientos vinculados de 'reserved' a 'available'
-        y elimina la referencia a esta compra.
-        """
-        # Verifica si existe la relación inversa 'allocated_seats' desde el modelo Seat
-        if hasattr(self, 'allocated_seats'):
-            seats = self.allocated_seats.all()
-            if seats.exists():
-                seats.update(status='available', purchase=None)
-                return True
-        return False
+    """
+    Libera asientos y registra audit log
+    """
+    if hasattr(self, 'allocated_seats'):
+        seats = self.allocated_seats.all()
+
+        if seats.exists():
+            for seat in seats:
+                # 🔥 Crear log antes de liberar
+                SeatAuditLog.objects.create(
+                    seat=seat,
+                    purchase=self,
+                    action='released',
+                    reason='Compra expirada'
+                )
+
+            seats.update(status='available', purchase=None)
+            return True
+
+    return False
 
     def check_expiration(self):
         """
@@ -427,3 +440,21 @@ class TicketInstance(models.Model):
 
     def __str__(self):
         return f"Ticket {self.backup_code} - {self.event.name}"
+    
+class SeatAuditLog(models.Model):
+    ACTION_CHOICES = [
+        ('released', 'Released'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    seat = models.ForeignKey('Seat', on_delete=models.CASCADE)
+    purchase = models.ForeignKey('Purchase', on_delete=models.SET_NULL, null=True, blank=True)
+
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    reason = models.CharField(max_length=255)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.seat} - {self.action} - {self.created_at}"
