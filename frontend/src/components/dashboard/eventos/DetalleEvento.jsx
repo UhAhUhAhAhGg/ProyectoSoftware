@@ -1,11 +1,14 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
 import VenueLayoutPreview from './VenueLayoutPreview';
 import ModalPagoQR from './ModalPagoQR';
 import SeatMapModal from '../../eventos/SeatMapModal';
+import ColaEspera from './ColaEspera';
 import './DetalleEvento.css';
 import WaitlistBanner from '../../WaitlistBanner';
+
+const QUEUE_URL = process.env.REACT_APP_QUEUE_URL || 'http://localhost:8003';
 
 function DetalleEvento() {
   const { id } = useParams();
@@ -23,6 +26,12 @@ function DetalleEvento() {
   const [selectedTicketType, setSelectedTicketType] = useState(null);
   const [mostrarSeatMap, setMostrarSeatMap] = useState(false);
   const [yaCompro, setYaCompro] = useState(false);
+
+  // Estados para la cola virtual (HS18)
+  const [verificandoCola, setVerificandoCola] = useState(false);
+  const [enCola, setEnCola] = useState(false);
+  const [colaInfo, setColaInfo] = useState(null); // { position, estimated_wait_minutes, queue_entry_id }
+  const [colaError, setColaError] = useState('');
 
   useEffect(() => {
     const cargar = async () => {
@@ -121,6 +130,74 @@ function DetalleEvento() {
       setErrorCompra('No se pudo salir de la cola. Intenta nuevamente.');
     }
   };
+
+  // HS18: Verificar acceso con service-queue antes de mostrar el SeatMap
+  const verificarAccesoConCola = useCallback(async (ticketType, accionSinAsientos) => {
+    const token = localStorage.getItem('token');
+    if (!token || !id) {
+      // Sin token o sin evento, continuar normal
+      if (accionSinAsientos) accionSinAsientos();
+      else { setSelectedTicketType(ticketType); setMostrarSeatMap(true); }
+      return;
+    }
+
+    setVerificandoCola(true);
+    setColaError('');
+    try {
+      const res = await fetch(`${QUEUE_URL}/api/v1/queue/${id}/enter/`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+
+      if (res.status === 403) {
+        // Tiempo de acceso expirado
+        setColaError(data.error || 'Tu tiempo en la cola ha expirado.');
+        return;
+      }
+
+      if (data.queued) {
+        // Mandar a la cola de espera
+        setEnCola(true);
+        setColaInfo({
+          position: data.position,
+          estimated_wait_minutes: data.estimated_wait_minutes,
+          queue_entry_id: data.queue_entry_id,
+        });
+      } else {
+        // Acceso libre — continuar al SeatMap o compra directa
+        if (accionSinAsientos) {
+          accionSinAsientos();
+        } else {
+          setSelectedTicketType(ticketType);
+          setMostrarSeatMap(true);
+        }
+      }
+    } catch (err) {
+      // Si service-queue no está disponible, permitir acceso (fail-open)
+      console.warn('service-queue no disponible, permitiendo acceso:', err);
+      if (accionSinAsientos) accionSinAsientos();
+      else { setSelectedTicketType(ticketType); setMostrarSeatMap(true); }
+    } finally {
+      setVerificandoCola(false);
+    }
+  }, [id]);
+
+  // Cuando el usuario es admitido desde la ColaEspera
+  const handleAdmitidoDesdeCola = useCallback(() => {
+    setEnCola(false);
+    setColaInfo(null);
+    if (selectedTicketType) {
+      setMostrarSeatMap(true);
+    }
+  }, [selectedTicketType]);
+
+  // Si hubo error de expiración en la ColaEspera
+  const handleErrorDesdeCola = useCallback((msg) => {
+    setEnCola(false);
+    setColaInfo(null);
+    setColaError(msg);
+  }, []);
   if (cargando) {
     return (
       <section className="detalle-evento estado-vacio">
@@ -198,27 +275,33 @@ function DetalleEvento() {
                     </span>
                   </div>
                   
-                  {/* AQUÍ ESTÁ EL BOTÓN DE COMPRA O SELECCIÓN DE ASIENTOS */}
-                  <button 
+                  {/* BOTÓN DE COMPRA — Pasa por la cola virtual (HS18) */}
+                  {colaError && (
+                    <div style={{ fontSize: '0.78rem', color: '#ef9a9a', marginBottom: '6px' }}>
+                      {colaError}
+                    </div>
+                  )}
+                  <button
                     onClick={() => {
                       if (t.filas && t.asientosPorFila) {
-                        setSelectedTicketType(t);
-                        setMostrarSeatMap(true);
+                        // Con mapa de asientos → verificar cola primero
+                        verificarAccesoConCola(t, null);
                       } else {
-                        handlePagarConQR(t.id, 1);
+                        // Sin mapa → verificar cola y luego compra directa
+                        verificarAccesoConCola(t, () => handlePagarConQR(t.id, 1));
                       }
                     }}
-                    disabled={cargandoCompra || t.disponibles <= 0 || yaCompro}
+                    disabled={cargandoCompra || verificandoCola || t.disponibles <= 0 || yaCompro}
                     style={{
                       padding: '8px 16px',
-                      background: (cargandoCompra || t.disponibles <= 0 || yaCompro) ? '#ccc' : '#28a745',
+                      background: (cargandoCompra || verificandoCola || t.disponibles <= 0 || yaCompro) ? '#ccc' : '#28a745',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
-                      cursor: (cargandoCompra || t.disponibles <= 0 || yaCompro) ? 'not-allowed' : 'pointer'
+                      cursor: (cargandoCompra || verificandoCola || t.disponibles <= 0 || yaCompro) ? 'not-allowed' : 'pointer'
                     }}
                   >
-                    {cargandoCompra ? 'Procesando...' : (yaCompro ? 'Ya compraste entrada' : (t.filas && t.asientosPorFila ? 'Seleccionar Asientos' : 'Comprar'))}
+                    {verificandoCola ? 'Verificando disponibilidad...' : cargandoCompra ? 'Procesando...' : (yaCompro ? 'Ya compraste entrada' : (t.filas && t.asientosPorFila ? 'Seleccionar Asientos' : 'Comprar'))}
                   </button>
                 </div>
               ))}
@@ -256,6 +339,18 @@ function DetalleEvento() {
             setMostrarSeatMap(false);
             handlePagarConQR(selectedTicketType.id, selectedSeats.length || 1);
           }}
+        />
+      )}
+
+      {/* PANTALLA DE COLA VIRTUAL (HS18) */}
+      {enCola && colaInfo && (
+        <ColaEspera
+          eventId={id}
+          queueEntryId={colaInfo.queue_entry_id}
+          posicionInicial={colaInfo.position}
+          etaInicial={colaInfo.estimated_wait_minutes}
+          onAdmitido={handleAdmitidoDesdeCola}
+          onError={handleErrorDesdeCola}
         />
       )}
     </section>
