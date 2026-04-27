@@ -36,6 +36,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'queue_app.middleware.ActiveUserTrackingMiddleware',
 ]
 
 ROOT_URLCONF = 'queue_config.urls'
