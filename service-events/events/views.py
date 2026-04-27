@@ -736,7 +736,8 @@ class PurchaseView(APIView):
             }, status=status.HTTP_409_CONFLICT)
 
         total_price = ticket.price * quantity
-        expires_at = timezone.now() + timedelta(minutes=15)
+        # 👇 CAMBIADO A 1 MINUTO PARA PRUEBAS
+        expires_at = timezone.now() + timedelta(minutes=1)
 
         purchase = Purchase.objects.create(
             user_id=user_id,
@@ -791,7 +792,8 @@ class SimularPagoView(APIView):
         if purchase.status == 'cancelled':
             return Response({"error": "Esta orden fue cancelada"}, status=400)
 
-        expires_at = purchase.created_at + timedelta(minutes=15)
+        # 👇 CAMBIADO A 1 MINUTO PARA PRUEBAS
+        expires_at = purchase.created_at + timedelta(minutes=1)
         if timezone.now() > expires_at:
             purchase.status = 'cancelled'
             purchase.save()
@@ -870,7 +872,8 @@ class PurchaseStatusView(APIView):
         if str(purchase.user_id) != str(request.user.id):
             return Response({"error": "No autorizado"}, status=403)
 
-        expires_at = purchase.created_at + timedelta(minutes=15)
+        # 👇 CAMBIADO A 1 MINUTO PARA PRUEBAS
+        expires_at = purchase.created_at + timedelta(minutes=1)
 
         if purchase.status == 'pending' and timezone.now() > expires_at:
             purchase.status = 'cancelled'

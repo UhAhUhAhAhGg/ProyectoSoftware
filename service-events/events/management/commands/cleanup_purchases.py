@@ -20,8 +20,8 @@ class Command(BaseCommand):
         parser.add_argument(
             '--timeout',
             type=int,
-            default=15,
-            help='Minutos de timeout para considerar una compra expirada (default: 15)',
+            default=1,
+            help='Minutos de timeout para considerar una compra expirada (default: 1)',
         )
 
     def handle(self, *args, **options):
@@ -51,4 +51,4 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 f'\n[cleanup_purchases] {count}/{total} compra(s) expirada(s) y asientos liberados.'
             )
-        )
+        )
