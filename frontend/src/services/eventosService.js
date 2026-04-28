@@ -365,4 +365,36 @@ export const eventosService = {
     }
     return data;
   },
+
+  // ===== CONFIGURACIÓN DE COLA VIRTUAL =====
+
+  getQueueConfig: async (eventoId) => {
+    const res = await apiFetch(
+      `${EVENTS_URL}/api/v1/queue-config/${eventoId}/`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.data ?? null;
+  },
+
+  updateQueueConfig: async (eventoId, config) => {
+    const res = await apiFetch(
+      `${EVENTS_URL}/api/v1/queue-config/${eventoId}/`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          waitlist_threshold: config.umbral,
+          payment_timeout_minutes: config.timeoutMinutos,
+        }),
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(
+        data.message || 'No se pudo actualizar la configuración.'
+      );
+    }
+    return data.data;
+  },
 };

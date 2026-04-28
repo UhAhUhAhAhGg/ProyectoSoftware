@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CategoryViewSet, EventViewSet, TicketTypeViewSet, PurchaseView, SimularPagoView, PurchaseStatusView, SeatConfigurationView, ValidateTicketView, WaitlistView, LogoutView, PurchaseHistoryView, PurchaseDetailView, PurchaseDownloadPDFView, PurchaseCancelView, SeatListView, SeatReserveView, SeatBulkReserveView
+from .views import CategoryViewSet, EventViewSet, TicketTypeViewSet, PurchaseView, SimularPagoView, PurchaseStatusView, SeatConfigurationView, ValidateTicketView, WaitlistView, LogoutView, PurchaseHistoryView, PurchaseDetailView, PurchaseDownloadPDFView, PurchaseCancelView, SeatListView, SeatReserveView, SeatBulkReserveView, QueueConfigView
 
 app_name = 'events'
 
@@ -33,4 +33,6 @@ urlpatterns = [
     path('seats/', SeatListView.as_view(), name='seat-list'),
     path('seats/bulk-reserve/', SeatBulkReserveView.as_view(), name='seat-bulk-reserve'),
     path('seats/<uuid:seat_id>/reserve/', SeatReserveView.as_view(), name='seat-reserve'),
+    # Configuración de cola virtual (TIC-14)
+    path('queue-config/<uuid:event_id>/', QueueConfigView.as_view(), name='queue-config'),
 ]

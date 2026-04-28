@@ -56,6 +56,9 @@ class Event(models.Model):
     # Lista de espera
     waitlist_threshold = models.IntegerField(default=90)  # porcentaje
     waitlist_active = models.BooleanField(default=False)
+    
+    # Timeout de pago en minutos para la cola virtual
+    payment_timeout_minutes = models.IntegerField(default=15)
 
     class Meta:
         verbose_name = 'Event'
@@ -328,4 +331,4 @@ class Seat(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.seat_code} ({self.get_status_display()}) — {self.ticket_type.name}"
+        return f"{self.seat_code} ({self.get_status_display()}) — {self.ticket_type.name}"
