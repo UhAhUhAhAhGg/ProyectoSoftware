@@ -397,4 +397,29 @@ export const eventosService = {
     }
     return data.data;
   },
+
+  // ===== LISTA DE ESPERA =====
+
+  getEstadoWaitlist: async (eventoId) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/waitlist/?event_id=${eventoId}`);
+    if (!res.ok) return { enCola: false, posicion: null };
+    const data = await res.json();
+    return {
+      enCola: data.en_cola ?? false,
+      posicion: data.posicion ?? null,
+    };
+  },
+
+  unirseWaitlist: async (eventoId) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/waitlist/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: eventoId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'No se pudo unirse a la lista de espera.');
+    }
+    return data;
+  },
 };

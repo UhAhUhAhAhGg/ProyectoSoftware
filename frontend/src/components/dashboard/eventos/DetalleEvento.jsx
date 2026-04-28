@@ -24,6 +24,10 @@ function DetalleEvento() {
   const [mostrarSeatMap, setMostrarSeatMap] = useState(false);
   const [yaCompro, setYaCompro] = useState(false);
 
+  // Estado de cola virtual
+  const [enCola, setEnCola] = useState(false);
+  const [posicionCola, setPosicionCola] = useState(null);
+
   useEffect(() => {
     const cargar = async () => {
       try {
@@ -33,6 +37,7 @@ function DetalleEvento() {
         const token = localStorage.getItem('token');
         if (token) {
           try {
+            // Verificar historial de compras
             const res = await fetch(`${process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002'}/api/v1/purchases/history/?event_id=${id}`, {
               headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -41,6 +46,11 @@ function DetalleEvento() {
               const hasBought = history.results && history.results.some(p => p.event_id === id && (p.status === 'active' || p.status === 'pending'));
               setYaCompro(hasBought);
             }
+
+            // Verificar si el usuario ya está en lista de espera
+            const estadoCola = await eventosService.getEstadoWaitlist(id);
+            setEnCola(estadoCola.enCola);
+            setPosicionCola(estadoCola.posicion);
           } catch (err) { /* ignorar error de red en historial */ }
         }
       } catch {
@@ -177,6 +187,35 @@ function DetalleEvento() {
             subtitulo="Consulta las zonas disponibles antes de seleccionar tu entrada."
           />
 
+          {/* BANNER DE COLA VIRTUAL - Mostrar si el usuario ya está en cola al cargar */}
+          {enCola && (
+            <div style={{
+              backgroundColor: '#fffbeb',
+              border: '2px solid #f59e0b',
+              borderRadius: '8px',
+              padding: '16px 20px',
+              marginBottom: '16px',
+            }}>
+              <p style={{
+                fontWeight: '700',
+                color: '#92400e',
+                fontSize: '15px',
+                margin: '0 0 6px 0',
+              }}>
+                ⏳ Estás en la lista de espera
+              </p>
+              {posicionCola && (
+                <p style={{ margin: '0 0 4px 0', color: '#78350f', fontSize: '14px' }}>
+                  <strong>Tu posición:</strong> #{posicionCola}
+                </p>
+              )}
+              <p style={{ margin: '0', color: '#78350f', fontSize: '13px' }}>
+                La compra de entradas está deshabilitada mientras estás en cola.
+                Serás notificado cuando sea tu turno.
+              </p>
+            </div>
+          )}
+
           {evento.tiposEntrada?.length > 0 && (
             <div className="tipos-entrada">
               <h3>Tipos de entrada</h3>
@@ -198,9 +237,13 @@ function DetalleEvento() {
                     </span>
                   </div>
                   
-                  {/* AQUÍ ESTÁ EL BOTÓN DE COMPRA O SELECCIÓN DE ASIENTOS */}
+                  {/* BOTÓN DE COMPRA O SELECCIÓN DE ASIENTOS - DESHABILITADO SI ESTÁ EN COLA */}
                   <button 
                     onClick={() => {
+                      if (enCola) {
+                        setErrorCompra('Estás en lista de espera. No puedes comprar hasta que sea tu turno.');
+                        return;
+                      }
                       if (t.filas && t.asientosPorFila) {
                         setSelectedTicketType(t);
                         setMostrarSeatMap(true);
@@ -208,17 +251,18 @@ function DetalleEvento() {
                         handlePagarConQR(t.id, 1);
                       }
                     }}
-                    disabled={cargandoCompra || t.disponibles <= 0 || yaCompro}
+                    disabled={cargandoCompra || t.disponibles <= 0 || yaCompro || enCola}
                     style={{
                       padding: '8px 16px',
-                      background: (cargandoCompra || t.disponibles <= 0 || yaCompro) ? '#ccc' : '#28a745',
+                      background: (cargandoCompra || t.disponibles <= 0 || yaCompro || enCola) ? '#ccc' : '#28a745',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
-                      cursor: (cargandoCompra || t.disponibles <= 0 || yaCompro) ? 'not-allowed' : 'pointer'
+                      cursor: (cargandoCompra || t.disponibles <= 0 || yaCompro || enCola) ? 'not-allowed' : 'pointer'
                     }}
+                    title={enCola ? 'Estás en lista de espera. Compra deshabilitada.' : ''}
                   >
-                    {cargandoCompra ? 'Procesando...' : (yaCompro ? 'Ya compraste entrada' : (t.filas && t.asientosPorFila ? 'Seleccionar Asientos' : 'Comprar'))}
+                    {cargandoCompra ? 'Procesando...' : (enCola ? '🔒 En lista de espera' : (yaCompro ? 'Ya compraste entrada' : (t.filas && t.asientosPorFila ? 'Seleccionar Asientos' : 'Comprar')))}
                   </button>
                 </div>
               ))}

@@ -1238,6 +1238,35 @@ class WaitlistView(APIView):
     """Endpoint para gestionar lista de espera."""
     permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        """Consultar si el usuario ya está en lista de espera para un evento."""
+        event_id = request.query_params.get("event_id")
+        if not event_id:
+            return Response(
+                {"error": "event_id es requerido"},
+                status=400
+            )
+
+        event = get_object_or_404(Event, id=event_id)
+        user_id = request.user.id
+
+        entrada = Waitlist.objects.filter(
+            event=event,
+            user_id=user_id
+        ).first()
+
+        if entrada:
+            return Response({
+                "en_cola": True,
+                "posicion": entrada.position,
+                "status": entrada.status,
+            }, status=200)
+
+        return Response({
+            "en_cola": False,
+            "posicion": None,
+        }, status=200)
+
     def post(self, request):
         event_id = request.data.get("event_id")
         event = get_object_or_404(Event, id=event_id)

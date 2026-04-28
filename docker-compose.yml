@@ -148,7 +148,10 @@ services:
     volumes:
       - ./service-events:/app
     command: >
-      sh -c "python manage.py makemigrations events &&
+      sh -c "python manage.py makemigrations --merge --noinput ||
+             true;
+             python manage.py makemigrations events ||
+             true;
              python manage.py migrate &&
              python manage.py runserver 0.0.0.0:8000"
 
