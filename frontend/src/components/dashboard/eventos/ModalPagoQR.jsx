@@ -2,19 +2,30 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { eventosService } from '../../../services/eventosService';
 import { useNavigate } from 'react-router-dom';
 
-export default function ModalPagoQR({ ordenData, onCerrar }) {
+export default function ModalPagoQR({ ordenData, seatStartTime, onCerrar }) {
   const navigate = useNavigate();
-  const [tiempoRestante, setTiempoRestante] = useState('1:00');
-  const [estadoPago, setEstadoPago] = useState('pending'); // pending | active | cancelled | expired
+  const [tiempoRestante, setTiempoRestante] = useState('--:--');
+  const [estadoPago, setEstadoPago] = useState('pending');
   const [datosTicket, setDatosTicket] = useState(null);
   const [simulando, setSimulando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Cronómetro de expiración
+  // Calcula la fecha real de expiración:
+  // Si tenemos el momento en que el usuario abrió el mapa de asientos + timeout configurado
+  // → la expiración real es seatStartTime + timeout, no la fecha del servidor (que es cuando se creó la compra)
+  const getRealExpiresAt = () => {
+    if (seatStartTime && ordenData.payment_timeout_minutes) {
+      return seatStartTime + ordenData.payment_timeout_minutes * 60 * 1000;
+    }
+    // Fallback: usar expires_at del servidor
+    return ordenData.expires_at ? new Date(ordenData.expires_at).getTime() : Date.now() + 60000;
+  };
+
+  // Cronómetro de expiración — arranca desde la selección de asientos
   useEffect(() => {
     if (estadoPago !== 'pending') return;
-    const fechaExp = new Date(ordenData.expires_at).getTime();
+    const fechaExp = getRealExpiresAt();
     const intervalo = setInterval(() => {
       const diff = fechaExp - Date.now();
       if (diff <= 0) {
@@ -28,7 +39,8 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
       }
     }, 1000);
     return () => clearInterval(intervalo);
-  }, [ordenData.expires_at, estadoPago]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estadoPago]);
 
   // Polling de estado cada 3 segundos
   const consultarEstado = useCallback(async () => {

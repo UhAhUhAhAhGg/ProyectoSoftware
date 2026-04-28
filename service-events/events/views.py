@@ -752,7 +752,7 @@ class PurchaseView(APIView):
 
         total_price = ticket.price * quantity
         # 👇 CAMBIADO A 1 MINUTO PARA PRUEBAS
-        expires_at = timezone.now() + timedelta(minutes=1)
+        expires_at = timezone.now() + timedelta(minutes=event.payment_timeout_minutes)
 
         purchase = Purchase.objects.create(
             user_id=user_id,
@@ -781,6 +781,7 @@ class PurchaseView(APIView):
                 "total": float(total_price),
                 "payment_qr": payment_qr_base64,
                 "expires_at": expires_at.isoformat(),
+                "payment_timeout_minutes": event.payment_timeout_minutes,
                 "event_name": event.name,
                 "ticket_type_name": ticket.name,
             }
@@ -807,12 +808,13 @@ class SimularPagoView(APIView):
         if purchase.status == 'cancelled':
             return Response({"error": "Esta orden fue cancelada"}, status=400)
 
-        # 👇 CAMBIADO A 1 MINUTO PARA PRUEBAS
-        expires_at = purchase.created_at + timedelta(minutes=1)
+        # Validar expiración usando el timeout configurado por el promotor
+        payment_timeout = purchase.event.payment_timeout_minutes
+        expires_at = purchase.created_at + timedelta(minutes=payment_timeout)
         if timezone.now() > expires_at:
             purchase.status = 'cancelled'
             purchase.save()
-            return Response({"error": "El tiempo de pago expiró. Genera una nueva orden."}, status=410)
+            return Response({"error": f"El tiempo de pago expiró ({payment_timeout} min). Genera una nueva orden."}, status=410)
 
         backup_code = secrets.token_hex(5).upper()
         qr_code_base64 = None

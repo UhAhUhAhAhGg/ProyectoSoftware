@@ -26,6 +26,7 @@ function DetalleEvento() {
   const [selectedTicketType, setSelectedTicketType] = useState(null);
   const [mostrarSeatMap, setMostrarSeatMap] = useState(false);
   const [yaCompro, setYaCompro] = useState(false);
+  const seatSelectionStart = useRef(null); // HS18: registra cuándo entró al mapa de asientos
 
   // Estados para la cola virtual (HS18)
   const [verificandoCola, setVerificandoCola] = useState(false);
@@ -136,6 +137,7 @@ function DetalleEvento() {
     const token = localStorage.getItem('token');
     if (!token || !id) {
       // Sin token o sin evento, continuar normal
+      seatSelectionStart.current = Date.now();
       if (accionSinAsientos) accionSinAsientos();
       else { setSelectedTicketType(ticketType); setMostrarSeatMap(true); }
       return;
@@ -151,12 +153,12 @@ function DetalleEvento() {
       const data = await res.json();
 
       if (res.status === 403) {
-        // Tiempo de acceso expirado
         setColaError(data.error || 'Tu tiempo en la cola ha expirado.');
         return;
       }
 
-      if (data.queued) {
+      // FIX: el backend devuelve can_proceed, no queued
+      if (data.can_proceed === false) {
         // Mandar a la cola de espera
         setEnCola(true);
         setColaInfo({
@@ -165,7 +167,8 @@ function DetalleEvento() {
           queue_entry_id: data.queue_entry_id,
         });
       } else {
-        // Acceso libre — continuar al SeatMap o compra directa
+        // Acceso libre — registrar inicio y continuar al SeatMap o compra directa
+        seatSelectionStart.current = Date.now();
         if (accionSinAsientos) {
           accionSinAsientos();
         } else {
@@ -176,6 +179,7 @@ function DetalleEvento() {
     } catch (err) {
       // Si service-queue no está disponible, permitir acceso (fail-open)
       console.warn('service-queue no disponible, permitiendo acceso:', err);
+      seatSelectionStart.current = Date.now();
       if (accionSinAsientos) accionSinAsientos();
       else { setSelectedTicketType(ticketType); setMostrarSeatMap(true); }
     } finally {
@@ -324,6 +328,7 @@ function DetalleEvento() {
       {mostrarModal && ordenCompra && (
         <ModalPagoQR
           ordenData={ordenCompra}
+          seatStartTime={seatSelectionStart.current}
           onCerrar={() => { setMostrarModal(false); setOrdenCompra(null); }}
         />
       )}
