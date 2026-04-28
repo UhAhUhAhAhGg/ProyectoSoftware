@@ -31,19 +31,17 @@ function ColaEspera({ eventId, queueEntryId, posicionInicial, etaInicial, onAdmi
     if (!token || !eventId) return;
 
     try {
-      const res = await fetch(`${QUEUE_URL}/api/v1/queue/${eventId}/enter/`, {
-        method: 'POST',
+      const res = await fetch(`${QUEUE_URL}/api/v1/queue/${eventId}/position/`, {
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
         },
       });
 
       const data = await res.json();
 
-      if (res.status === 403) {
-        // Tiempo expirado
-        onError && onError(data.error || 'Tu tiempo en la cola ha expirado.');
+      if (data.status === 'expired') {
+        onError && onError('Tu tiempo en la cola ha expirado.');
         return;
       }
 

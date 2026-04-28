@@ -137,6 +137,7 @@ services:
       SECRET_KEY: "django-insecure-your-secret-key-change-this"
       DJANGO_SETTINGS_MODULE: events_config.settings   # ✅ AGREGAR
       AUTH_SERVICE_URL: "http://service-auth:8000"
+      QUEUE_SERVICE_URL: "http://service-queue:8000"
       EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
       EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
       DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-TicketProject <noreply@ticketproject.com>}

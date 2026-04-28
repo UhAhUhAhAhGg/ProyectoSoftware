@@ -21,6 +21,7 @@ function DetalleEvento() {
   const [errorCompra, setErrorCompra] = useState('');
   const [waitlistInfo, setWaitlistInfo] = useState(null);
   const waitlistPollRef = useRef(null);
+  const pendingColaActionRef = useRef(null); // acción a ejecutar cuando el usuario sea admitido
 
   // Estados para el mapa de asientos interactivo
   const [selectedTicketType, setSelectedTicketType] = useState(null);
@@ -157,7 +158,9 @@ function DetalleEvento() {
       }
 
       if (data.queued) {
-        // Mandar a la cola de espera
+        // Guardar contexto para cuando sea admitido
+        setSelectedTicketType(ticketType);
+        pendingColaActionRef.current = accionSinAsientos || null;
         setEnCola(true);
         setColaInfo({
           position: data.position,
@@ -187,7 +190,13 @@ function DetalleEvento() {
   const handleAdmitidoDesdeCola = useCallback(() => {
     setEnCola(false);
     setColaInfo(null);
-    if (selectedTicketType) {
+    const action = pendingColaActionRef.current;
+    pendingColaActionRef.current = null;
+    if (action) {
+      // Ticket sin mapa de asientos → compra directa
+      action();
+    } else if (selectedTicketType) {
+      // Ticket con mapa de asientos → abrir SeatMap
       setMostrarSeatMap(true);
     }
   }, [selectedTicketType]);
@@ -198,6 +207,21 @@ function DetalleEvento() {
     setColaInfo(null);
     setColaError(msg);
   }, []);
+
+  // Liberar slot en service-queue al cerrar el SeatMap sin comprar
+  const handleCancelSeatMap = useCallback(async () => {
+    setMostrarSeatMap(false);
+    setSelectedTicketType(null);
+    const token = localStorage.getItem('token');
+    if (token && id) {
+      try {
+        await fetch(`${QUEUE_URL}/api/v1/queue/${id}/leave/`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+      } catch { /* ignorar error de red */ }
+    }
+  }, [id]);
   if (cargando) {
     return (
       <section className="detalle-evento estado-vacio">
@@ -332,7 +356,7 @@ function DetalleEvento() {
       {mostrarSeatMap && selectedTicketType && (
         <SeatMapModal
           open={mostrarSeatMap}
-          onClose={() => { setMostrarSeatMap(false); setSelectedTicketType(null); }}
+          onClose={handleCancelSeatMap}
           eventId={id}
           ticketType={selectedTicketType}
           onConfirm={(selectedSeats) => {
