@@ -183,3 +183,42 @@ class TicketTypeCreateSerializer(serializers.ModelSerializer):
         if value is not None and value <= 0:
             raise serializers.ValidationError('Los asientos por fila deben ser mayores a 0.')
         return value
+
+
+class QueueConfigSerializer(serializers.ModelSerializer):
+    """
+    Serializer para leer y actualizar la configuración de cola de un evento.
+    Solo expone los campos relevantes para la cola virtual.
+    """
+    class Meta:
+        model = Event
+        fields = [
+            'id',
+            'name',
+            'waitlist_threshold',
+            'waitlist_active',
+            'payment_timeout_minutes',
+        ]
+        read_only_fields = ['id', 'name', 'waitlist_active']
+
+    def validate_waitlist_threshold(self, value):
+        if value <= 0:
+            raise serializers.ValidationError(
+                "El umbral debe ser mayor a 0."
+            )
+        if value > 100:
+            raise serializers.ValidationError(
+                "El umbral no puede superar el 100%."
+            )
+        return value
+
+    def validate_payment_timeout_minutes(self, value):
+        if value <= 0:
+            raise serializers.ValidationError(
+                "El tiempo de pago debe ser mayor a 0 minutos."
+            )
+        if value > 60:
+            raise serializers.ValidationError(
+                "El tiempo de pago no puede superar 60 minutos."
+            )
+        return value

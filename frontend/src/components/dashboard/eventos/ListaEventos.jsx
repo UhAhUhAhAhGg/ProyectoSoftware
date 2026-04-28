@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
 import { useAuth } from '../../../context/AuthContext';
+import ConfiguracionCola from './ConfiguracionCola';
 import './ListaEventos.css';
 
 function ListaEventos() {
@@ -312,13 +313,14 @@ function ListaEventos() {
           evento={eventoDetalle} 
           onClose={() => setEventoDetalle(null)}
           getRangoPrecios={getRangoPrecios}
+          user={user}
         />
       )}
     </div>
   );
 }
 
-function DetalleEventoModal({ evento, onClose, getRangoPrecios }) {
+function DetalleEventoModal({ evento, onClose, getRangoPrecios, user }) {
   const activos = evento.tiposEntrada?.filter(t => t.estado === 'activo') || [];
   
   return (
@@ -373,6 +375,13 @@ function DetalleEventoModal({ evento, onClose, getRangoPrecios }) {
             <p style={{ margin: '10px 0 0', fontStyle: 'italic', color: '#888' }}>No hay entradas creadas.</p>
           )}
         </div>
+
+        {/* Configuración de Cola Virtual */}
+        <ConfiguracionCola
+          eventoId={evento.id}
+          promotorId={evento.promotorId}
+          usuarioId={user?.id}
+        />
       </div>
     </div>
   );

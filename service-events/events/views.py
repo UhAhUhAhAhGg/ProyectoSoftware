@@ -38,7 +38,8 @@ from .serializers import (
     EventCreateSerializer,
     EventUpdateSerializer,
     TicketTypeSerializer,
-    TicketTypeCreateSerializer
+    TicketTypeCreateSerializer,
+    QueueConfigSerializer,
 )
 
 
@@ -1485,6 +1486,7 @@ class PurchaseCancelView(APIView):
         }, status=200)
 
 
+
 class SeatReleaseExpiredView(APIView):
     """
     TIC-335, TIC-338: POST /api/v1/seats/release-expired/
@@ -1534,3 +1536,52 @@ class SeatReleaseExpiredView(APIView):
         }, status=200)
 
 
+class QueueConfigView(APIView):
+    """
+    TIC-350, TIC-351, TIC-352: Panel de configuracion de cola para el Promotor.
+    GET  /api/v1/queue-config/<event_id>/  — obtener configuracion actual
+    POST /api/v1/queue-config/<event_id>/  — actualizar configuracion
+
+    Solo el promotor dueno del evento puede configurar la cola.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    def get(self, request, event_id):
+        event = get_object_or_404(Event, id=event_id)
+
+        if str(event.promoter_id) != str(request.user.id):
+            return Response(
+                {"error": "No tienes permiso para ver esta configuracion."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = QueueConfigSerializer(event)
+        return Response({
+            "status": "success",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request, event_id):
+        event = get_object_or_404(Event, id=event_id)
+
+        if str(event.promoter_id) != str(request.user.id):
+            return Response(
+                {"error": "No tienes permiso para configurar este evento."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = QueueConfigSerializer(event, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Configuracion de cola actualizada correctamente.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        return Response({
+            "status": "error",
+            "message": "Error al validar los datos.",
+            "details": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)

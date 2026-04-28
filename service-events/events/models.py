@@ -60,7 +60,11 @@ class Event(models.Model):
     # Lista de espera
     waitlist_threshold = models.IntegerField(default=90)  # porcentaje
     waitlist_active = models.BooleanField(default=False)
-    queue_timeout = models.IntegerField(default=10) # minutos para entrar cuando es su turno
+
+    # Cola virtual: minutos para entrar cuando es su turno
+    queue_timeout = models.IntegerField(default=10)
+    # Timeout de pago en minutos
+    payment_timeout_minutes = models.IntegerField(default=15)
 
     class Meta:
         verbose_name = 'Event'
@@ -142,7 +146,7 @@ class TicketType(models.Model):
         ).aggregate(
             total=models.Sum('quantity')
         )['total'] or 0
-        
+
         return self.max_capacity - vendidos_o_reservados
 
     @property
@@ -155,13 +159,14 @@ class TicketType(models.Model):
     def is_available(self):
         return self.status == 'active' and self.available_capacity > 0
 
+
 class Purchase(models.Model):
     STATUS_CHOICES = [
         ('active', 'Active'),
         ('used', 'Used'),
         ('pending', 'Pending'),
         ('cancelled', 'Cancelled'),
-        ('expired', 'Expired'), 
+        ('expired', 'Expired'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -209,7 +214,6 @@ class Purchase(models.Model):
 
             if seats.exists():
                 for seat in seats:
-                    # 🔥 Crear log antes de liberar
                     SeatAuditLog.objects.create(
                         seat=seat,
                         purchase=self,
@@ -227,34 +231,30 @@ class Purchase(models.Model):
         Hace una petición interna HTTP a service-profiles para obtener el email.
         """
         base_url = getattr(settings, 'PROFILE_SERVICE_URL', 'http://localhost:8002')
-        # Asumimos que tu ruta en urls.py es algo como /api/profiles/<user_id>/
-        url = f"{base_url}/api/profiles/{self.user_id}/" 
-        
+        url = f"{base_url}/api/profiles/{self.user_id}/"
+
         try:
-            # Hacemos la petición con un timeout corto para no bloquear el sistema
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
                 data = response.json()
-                # Dependiendo de tu Serializer, el email puede venir directo o anidado
                 return data.get('email') or data.get('user', {}).get('email')
             else:
                 logger.error(f"Error HTTP {response.status_code} al consultar el perfil {self.user_id}")
         except requests.RequestException as e:
             logger.error(f"Error de conexión con service-profiles: {e}")
-            
+
         return None
 
     def send_expiration_email(self):
         """
         HU Subtarea: Enviar notificación por email al usuario que perdió asientos.
         """
-        # 1. Obtenemos el correo real del microservicio de perfiles
         user_email = self.get_user_email()
-        
+
         if not user_email:
             logger.warning(f"No se pudo enviar el correo de expiración: Email no encontrado para user_id {self.user_id}")
             return False
-            
+
         asunto = "Tiempo agotado - Asientos liberados"
         mensaje = (
             f"Hola,\n\n"
@@ -284,20 +284,18 @@ class Purchase(models.Model):
         """
         HU: Liberar asientos y notificar al usuario.
         """
+        # 👇 CAMBIADO A 1 MINUTO PARA PRUEBAS (cambiar a 15 para produccion)
         timeout_limit = self.created_at + timedelta(minutes=1)
-        
+
         if self.status == 'pending' and timezone.now() > timeout_limit:
             self.status = 'expired'
-            self.save(update_fields=['status']) 
-            
-            # 1. Liberamos los asientos (método que creamos en la tarea anterior)
+            self.save(update_fields=['status'])
+
             self.release_seats()
-            
-            # 2. Enviamos el correo consultando primero al service-profiles
             self.send_expiration_email()
-            
+
             return True
-    
+
         return False
 
 
@@ -319,7 +317,7 @@ class Waitlist(models.Model):
 
     class Meta:
         ordering = ['position']
-        unique_together = ('event', 'user_id')  # no duplicados
+        unique_together = ('event', 'user_id')
 
 
 class BlacklistedToken(models.Model):
@@ -331,6 +329,7 @@ class BlacklistedToken(models.Model):
     def __str__(self):
         return self.token[:20]
 
+
 class PaymentOrder(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pendiente'),
@@ -340,10 +339,10 @@ class PaymentOrder(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user_id = models.UUIDField() # Relacionado con el microservicio de usuarios
+    user_id = models.UUIDField()
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -361,7 +360,7 @@ class PaymentOrder(models.Model):
 
 
 class TicketInstance(models.Model):
-    
+
     STATUS_CHOICES = [
         ('valid', 'Válida'),
         ('used', 'Usada'),
@@ -372,15 +371,14 @@ class TicketInstance(models.Model):
     order = models.ForeignKey(PaymentOrder, on_delete=models.CASCADE, related_name='tickets')
     event = models.ForeignKey(Event, on_delete=models.CASCADE)
     ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE)
-    
-    # Datos únicos de esta entrada en particular
+
     qr_code = models.TextField(null=True, blank=True)
     backup_code = models.CharField(max_length=20, unique=True, db_index=True, null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='valid')
-    
+
     used_at = models.DateTimeField(null=True, blank=True)
     validated_by = models.UUIDField(null=True, blank=True)
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -394,6 +392,7 @@ class TicketInstance(models.Model):
 
     def __str__(self):
         return f"Ticket {self.backup_code} - {self.event.name}"
+
 
 # ─── TIC-11: Gestión de asientos individuales ────────────────────────────────
 
@@ -415,10 +414,9 @@ class Seat(models.Model):
         on_delete=models.CASCADE,
         related_name='seats',
     )
-    # Código legible: "A-1", "B-5", etc.
     seat_code = models.CharField(max_length=20)
-    row_label = models.CharField(max_length=5)       # "A", "B", "C"...
-    seat_number = models.PositiveIntegerField()       # 1, 2, 3...
+    row_label = models.CharField(max_length=5)
+    seat_number = models.PositiveIntegerField()
 
     status = models.CharField(
         max_length=20,
@@ -427,17 +425,15 @@ class Seat(models.Model):
         db_index=True,
     )
 
-    # Timestamp de reserva (para liberar si no se confirma el pago)
     reserved_at = models.DateTimeField(null=True, blank=True)
-    # Quién lo reservó (UUID lógico, sin FK entre microservicios)
     reserved_by = models.UUIDField(null=True, blank=True)
 
-    # Relación con la compra actual (si está reservado o vendido) agregada de US20
+    # Relación con la compra actual (si está reservado o vendido)
     purchase = models.ForeignKey(
-        'Purchase', 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True, 
+        'Purchase',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='allocated_seats'
     )
 
@@ -454,6 +450,7 @@ class Seat(models.Model):
 
     def __str__(self):
         return f"{self.seat_code} ({self.get_status_display()}) — {self.ticket_type.name}"
+
 
 class SeatAuditLog(models.Model):
     ACTION_CHOICES = [
