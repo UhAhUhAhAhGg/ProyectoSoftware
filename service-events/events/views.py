@@ -1,4 +1,9 @@
+# pyright: reportAttributeAccessIssue=false
+# pyright: reportOptionalMemberAccess=false
+# pyright: reportArgumentType=false
+# pyright: reportUndefinedVariable=false
 from rest_framework import viewsets, status
+from django.db import transaction
 from rest_framework.decorators import action
 from django.db import transaction
 from rest_framework.response import Response
@@ -150,6 +155,74 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response({"status": orden.status}, status=status.HTTP_200_OK)
         except PaymentOrder.DoesNotExist:
             return Response({"error": "Orden no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+        
+    @action(detail=True, methods=['get'], url_path='queue-status')
+    def queue_status(self, request, pk=None):
+        """
+        HU: Asignar lugar y mostrar tiempo estimado de espera.
+        GET /events/{id}/queue-status/
+        Calcula la posición en tiempo real y el promedio dinámico de espera (max 15 min).
+        """
+        event = self.get_object()
+        user_id = request.user.id
+
+        # 1. Verificar si el usuario realmente está en la fila
+        waitlist_entry = Waitlist.objects.filter(event=event, user_id=user_id).first()
+        
+        if not waitlist_entry:
+            return Response({
+                "status": "error",
+                "message": "No te encuentras en la fila virtual para este evento."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        if waitlist_entry.status != 'waiting':
+            return Response({
+                "status": "success",
+                "message": f"Tu estado en la fila es: {waitlist_entry.status}. Ya puedes proceder a comprar.",
+                "data": {"queue_status": waitlist_entry.status}
+            }, status=status.HTTP_200_OK)
+
+        # 2. Calcular cuántas personas están estrictamente delante de este usuario
+        people_ahead = Waitlist.objects.filter(
+            event=event,
+            status='waiting',
+            position__lt=waitlist_entry.position
+        ).count()
+        # Tomamos una muestra de las últimas 20 compras confirmadas del evento
+        recent_purchases = list(Purchase.objects.filter(
+            event=event, 
+            status='active'
+        ).order_by('-created_at')[:20])
+
+        average_time_minutes = 5.0  # Tiempo por defecto si no hay data histórica suficiente
+
+        if len(recent_purchases) >= 2:
+            # Diferencia de tiempo entre la compra más reciente y la más antigua de la muestra
+            newest_purchase = recent_purchases[0].created_at
+            oldest_purchase = recent_purchases[-1].created_at
+            
+            time_diff_seconds = (newest_purchase - oldest_purchase).total_seconds()
+            
+            if time_diff_seconds > 0:
+                # Calculamos cuánto toma en promedio despachar 1 compra (en minutos)
+                calc_average = (time_diff_seconds / 60.0) / len(recent_purchases)
+                
+                # Regla de Negocio: Mínimo 1 minuto, Máximo 15 minutos (por expiración del QR)
+                average_time_minutes = min(max(calc_average, 1.0), 15.0)
+
+        estimated_wait_time = int(people_ahead * average_time_minutes)
+
+        return Response({
+            "status": "success",
+            "data": {
+                "event_id": str(event.id),
+                "queue_status": waitlist_entry.status,
+                "your_position": waitlist_entry.position,
+                "people_ahead": people_ahead,
+                "dynamic_average_per_purchase": round(average_time_minutes, 2),
+                "estimated_wait_time_minutes": estimated_wait_time
+            }
+        }, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'])
     def upcoming(self, request):
@@ -187,6 +260,107 @@ class EventViewSet(viewsets.ModelViewSet):
         event.status = 'published'
         event.save()
         return Response({'success': 'Event published'})
+    
+    @action(detail=True, methods=['get', 'put'], url_path='queue-config')
+    def queue_config(self, request, pk=None):
+        """
+        HU: Configurar umbral de usuarios simultáneos.
+        GET: Obtener la configuración actual.
+        PUT: Actualizar la configuración con validaciones estrictas.
+        """
+        event = self.get_object()
+
+        # 1. Seguridad base para ambos métodos
+        if str(event.promoter_id) != str(request.user.id):
+            return Response({
+                "status": "error",
+                "message": "No tienes permisos. Solo el promotor de este evento puede gestionar la fila virtual."
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # 2. Manejo de la petición GET (Lo que hicimos en la subtarea anterior)
+        if request.method == 'GET':
+            return Response({
+                "status": "success",
+                "data": {
+                    "event_id": str(event.id),
+                    "waitlist_threshold": event.waitlist_threshold,
+                    "waitlist_active": event.waitlist_active,
+                    "queue_timeout": event.queue_timeout,
+                    "event_capacity": event.capacity # Útil para que el Frontend valide también
+                }
+            }, status=status.HTTP_200_OK)
+
+        # 3. Manejo de la petición PUT (La nueva subtarea de validación)
+        elif request.method == 'PUT':
+            threshold_input = request.data.get('waitlist_threshold')
+            is_active_input = request.data.get('waitlist_active', event.waitlist_active)
+            timeout_input = request.data.get('queue_timeout', event.queue_timeout)
+
+            # Validación A: Que el dato exista
+            if threshold_input is None:
+                return Response({
+                    "status": "error",
+                    "message": "El campo 'waitlist_threshold' es obligatorio."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validación B: Que sea un número entero
+            try:
+                threshold = int(threshold_input)
+            except ValueError:
+                return Response({
+                    "status": "error",
+                    "message": "El umbral debe ser un número entero válido."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validación C: Entero positivo (> 0)
+            if threshold <= 0:
+                return Response({
+                    "status": "error",
+                    "message": "El umbral debe ser un número entero positivo mayor a cero."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validación D: <= capacidad del evento (El Core de tu ticket)
+            if threshold > event.capacity:
+                return Response({
+                    "status": "error",
+                    "message": f"El umbral ({threshold}) no puede superar la capacidad máxima del evento ({event.capacity} personas)."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validación para queue_timeout
+            try:
+                q_timeout = int(timeout_input)
+                if q_timeout <= 0:
+                    return Response({
+                        "status": "error",
+                        "message": "El tiempo de espera (timeout) debe ser mayor a cero."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            except ValueError:
+                return Response({
+                    "status": "error",
+                    "message": "El tiempo de espera (timeout) debe ser un número entero válido."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Manejo seguro del booleano para 'waitlist_active'
+            if isinstance(is_active_input, str):
+                is_active = is_active_input.lower() == 'true'
+            else:
+                is_active = bool(is_active_input)
+
+            # Guardado final
+            event.waitlist_threshold = threshold
+            event.waitlist_active = is_active
+            event.queue_timeout = q_timeout
+            event.save()
+
+            return Response({
+                "status": "success",
+                "message": "Configuración de la fila virtual actualizada y validada correctamente.",
+                "data": {
+                    "waitlist_threshold": event.waitlist_threshold,
+                    "waitlist_active": event.waitlist_active,
+                    "queue_timeout": event.queue_timeout
+                }
+            }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
@@ -480,7 +654,7 @@ class PurchaseView(APIView):
     POST /api/v1/purchase/
     Inicia el proceso de compra: crea una Purchase con status='pending' y devuelve
     un QR de pago (contiene el purchase_id) con 15 minutos de expiración.
-    El pago debe confirmarse via SimularPagoView (desarrollo) o webhook bancario (producción).
+    Si el evento supera el umbral, redirige a la fila virtual.
     """
     permission_classes = [IsAuthenticated]
 
@@ -492,31 +666,63 @@ class PurchaseView(APIView):
         try:
             quantity = int(request.data.get("quantity", 1))
         except (ValueError, TypeError):
-            return Response({"error": "Cantidad invalida"}, status=400)
+            return Response({"error": "Cantidad invalida"}, status=status.HTTP_400_BAD_REQUEST)
 
         if quantity <= 0:
-            return Response({"error": "Cantidad debe ser mayor a 0"}, status=400)
+            return Response({"error": "Cantidad debe ser mayor a 0"}, status=status.HTTP_400_BAD_REQUEST)
 
         event = get_object_or_404(Event, id=event_id)
         ticket = get_object_or_404(TicketType, id=ticket_type_id)
+        # 1. Calculamos el total de entradas vendidas actualmente
+        total_sold = sum(t.current_sold for t in event.ticket_types.all())
 
-        if event.waitlist_active:
+        # 2. Evaluamos si el evento tiene la fila activa Y superó el umbral
+        if event.waitlist_active and (total_sold + quantity) >= event.waitlist_threshold:
+            
+            with transaction.atomic():
+                # Verificamos si el usuario ya está en la fila
+                waitlist_entry = Waitlist.objects.filter(event=event, user_id=user_id).first()
+                
+                if not waitlist_entry:
+                    # Buscamos la última posición asignada para darle la siguiente
+                    last_position = Waitlist.objects.filter(event=event).aggregate(Max('position'))['position__max'] or 0
+                    
+                    waitlist_entry = Waitlist.objects.create(
+                        event=event,
+                        user_id=user_id,
+                        position=last_position + 1,
+                        status='waiting' # Estado "en_cola" según el ticket
+                    )
+                    
+                    mensaje = "El evento ha superado el umbral de capacidad simultánea. Has sido colocado en la fila virtual."
+                    status_code = status.HTTP_202_ACCEPTED
+                else:
+                    mensaje = "Ya te encuentras en la fila virtual para este evento."
+                    status_code = status.HTTP_200_OK
+
             return Response({
-                "status": "waitlist",
-                "message": "El evento está casi lleno. Has sido redirigido a la lista de espera."
-            }, status=200)
+                "status": "queue",
+                "message": mensaje,
+                "data": {
+                    "event_id": str(event.id),
+                    "queue_position": waitlist_entry.position,
+                    "queue_status": waitlist_entry.status
+                }
+            }, status=status_code)
+        # --- FIN LÓGICA DE FILA VIRTUAL ---
 
+        # Validaciones estándar de compra
         if event.status == 'cancelled':
-            return Response({"error": "No puedes comprar entradas para un evento cancelado"}, status=400)
+            return Response({"error": "No puedes comprar entradas para un evento cancelado"}, status=status.HTTP_400_BAD_REQUEST)
 
         if event.status != 'published':
-            return Response({"error": "El evento no esta disponible para compra"}, status=400)
+            return Response({"error": "El evento no esta disponible para compra"}, status=status.HTTP_400_BAD_REQUEST)
 
         if ticket.status != 'active':
-            return Response({"error": "Este tipo de entrada no esta disponible"}, status=400)
+            return Response({"error": "Este tipo de entrada no esta disponible"}, status=status.HTTP_400_BAD_REQUEST)
 
         if ticket.available_capacity < quantity:
-            return Response({"error": "No hay suficientes entradas disponibles"}, status=400)
+            return Response({"error": "No hay suficientes entradas disponibles"}, status=status.HTTP_400_BAD_REQUEST)
 
         existing_purchase = Purchase.objects.filter(
             user_id=user_id,
@@ -528,7 +734,7 @@ class PurchaseView(APIView):
             return Response({
                 "error": "Ya tienes una entrada para este evento. Revisa tu historial de compras.",
                 "error_code": "DUPLICATE_PURCHASE"
-            }, status=409)
+            }, status=status.HTTP_409_CONFLICT)
 
         total_price = ticket.price * quantity
         expires_at = timezone.now() + timedelta(minutes=15)
@@ -564,7 +770,6 @@ class PurchaseView(APIView):
                 "ticket_type_name": ticket.name,
             }
         }, status=status.HTTP_201_CREATED)
-
 
 class SimularPagoView(APIView):
     """

@@ -429,3 +429,4 @@ El proyecto usa volúmenes montados, los cambios en el código Python se recarga
 ```bash
 docker compose up --build
 ```
+update

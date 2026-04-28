@@ -12,7 +12,7 @@ const clearSession = () => {
   window.location.href = '/login';
 };
 
-const refreshAccessToken = async () => {
+export const refreshAccessToken = async () => {
   const refresh = localStorage.getItem('refresh');
   if (!refresh) {
     clearSession();
