@@ -4,16 +4,28 @@ views.py — Endpoints de service-queue.
 US14: Configuración de umbral de cola virtual por evento.
   GET  /api/v1/queue-config/{event_id}/   → obtener config actual
   POST /api/v1/queue-config/{event_id}/   → crear o actualizar config (solo Promotores)
+
+US18: Entrada y estado de la cola virtual.
+  POST /api/v1/queue/{event_id}/enter/    → verificar si puede entrar o debe esperar
+  GET  /api/v1/queue/{event_id}/status/   → estado actual de la cola
+
+US19: Posición en cola y ETA dinámico.
+  GET  /api/v1/queue/{event_id}/position/ → posición y tiempo estimado de espera
+
+Internal:
+  POST /api/v1/internal/sync-config/{event_id}/ → sync de config desde service-events
 """
 
 import requests
 from django.conf import settings
+from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
-from .models import QueueConfig
+from .models import QueueConfig, QueueEntry, QueueLog
 from .serializers import QueueConfigSerializer, QueueConfigWriteSerializer
+from .active_users import get_active_users_count, register_user_activity, remove_user_activity
 
 
 def _get_event_capacity(event_id: str, token: str) -> int | None:
@@ -29,109 +41,6 @@ def _get_event_capacity(event_id: str, token: str) -> int | None:
     except requests.RequestException:
         pass
     return None
-
-
-class QueueConfigView(APIView):
-    """
-    GET  /api/v1/queue-config/{event_id}/
-        Retorna la configuración de cola para el evento.
-        Si no existe, retorna la configuración por defecto (no persistida).
-
-    POST /api/v1/queue-config/{event_id}/
-        Crea o actualiza la configuración de cola para el evento.
-        Solo permitido para usuarios con role='promoter' o 'admin'.
-
-    Criterios de Aceptación (TIC-14):
-        - PA: El promotor puede ver el umbral y timeout actual de su evento.
-        - PA: El promotor puede guardar un umbral válido y se persiste correctamente.
-        - PA: Si el umbral supera la capacidad del evento → error 400.
-        - PA: Si el umbral es 0 o negativo → error 400.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, event_id):
-        try:
-            config = QueueConfig.objects.get(event_id=event_id)
-            serializer = QueueConfigSerializer(config)
-            return Response(serializer.data, status=200)
-        except QueueConfig.DoesNotExist:
-            # Retornar configuración por defecto (no persistida aún)
-            return Response({
-                "event_id": str(event_id),
-                "max_concurrent_users": 100,
-                "payment_timeout_minutes": 15,
-                "is_queue_active": False,
-                "updated_by": None,
-                "created_at": None,
-                "updated_at": None,
-                "info": "No existe configuración para este evento. Se muestran los valores por defecto."
-            }, status=200)
-
-    def post(self, request, event_id):
-        # Solo promotores y admins pueden configurar la cola
-        user = request.user
-        if user.role not in ('promoter', 'admin'):
-            return Response(
-                {"error": "Solo los promotores pueden configurar la cola de espera."},
-                status=403
-            )
-
-        serializer = QueueConfigWriteSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=400)
-
-        max_users = serializer.validated_data['max_concurrent_users']
-
-        # Extraer el token del header para consultarle a service-events
-        auth_header = request.headers.get('Authorization', '')
-        token = auth_header.replace('Bearer ', '').strip()
-
-        # Validar que el umbral no supere la capacidad del evento
-        capacity = _get_event_capacity(str(event_id), token)
-        if capacity is not None and max_users > capacity:
-            return Response(
-                {"error": f"El umbral ({max_users}) no puede superar la capacidad del evento ({capacity})."},
-                status=400
-            )
-
-        # Crear o actualizar la configuración (upsert)
-        config, created = QueueConfig.objects.update_or_create(
-            event_id=event_id,
-            defaults={
-                **serializer.validated_data,
-                'updated_by': user.id,
-            }
-        )
-
-        response_serializer = QueueConfigSerializer(config)
-        return Response(
-            {
-                "message": "Configuración de cola guardada correctamente.",
-                "data": response_serializer.data,
-            },
-            status=201 if created else 200
-        )
-
-
-class QueueHealthView(APIView):
-    """
-    GET /api/v1/health/
-    Endpoint de salud del microservicio (no requiere autenticación).
-    Útil para verificar que el servicio levantó correctamente en Docker.
-    """
-    permission_classes = []
-    authentication_classes = []
-
-    def get(self, request):
-        return Response({
-            "service": "service-queue",
-            "status": "healthy",
-            "version": "1.0.0",
-        }, status=200)
-
-from django.utils import timezone
-from .models import QueueEntry
-from .active_users import get_active_users_count, register_user_activity, remove_user_activity
 
 
 def _calculate_avg_transaction_time(event_id: str) -> float:
@@ -166,55 +75,285 @@ def _calculate_avg_transaction_time(event_id: str) -> float:
     return default_minutes
 
 
+class QueueConfigView(APIView):
+    """
+    GET  /api/v1/queue-config/{event_id}/
+        Retorna la configuración de cola para el evento.
+        Si no existe, retorna la configuración por defecto (no persistida).
+
+    POST /api/v1/queue-config/{event_id}/
+        Crea o actualiza la configuración de cola para el evento.
+        Solo permitido para usuarios con role='promoter' o 'admin'.
+
+    Criterios de Aceptación (TIC-14):
+        - PA: El promotor puede ver el umbral y timeout actual de su evento.
+        - PA: El promotor puede guardar un umbral válido y se persiste correctamente.
+        - PA: Si el umbral supera la capacidad del evento → error 400.
+        - PA: Si el umbral es 0 o negativo → error 400.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, event_id):
+        try:
+            config = QueueConfig.objects.get(event_id=event_id)
+            serializer = QueueConfigSerializer(config)
+            return Response(serializer.data, status=200)
+        except QueueConfig.DoesNotExist:
+            return Response({
+                "event_id": str(event_id),
+                "max_concurrent_users": 100,
+                "payment_timeout_minutes": 15,
+                "is_queue_active": False,
+                "updated_by": None,
+                "created_at": None,
+                "updated_at": None,
+                "info": "No existe configuración para este evento. Se muestran los valores por defecto."
+            }, status=200)
+
+    def post(self, request, event_id):
+        user = request.user
+        if user.role not in ('promoter', 'admin'):
+            return Response(
+                {"error": "Solo los promotores pueden configurar la cola de espera."},
+                status=403
+            )
+
+        serializer = QueueConfigWriteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+
+        max_users = serializer.validated_data['max_concurrent_users']
+
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.replace('Bearer ', '').strip()
+
+        capacity = _get_event_capacity(str(event_id), token)
+        if capacity is not None and max_users > capacity:
+            return Response(
+                {"error": f"El umbral ({max_users}) no puede superar la capacidad del evento ({capacity})."},
+                status=400
+            )
+
+        config, created = QueueConfig.objects.update_or_create(
+            event_id=event_id,
+            defaults={
+                **serializer.validated_data,
+                'updated_by': user.id,
+            }
+        )
+
+        response_serializer = QueueConfigSerializer(config)
+        return Response(
+            {
+                "message": "Configuración de cola guardada correctamente.",
+                "data": response_serializer.data,
+            },
+            status=201 if created else 200
+        )
+
+
+class QueueHealthView(APIView):
+    """
+    GET /api/v1/health/
+    Endpoint de salud del microservicio (no requiere autenticación).
+    """
+    permission_classes = []
+    authentication_classes = []
+
+    def get(self, request):
+        return Response({
+            "service": "service-queue",
+            "status": "healthy",
+            "version": "1.0.0",
+        }, status=200)
+
+
+class SyncQueueConfigView(APIView):
+    """
+    POST /api/v1/internal/sync-config/{event_id}/
+    Endpoint interno para que service-events sincronice la configuración de cola.
+    No requiere autenticación (llamada service-to-service).
+
+    Body: { max_concurrent_users, payment_timeout_minutes, is_queue_active }
+    """
+    permission_classes = []
+    authentication_classes = []
+
+    def post(self, request, event_id):
+        max_users = request.data.get('max_concurrent_users', 100)
+        timeout = request.data.get('payment_timeout_minutes', 15)
+        is_active = request.data.get('is_queue_active', False)
+
+        config, created = QueueConfig.objects.update_or_create(
+            event_id=str(event_id),
+            defaults={
+                'max_concurrent_users': max_users,
+                'payment_timeout_minutes': timeout,
+                'is_queue_active': is_active,
+            }
+        )
+
+        return Response({
+            "status": "ok",
+            "event_id": str(event_id),
+            "is_queue_active": config.is_queue_active,
+            "max_concurrent_users": config.max_concurrent_users,
+        }, status=200)
+
+
 class QueueEnterView(APIView):
     """
     POST /api/v1/queue/{event_id}/enter/
-    Verifica si el usuario puede acceder a la selección de asientos o debe ir a la cola.
+    TIC-294, TIC-295, TIC-298: Verifica si el usuario puede acceder directamente
+    a la selección de asientos o debe esperar en la cola virtual.
+
+    Respuestas:
+      { "can_proceed": true }                          → acceso directo
+      { "can_proceed": false, "position": X, ... }     → debe esperar en cola
     """
+    permission_classes = [IsAuthenticated]
 
-from django.utils import timezone
-from .models import QueueEntry
+    def post(self, request, event_id):
+        user_id = str(request.user.id)
+        event_id_str = str(event_id)
 
+        # Si no existe config, el usuario puede proceder libremente
+        try:
+            config = QueueConfig.objects.get(event_id=event_id_str)
+        except QueueConfig.DoesNotExist:
+            register_user_activity(event_id_str, user_id)
+            return Response({"can_proceed": True, "queue_active": False}, status=200)
 
-def _calculate_avg_transaction_time(event_id: str) -> float:
-    """
-    TIC-311: Calcula el tiempo promedio (en minutos) que tardan los últimos
-    20 usuarios admitidos en completar su transacción para este evento.
-    Si no hay historial suficiente, usa payment_timeout_minutes/2 como fallback.
-    """
-    # Fallback desde la configuración del evento
-    try:
-        config = QueueConfig.objects.get(event_id=event_id)
-        default_minutes = config.payment_timeout_minutes / 2.0  # ej. 7.5 min si timeout=15
-    except QueueConfig.DoesNotExist:
-        default_minutes = 7.5
+        # Si la cola no está activa, registrar actividad y permitir paso
+        if not config.is_queue_active:
+            register_user_activity(event_id_str, user_id)
+            return Response({"can_proceed": True, "queue_active": False}, status=200)
 
-    # Calcular promedio real con las últimas 20 admisiones completadas
-    admitted = QueueEntry.objects.filter(
-        event_id=event_id,
-        status='admitted',
-        accessed_at__isnull=False,
-        notified_at__isnull=False,
-    ).order_by('-accessed_at')[:20]
+        # Verificar si el usuario ya fue admitido (y su tiempo no expiró)
+        try:
+            existing = QueueEntry.objects.get(
+                user_id=user_id,
+                event_id=event_id_str,
+                status='admitted',
+            )
+            # Verificar si su tiempo de admisión no expiró
+            if existing.accessed_at:
+                elapsed = (timezone.now() - existing.accessed_at).total_seconds() / 60.0
+                if elapsed > config.payment_timeout_minutes:
+                    existing.status = 'expired'
+                    existing.save()
+                    # No retornar can_proceed aquí, dejar que lo procesen abajo
+                else:
+                    register_user_activity(event_id_str, user_id)
+                    return Response({
+                        "can_proceed": True,
+                        "queue_active": True,
+                        "already_admitted": True,
+                    }, status=200)
+        except QueueEntry.DoesNotExist:
+            pass
 
-    if admitted.exists():
-        times = [
-            (e.accessed_at - e.notified_at).total_seconds() / 60.0
-            for e in admitted
-            if e.accessed_at and e.notified_at and e.accessed_at > e.notified_at
-        ]
-        if times:
-            avg = sum(times) / len(times)
-            return max(1.0, avg)  # Mínimo 1 minuto por usuario
+        # Verificar si el usuario ya está esperando en cola
+        try:
+            existing = QueueEntry.objects.get(
+                user_id=user_id,
+                event_id=event_id_str,
+                status='waiting',
+            )
+            position = QueueEntry.objects.filter(
+                event_id=event_id_str,
+                status='waiting',
+                joined_at__lt=existing.joined_at,
+            ).count() + 1
+            avg_minutes = _calculate_avg_transaction_time(event_id_str)
+            return Response({
+                "can_proceed": False,
+                "queue_active": True,
+                "already_in_queue": True,
+                "position": position,
+                "total_waiting": QueueEntry.objects.filter(event_id=event_id_str, status='waiting').count(),
+                "estimated_wait_minutes": round(position * avg_minutes),
+            }, status=200)
+        except QueueEntry.DoesNotExist:
+            pass
 
-    return default_minutes
+        # Verificar si hay espacio para admitir directamente
+        active_count = get_active_users_count(event_id_str)
+        if active_count < config.max_concurrent_users:
+            register_user_activity(event_id_str, user_id)
+            entry, _ = QueueEntry.objects.update_or_create(
+                user_id=user_id,
+                event_id=event_id_str,
+                defaults={
+                    'status': 'admitted',
+                    'notified_at': timezone.now(),
+                    'accessed_at': timezone.now(),
+                }
+            )
+            QueueLog.objects.create(
+                event_type='user_admitted',
+                user_id=user_id,
+                event_id=event_id_str,
+                queue_entry_id=entry.id,
+                description=f"Usuario admitido directamente (espacio disponible: {active_count}/{config.max_concurrent_users})",
+            )
+            return Response({
+                "can_proceed": True,
+                "queue_active": True,
+                "admitted": True,
+            }, status=200)
+
+        # No hay espacio → poner en cola
+        last_joined = QueueEntry.objects.filter(
+            event_id=event_id_str,
+            status='waiting',
+        ).order_by('-joined_at').first()
+
+        entry, created = QueueEntry.objects.get_or_create(
+            user_id=user_id,
+            event_id=event_id_str,
+            defaults={
+                'status': 'waiting',
+                'position': (QueueEntry.objects.filter(event_id=event_id_str, status='waiting').count() + 1),
+                'joined_at': timezone.now(),
+            }
+        )
+
+        if not created and entry.status != 'waiting':
+            entry.status = 'waiting'
+            entry.joined_at = timezone.now()
+            entry.save()
+
+        position = QueueEntry.objects.filter(
+            event_id=event_id_str,
+            status='waiting',
+            joined_at__lte=entry.joined_at,
+        ).count()
+
+        avg_minutes = _calculate_avg_transaction_time(event_id_str)
+        total_waiting = QueueEntry.objects.filter(event_id=event_id_str, status='waiting').count()
+
+        QueueLog.objects.create(
+            event_type='user_waiting',
+            user_id=user_id,
+            event_id=event_id_str,
+            queue_entry_id=entry.id,
+            description=f"Usuario puesto en cola. Posición: {position}",
+        )
+
+        return Response({
+            "can_proceed": False,
+            "queue_active": True,
+            "position": position,
+            "total_waiting": total_waiting,
+            "estimated_wait_minutes": round(position * avg_minutes),
+        }, status=200)
 
 
 class QueueStatusView(APIView):
     """
     GET /api/v1/queue/{event_id}/status/
     Retorna el estado actual de la cola para que el frontend decida qué mostrar.
-    No requiere que el usuario esté en la cola — es informativo.
     """
     permission_classes = [IsAuthenticated]
 
@@ -241,8 +380,6 @@ class QueuePositionView(APIView):
     """
     TIC-309: GET /api/v1/queue/{event_id}/position/
     Retorna la posición actual del usuario en la cola y el ETA calculado dinámicamente.
-    Si el usuario no está en cola, retorna queued=False.
-    Si fue admitido, lo indica para que el frontend lo redirija.
     """
     permission_classes = [IsAuthenticated]
 
@@ -269,7 +406,7 @@ class QueuePositionView(APIView):
                         return Response({
                             "queued": False,
                             "status": "expired",
-                            "error": "Tu tiempo para comprar ha expirado."
+                            "error": "Tu tiempo para comprar ha expirado.",
                         }, status=200)
                 except QueueConfig.DoesNotExist:
                     pass
@@ -313,7 +450,6 @@ class QueueLeaveView(APIView):
     """
     DELETE /api/v1/queue/{event_id}/leave/
     Permite al usuario salir voluntariamente de la cola.
-    Marca su QueueEntry como 'left' y libera su cupo.
     """
     permission_classes = [IsAuthenticated]
 
@@ -329,6 +465,7 @@ class QueueLeaveView(APIView):
             )
             entry.status = 'left'
             entry.save()
+            remove_user_activity(event_id_str, user_id)
             return Response({"message": "Has salido de la cola exitosamente."}, status=200)
         except QueueEntry.DoesNotExist:
             return Response({"error": "No se encontró una entrada activa en la cola."}, status=404)

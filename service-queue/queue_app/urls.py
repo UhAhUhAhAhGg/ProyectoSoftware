@@ -10,16 +10,17 @@ from .views import (
     QueueStatusView,
     QueuePositionView,
     QueueLeaveView,
+    SyncQueueConfigView,
 )
 
 urlpatterns = [
-    # US14: Configuración de cola por evento
+    # US14: Configuración de cola por evento (para Promotores)
     path('queue-config/<uuid:event_id>/', QueueConfigView.as_view(), name='queue-config'),
 
     # Health check (sin autenticación)
     path('health/', QueueHealthView.as_view(), name='queue-health'),
 
-    # US18: Entrada y estado de la cola
+    # US18: Entrada y estado de la cola virtual
     path('queue/<uuid:event_id>/enter/', QueueEnterView.as_view(), name='queue-enter'),
     path('queue/<uuid:event_id>/status/', QueueStatusView.as_view(), name='queue-status'),
 
@@ -28,4 +29,7 @@ urlpatterns = [
 
     # US19: Abandonar la cola voluntariamente
     path('queue/<uuid:event_id>/leave/', QueueLeaveView.as_view(), name='queue-leave'),
+
+    # Internal: Sync de configuración desde service-events (sin auth)
+    path('internal/sync-config/<uuid:event_id>/', SyncQueueConfigView.as_view(), name='sync-config'),
 ]

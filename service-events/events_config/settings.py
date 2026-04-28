@@ -178,3 +178,7 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', f'TicketProject <{EMAIL_HOST_USER}>')
+
+# ─── Microservice URLs ───────────────────────────────────────────────────────
+# URL interna de service-queue (dentro de la red Docker)
+QUEUE_SERVICE_URL = os.getenv('QUEUE_SERVICE_URL', 'http://service_queue:8000')

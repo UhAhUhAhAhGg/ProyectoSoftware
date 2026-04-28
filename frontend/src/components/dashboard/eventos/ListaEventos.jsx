@@ -325,7 +325,7 @@ function DetalleEventoModal({ evento, onClose, getRangoPrecios, user }) {
   
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-confirmar" style={{ maxWidth: '600px', textAlign: 'left' }} onClick={e => e.stopPropagation()}>
+      <div className="modal-confirmar" style={{ maxWidth: '600px', textAlign: 'left', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
           <div>
             <h2 style={{ margin: '0 0 5px 0', color: 'var(--color-marron)' }}>{evento.nombre}</h2>

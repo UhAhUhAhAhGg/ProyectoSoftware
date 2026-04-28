@@ -27,8 +27,9 @@ from rest_framework import status
 from .models import TicketType, PaymentOrder # Asegúrate de importar tus modelos
 import secrets
 import uuid
-from django.db.models import Max
+from django.db.models import Max, Sum as DbSum
 from datetime import timedelta
+import requests as _http_requests
 from .permissions import IsAdministrador, IsPromotor, IsComprador
 from .services import TicketGenerationService, send_ticket_email
 from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat
@@ -649,6 +650,30 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
         return Response({'success': 'Ticket type deactivated'})
 
 
+def _sync_queue_config_to_service(event, is_queue_active=None):
+    """
+    Sincroniza la configuración de cola a service-queue (HS14+HS18).
+    Convierte el umbral porcentual en usuarios absolutos para QueueConfig.
+    Llamada non-blocking: si service-queue no responde, no falla la request.
+    """
+    from django.conf import settings
+    queue_url = getattr(settings, 'QUEUE_SERVICE_URL', 'http://service_queue:8000')
+    max_users = max(1, round((event.waitlist_threshold / 100.0) * event.capacity))
+    payload = {
+        'max_concurrent_users': max_users,
+        'payment_timeout_minutes': event.payment_timeout_minutes,
+        'is_queue_active': is_queue_active if is_queue_active is not None else event.waitlist_active,
+    }
+    try:
+        _http_requests.post(
+            f"{queue_url}/api/v1/internal/sync-config/{event.id}/",
+            json=payload,
+            timeout=3,
+        )
+    except Exception:
+        pass  # Non-blocking: no fallar si service-queue no responde
+
+
 class PurchaseView(APIView):
     """
     POST /api/v1/purchase/
@@ -673,43 +698,32 @@ class PurchaseView(APIView):
 
         event = get_object_or_404(Event, id=event_id)
         ticket = get_object_or_404(TicketType, id=ticket_type_id)
-        # 1. Calculamos el total de entradas vendidas actualmente
-        total_sold = sum(t.current_sold for t in event.ticket_types.all())
 
-        # 2. Evaluamos si el evento tiene la fila activa Y superó el umbral
-        if event.waitlist_active and (total_sold + quantity) >= event.waitlist_threshold:
-            
-            with transaction.atomic():
-                # Verificamos si el usuario ya está en la fila
-                waitlist_entry = Waitlist.objects.filter(event=event, user_id=user_id).first()
-                
-                if not waitlist_entry:
-                    # Buscamos la última posición asignada para darle la siguiente
-                    last_position = Waitlist.objects.filter(event=event).aggregate(Max('position'))['position__max'] or 0
-                    
-                    waitlist_entry = Waitlist.objects.create(
-                        event=event,
-                        user_id=user_id,
-                        position=last_position + 1,
-                        status='waiting' # Estado "en_cola" según el ticket
-                    )
-                    
-                    mensaje = "El evento ha superado el umbral de capacidad simultánea. Has sido colocado en la fila virtual."
-                    status_code = status.HTTP_202_ACCEPTED
-                else:
-                    mensaje = "Ya te encuentras en la fila virtual para este evento."
-                    status_code = status.HTTP_200_OK
+        # HS14+HS18: Verificar umbral y auto-activar la cola si se supera
+        # "En umbral" = usuarios con compras pending o active (seleccionando/pagando)
+        occupied = Purchase.objects.filter(
+            event=event,
+            status__in=['active', 'pending']
+        ).aggregate(total=DbSum('quantity'))['total'] or 0
 
+        threshold_abs = (event.waitlist_threshold / 100.0) * event.capacity
+
+        if occupied >= threshold_abs and not event.waitlist_active:
+            # Auto-activar la cola y sincronizar con service-queue
+            event.waitlist_active = True
+            event.save(update_fields=['waitlist_active'])
+            _sync_queue_config_to_service(event, is_queue_active=True)
+
+        # Si la fila está activa → el frontend debe redirigir a la cola virtual
+        if event.waitlist_active:
             return Response({
-                "status": "queue",
-                "message": mensaje,
+                "status": "queue_required",
+                "message": "El evento está en alta demanda. Por favor únete a la fila virtual.",
                 "data": {
                     "event_id": str(event.id),
-                    "queue_position": waitlist_entry.position,
-                    "queue_status": waitlist_entry.status
+                    "queue_url": f"/cola-espera/{event.id}",
                 }
-            }, status=status_code)
-        # --- FIN LÓGICA DE FILA VIRTUAL ---
+            }, status=status.HTTP_202_ACCEPTED)
 
         # Validaciones estándar de compra
         if event.status == 'cancelled':
@@ -1574,6 +1588,9 @@ class QueueConfigView(APIView):
 
         if serializer.is_valid():
             serializer.save()
+            # Sincronizar con service-queue para que la cola real refleje el nuevo umbral
+            event.refresh_from_db()
+            _sync_queue_config_to_service(event)
             return Response({
                 "status": "success",
                 "message": "Configuracion de cola actualizada correctamente.",
