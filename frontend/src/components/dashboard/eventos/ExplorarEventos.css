@@ -1,0 +1,167 @@
+.explorar-eventos {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 2rem;
+}
+
+.explorar-header-nav {
+  margin-bottom: 1rem;
+}
+
+.btn-volver-dashboard {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #ad8149;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: opacity 0.2s;
+}
+
+.btn-volver-dashboard:hover {
+  opacity: 0.75;
+  text-decoration: underline;
+}
+
+body.dark-mode .btn-volver-dashboard {
+  color: #d4a86a;
+}
+
+.explorar-header h2 {
+  margin: 0;
+  color: #2f2a22;
+}
+
+.explorar-header p {
+  margin-top: 0.5rem;
+  color: #655d50;
+}
+
+.busqueda-wrapper {
+  margin: 1rem 0 1.5rem;
+}
+
+.busqueda-wrapper input {
+  width: 100%;
+  max-width: 480px;
+  border: 1px solid #d7cab5;
+  border-radius: 10px;
+  padding: 0.7rem 0.8rem;
+}
+
+.eventos-grid-comprador {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.evento-card-comprador {
+  background: #fff;
+  border: 1px solid #ebe0d0;
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.evento-card-comprador img {
+  width: 100%;
+  height: 190px;
+  object-fit: cover;
+}
+
+.card-body {
+  padding: 1rem;
+  flex: 1;
+}
+
+.card-body h3 {
+  margin: 0 0 0.45rem;
+}
+
+.meta {
+  margin: 0.2rem 0;
+  color: #5e574b;
+}
+
+.descripcion {
+  margin-top: 0.6rem;
+  color: #4f473b;
+}
+
+.card-footer {
+  border-top: 1px solid #f0e6d7;
+  padding: 0.9rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.precio {
+  font-weight: 700;
+}
+
+.btn-detalle,
+.btn-volver {
+  background: #ad8149;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  font-weight: 600;
+}
+
+.empty-state,
+.loading-state {
+  background: #fff;
+  border: 1px solid #ebe0d0;
+  border-radius: 14px;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 2rem;
+}
+
+.spinner {
+  width: 34px;
+  height: 34px;
+  border: 4px solid #ececec;
+  border-top-color: #ad8149;
+  border-radius: 50%;
+  margin: 0 auto 0.7rem;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Dark Mode ── */
+body.dark-mode .explorar-eventos { color: #e0e0e0; }
+body.dark-mode .explorar-header h2 { color: #f0f0f0; }
+body.dark-mode .explorar-header p { color: #aaa; }
+body.dark-mode .busqueda-wrapper input {
+  background: #2a2a3a;
+  border-color: #444;
+  color: #e0e0e0;
+}
+body.dark-mode .evento-card-comprador {
+  background: #1e1e2e;
+  border-color: #3a3a4a;
+}
+body.dark-mode .card-body h3 { color: #f0f0f0; }
+body.dark-mode .meta { color: #aaa; }
+body.dark-mode .descripcion { color: #bbb; }
+body.dark-mode .card-footer { border-top-color: #3a3a4a; }
+body.dark-mode .precio { color: #d4a86a; }
+body.dark-mode .empty-state,
+body.dark-mode .loading-state {
+  background: #1e1e2e;
+  border-color: #3a3a4a;
+  color: #aaa;
+}

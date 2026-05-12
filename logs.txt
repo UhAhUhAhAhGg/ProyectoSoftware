@@ -1,0 +1,50 @@
+﻿service_events  | [27/Mar/2026 10:46:09] "OPTIONS /api/v1/ticket-types/ HTTP/1.1" 200 0
+service_events  | Bad Request: /api/v1/ticket-types/
+service_events  | [27/Mar/2026 10:46:09] "POST /api/v1/ticket-types/ HTTP/1.1" 400 61
+service_events  | /app/events/serializers.py changed, reloading.
+service_events  | Performing system checks...
+service_events  | 
+service_events  | System check identified no issues (0 silenced).
+service_events  | March 27, 2026 - 10:10:54
+service_events  | Django version 4.2.11, using settings 'events_config.settings'
+service_events  | Starting development server at http://0.0.0.0:8000/
+service_events  | Quit the server with CONTROL-C.
+service_events  | 
+service_events  | Watching for file changes with StatReloader
+service_events  | [27/Mar/2026 10:49:25] "GET /api/v1/categories/ HTTP/1.1" 200 1032
+service_events  | [27/Mar/2026 10:49:25] "GET /api/v1/categories/ HTTP/1.1" 200 1032
+service_events  | [27/Mar/2026 10:50:14] "POST /api/v1/events/ HTTP/1.1" 201 817
+service_events  | Bad Request: /api/v1/ticket-types/
+service_events  | [27/Mar/2026 10:50:14] "POST /api/v1/ticket-types/ HTTP/1.1" 400 139
+service_events  | [27/Mar/2026 10:51:23] "POST /api/v1/events/ HTTP/1.1" 201 817
+service_events  | [27/Mar/2026 10:51:24] "OPTIONS /api/v1/events/by_promoter/?promoter_id=3b8a2dca-fee7-45d8-9644-80292422d01f HTTP/1.1" 200 0
+service_events  | [27/Mar/2026 10:51:24] "OPTIONS /api/v1/events/by_promoter/?promoter_id=3b8a2dca-fee7-45d8-9644-80292422d01f HTTP/1.1" 200 0
+service_events  | [27/Mar/2026 10:51:25] "GET /api/v1/events/by_promoter/?promoter_id=3b8a2dca-fee7-45d8-9644-80292422d01f HTTP/1.1" 200 2656
+service_events  | [27/Mar/2026 10:51:25] "GET /api/v1/events/by_promoter/?promoter_id=3b8a2dca-fee7-45d8-9644-80292422d01f HTTP/1.1" 200 2656
+service_events  | [27/Mar/2026 10:51:46] "GET /api/v1/events/by_promoter/?promoter_id=3b8a2dca-fee7-45d8-9644-80292422d01f HTTP/1.1" 200 2656
+service_events  | [27/Mar/2026 10:51:46] "GET /api/v1/events/by_promoter/?promoter_id=3b8a2dca-fee7-45d8-9644-80292422d01f HTTP/1.1" 200 2656
+service_events  | [27/Mar/2026 10:52:27] "OPTIONS /api/v1/ticket-types/by_event/?event_id=dc9edbaa-6165-44dd-805c-abe2ad5ec959 HTTP/1.1" 200 0
+service_events  | [27/Mar/2026 10:52:27] "OPTIONS /api/v1/ticket-types/by_event/?event_id=dc9edbaa-6165-44dd-805c-abe2ad5ec959 HTTP/1.1" 200 0
+service_events  | [27/Mar/2026 10:52:27] "GET /api/v1/ticket-types/by_event/?event_id=dc9edbaa-6165-44dd-805c-abe2ad5ec959 HTTP/1.1" 200 2
+service_events  | [27/Mar/2026 10:52:27] "GET /api/v1/categories/ HTTP/1.1" 200 1032
+service_events  | [27/Mar/2026 10:52:27] "OPTIONS /api/v1/events/dc9edbaa-6165-44dd-805c-abe2ad5ec959/ HTTP/1.1" 200 0
+service_events  | [27/Mar/2026 10:52:27] "GET /api/v1/categories/ HTTP/1.1" 200 1032
+service_events  | [27/Mar/2026 10:52:27] "GET /api/v1/events/dc9edbaa-6165-44dd-805c-abe2ad5ec959/ HTTP/1.1" 200 884
+service_events  | [27/Mar/2026 10:52:27] "GET /api/v1/ticket-types/by_event/?event_id=dc9edbaa-6165-44dd-805c-abe2ad5ec959 HTTP/1.1" 200 2
+service_events  | [27/Mar/2026 10:52:27] "OPTIONS /api/v1/events/dc9edbaa-6165-44dd-805c-abe2ad5ec959/tickets/ HTTP/1.1" 200 0
+service_events  | [27/Mar/2026 10:52:27] "GET /api/v1/events/dc9edbaa-6165-44dd-805c-abe2ad5ec959/ HTTP/1.1" 200 884
+service_events  | [27/Mar/2026 10:52:27] "GET /api/v1/events/dc9edbaa-6165-44dd-805c-abe2ad5ec959/tickets/ HTTP/1.1" 200 2
+service_events  | [27/Mar/2026 10:52:27] "GET /api/v1/events/dc9edbaa-6165-44dd-805c-abe2ad5ec959/tickets/ HTTP/1.1" 200 2
+service_events  | [27/Mar/2026 10:52:36] "PATCH /api/v1/events/dc9edbaa-6165-44dd-805c-abe2ad5ec959/ HTTP/1.1" 200 794
+service_events  | [27/Mar/2026 10:52:38] "GET /api/v1/events/by_promoter/?promoter_id=3b8a2dca-fee7-45d8-9644-80292422d01f HTTP/1.1" 200 2656
+service_events  | [27/Mar/2026 10:52:38] "GET /api/v1/events/by_promoter/?promoter_id=3b8a2dca-fee7-45d8-9644-80292422d01f HTTP/1.1" 200 2656
+service_events  | [27/Mar/2026 10:52:46] "GET /api/v1/ticket-types/by_event/?event_id=dc9edbaa-6165-44dd-805c-abe2ad5ec959 HTTP/1.1" 200 2
+service_events  | [27/Mar/2026 10:52:46] "GET /api/v1/categories/ HTTP/1.1" 200 1032
+service_events  | [27/Mar/2026 10:52:46] "GET /api/v1/ticket-types/by_event/?event_id=dc9edbaa-6165-44dd-805c-abe2ad5ec959 HTTP/1.1" 200 2
+service_events  | [27/Mar/2026 10:52:46] "GET /api/v1/categories/ HTTP/1.1" 200 1032
+service_events  | [27/Mar/2026 10:52:46] "GET /api/v1/events/dc9edbaa-6165-44dd-805c-abe2ad5ec959/ HTTP/1.1" 200 884
+service_events  | [27/Mar/2026 10:52:46] "GET /api/v1/events/dc9edbaa-6165-44dd-805c-abe2ad5ec959/tickets/ HTTP/1.1" 200 2
+service_events  | [27/Mar/2026 10:52:46] "GET /api/v1/events/dc9edbaa-6165-44dd-805c-abe2ad5ec959/ HTTP/1.1" 200 884
+service_events  | [27/Mar/2026 10:52:46] "GET /api/v1/events/dc9edbaa-6165-44dd-805c-abe2ad5ec959/tickets/ HTTP/1.1" 200 2
+service_events  | [27/Mar/2026 10:52:48] "GET /api/v1/events/by_promoter/?promoter_id=3b8a2dca-fee7-45d8-9644-80292422d01f HTTP/1.1" 200 2656
+service_events  | [27/Mar/2026 10:52:48] "GET /api/v1/events/by_promoter/?promoter_id=3b8a2dca-fee7-45d8-9644-80292422d01f HTTP/1.1" 200 2656
