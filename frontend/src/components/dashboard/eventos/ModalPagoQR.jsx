@@ -1,15 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { eventosService } from '../../../services/eventosService';
 import { useNavigate } from 'react-router-dom';
+import { useQueue } from '../../../context/QueueContext';
+import ConfirmDialog from '../../common/ConfirmDialog';
 
-export default function ModalPagoQR({ ordenData, onCerrar }) {
+export default function ModalPagoQR({ ordenData, onCerrar, onVolver, asientosSeleccionados, hayColaActiva }) {
   const navigate = useNavigate();
+  const { fueAdmitidoPorCola } = useQueue();
   const [tiempoRestante, setTiempoRestante] = useState('1:00');
-  const [estadoPago, setEstadoPago] = useState('pending'); // pending | active | cancelled | expired
+  const [estadoPago, setEstadoPago] = useState('pending'); // pending | active | cancelled
   const [datosTicket, setDatosTicket] = useState(null);
   const [simulando, setSimulando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [mostrarConfirm, setMostrarConfirm] = useState(false);
 
   // Cronómetro de expiración
   useEffect(() => {
@@ -20,7 +24,12 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
       if (diff <= 0) {
         clearInterval(intervalo);
         setTiempoRestante('00:00');
-        setEstadoPago('expired');
+        // Forzar consulta al backend para que cancele y libere asientos
+        consultarEstado().then(() => {
+          // Si la consulta no cambió el estado (backend aún no canceló),
+          // forzar la vista de cancelado
+          setEstadoPago(prev => prev === 'pending' ? 'cancelled' : prev);
+        });
       } else {
         const m = Math.floor(diff / 60000);
         const s = Math.floor((diff % 60000) / 1000);
@@ -62,7 +71,17 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
     }
   };
 
-  const handleCancelar = async () => {
+  const handleCancelar = () => {
+    // Advertencia si hay cola activa
+    if (hayColaActiva || fueAdmitidoPorCola) {
+      setMostrarConfirm(true);
+      return;
+    }
+    ejecutarCancelacion();
+  };
+
+  const ejecutarCancelacion = async () => {
+    setMostrarConfirm(false);
     // Solo cancelar si la compra aún está pendiente
     if (estadoPago === 'pending' && ordenData?.purchase_id) {
       setCancelando(true);
@@ -70,7 +89,7 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
         await eventosService.cancelarCompra(ordenData.purchase_id);
       } catch {
         // Ignorar error: aunque falle, cerramos el modal 
-        // La compra expirará sola en 15 min por el backend
+        // La compra expirará sola por el backend
       } finally {
         setCancelando(false);
       }
@@ -88,35 +107,68 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
       position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
       backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex',
       justifyContent: 'center', alignItems: 'center', zIndex: 1000,
+      overflowY: 'auto', padding: '20px 0',
     }}>
       <div style={{
         background: 'white', padding: '30px', borderRadius: '14px',
         textAlign: 'center', maxWidth: '420px', width: '90%',
         boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+        maxHeight: '90vh', overflowY: 'auto',
+        margin: 'auto',
       }}>
 
         {/* PAGO PENDIENTE */}
         {estadoPago === 'pending' && (
           <>
-            <h2 style={{ margin: '0 0 4px 0' }}>Total: Bs. {ordenData.total}</h2>
-            <p style={{ color: '#555', margin: '0 0 12px 0' }}>
-              {ordenData.event_name} · {ordenData.ticket_type_name}
+            <h2 style={{ margin: '0 0 4px 0' }}>Resumen de compra</h2>
+            <p style={{ color: '#555', margin: '0 0 12px 0', fontSize: '0.95rem' }}>
+              {ordenData.event_name}
             </p>
-            <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '10px' }}>
-              En producción: escanea este QR con tu app bancaria.
+
+            {/* RESUMEN DETALLADO */}
+            <div style={{
+              background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: 8,
+              padding: '12px', marginBottom: '12px', textAlign: 'left',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.9rem' }}>
+                <span style={{ color: '#666' }}>Tipo de entrada:</span>
+                <strong>{ordenData.ticket_type_name}</strong>
+              </div>
+              {asientosSeleccionados && asientosSeleccionados.length > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.9rem' }}>
+                  <span style={{ color: '#666' }}>Asientos:</span>
+                  <strong>{asientosSeleccionados.join(', ')}</strong>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.9rem' }}>
+                <span style={{ color: '#666' }}>Cantidad:</span>
+                <strong>{asientosSeleccionados?.length || 1}</strong>
+              </div>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                paddingTop: '8px', borderTop: '1px solid #dee2e6',
+                fontSize: '1.05rem', fontWeight: 'bold',
+              }}>
+                <span>Total:</span>
+                <span style={{ color: '#28a745' }}>Bs. {ordenData.total}</span>
+              </div>
+            </div>
+
+            <p style={{ color: '#666', fontSize: '0.85rem', marginBottom: '8px' }}>
+              📱 Escanea este QR con tu app bancaria
             </p>
 
             {ordenData.payment_qr && (
               <img
                 src={`data:image/png;base64,${ordenData.payment_qr}`}
                 alt="QR de pago"
-                style={{ width: 200, height: 200, border: '2px solid #dee2e6', borderRadius: 8, marginBottom: 12 }}
+                style={{ width: 180, height: 180, border: '2px solid #dee2e6', borderRadius: 8, marginBottom: 10 }}
               />
             )}
 
-            <div style={{ background: '#e2e3e5', borderRadius: 8, padding: '10px', marginBottom: 16 }}>
-              <p style={{ margin: 0, fontWeight: 'bold', color: '#383d41' }}>⏳ Tiempo restante:</p>
-              <p style={{ fontSize: '2rem', margin: '4px 0', fontWeight: 900, color: '#383d41' }}>{tiempoRestante}</p>
+            <div style={{ background: '#e2e3e5', borderRadius: 8, padding: '8px', marginBottom: 12 }}>
+              <p style={{ margin: 0, fontWeight: 'bold', color: '#383d41', fontSize: '0.85rem' }}>⏳ Tiempo restante:</p>
+              <p style={{ fontSize: '1.6rem', margin: '2px 0', fontWeight: 900, color: '#383d41' }}>{tiempoRestante}</p>
             </div>
 
             {errorMsg && (
@@ -128,9 +180,9 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
             {/* BOTÓN DE SIMULACIÓN — solo para desarrollo */}
             <div style={{
               background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 8,
-              padding: '12px', marginBottom: 12,
+              padding: '10px', marginBottom: 10,
             }}>
-              <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: '#856404', fontWeight: 'bold' }}>
+              <p style={{ margin: '0 0 6px 0', fontSize: '0.78rem', color: '#856404', fontWeight: 'bold' }}>
                 🛠️ MODO DESARROLLO
               </p>
               <button
@@ -142,13 +194,25 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
               </button>
             </div>
 
-            <button
-              onClick={handleCancelar}
-              disabled={cancelando}
-              style={btnStyle('#6c757d')}
-            >
-              {cancelando ? 'Cancelando...' : 'Cancelar'}
-            </button>
+            {/* BOTONES: Volver y Cancelar lado a lado */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {onVolver && (
+                <button
+                  onClick={onVolver}
+                  disabled={cancelando}
+                  style={{ ...btnStyle('#0d6efd'), flex: 1 }}
+                >
+                  ← Volver
+                </button>
+              )}
+              <button
+                onClick={handleCancelar}
+                disabled={cancelando}
+                style={{ ...btnStyle('#6c757d'), flex: 1 }}
+              >
+                {cancelando ? 'Cancelando...' : 'Cancelar'}
+              </button>
+            </div>
           </>
         )}
 
@@ -201,37 +265,29 @@ export default function ModalPagoQR({ ordenData, onCerrar }) {
           </>
         )}
 
-        {/* EXPIRADO - */}
-        {estadoPago === 'expired' && (
-          <div style={{ color: '#991b1b', background: '#fee2e2', padding: 20, borderRadius: 8, border: '1px solid #fca5a5' }}>
-            <div style={{ fontSize: '3rem', marginBottom: 8 }}>⚠️</div>
-
-            {/* Texto exacto requerido por la Historia de Usuario */}
-            <h2 style={{ margin: '0 0 8px 0', fontSize: '1.3rem' }}>
-              Tiempo para pagar agotado, asientos liberados
-            </h2>
-
-            <p style={{ color: '#7f1d1d', marginBottom: '15px' }}>
-              El tiempo de reserva de 15 minutos ha concluido. Por favor, intenta comprar de nuevo si aún hay asientos disponibles.
-            </p>
-
-            <button onClick={handleCancelar} style={btnStyle('#6c757d')}>
-              Volver al evento
-            </button>
-          </div>
-        )}
-
-        {/* CANCELADO */}
+        {/* CANCELADO / EXPIRADO — vista unificada */}
         {estadoPago === 'cancelled' && (
           <div style={{ color: '#721c24', background: '#f8d7da', padding: 20, borderRadius: 8, border: '1px solid #f5c6cb' }}>
             <div style={{ fontSize: '3rem', marginBottom: 8 }}>❌</div>
             <h2 style={{ margin: '0 0 8px 0' }}>Orden Cancelada</h2>
-            <p>Esta orden de pago fue cancelada o expiró.</p>
+            <p>Esta orden de pago fue cancelada o expiró. Los asientos han sido liberados.</p>
             <button onClick={onCerrar} style={btnStyle('#dc3545')}>Volver al evento</button>
           </div>
         )}
 
       </div>
+
+      {/* Diálogo de confirmación bonito */}
+      <ConfirmDialog
+        open={mostrarConfirm}
+        icono="🚫"
+        titulo="¿Cancelar la compra?"
+        mensaje="Hay una cola de espera activa para este evento. Si cancelas, perderás tu turno y tendrás que volver a hacer cola."
+        textoConfirmar="Sí, cancelar"
+        textoCancelar="Seguir con el pago"
+        onConfirm={ejecutarCancelacion}
+        onCancel={() => setMostrarConfirm(false)}
+      />
     </div>
   );
 }

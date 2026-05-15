@@ -10,6 +10,9 @@ from .views import (
     QueueStatusView,
     QueuePositionView,
     QueueLeaveView,
+    ReleaseUserView,
+    InternalQueueConfigSyncView,
+    InternalAccessTimeView,
 )
 
 urlpatterns = [
@@ -28,4 +31,13 @@ urlpatterns = [
 
     # US19: Abandonar la cola voluntariamente
     path('queue/<uuid:event_id>/leave/', QueueLeaveView.as_view(), name='queue-leave'),
+
+    # Interno: service-events notifica cuando una compra termina (completa/cancela/expira)
+    path('internal/release-user/', ReleaseUserView.as_view(), name='release-user'),
+
+    # Interno: service-events sincroniza la configuración de cola sin ciclo de vuelta
+    path('internal/sync-queue-config/<uuid:event_id>/', InternalQueueConfigSyncView.as_view(), name='sync-queue-config'),
+
+    # Interno: service-events consulta cuándo el usuario fue admitido al evento
+    path('internal/access-time/<uuid:event_id>/<uuid:user_id>/', InternalAccessTimeView.as_view(), name='access-time'),
 ]

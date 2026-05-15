@@ -67,6 +67,14 @@ def get_active_users_count(event_id: str, timeout_minutes=2) -> int:
         return len(_active_sessions[event_id_str])
 
 
+def clear_event_activity(event_id: str):
+    """Limpia todos los usuarios activos de un evento (p.ej. cuando el promotor reconfigura)."""
+    with _lock:
+        event_id_str = str(event_id)
+        if event_id_str in _active_sessions:
+            _active_sessions[event_id_str] = {}
+
+
 def is_user_active(event_id: str, user_id: str, timeout_minutes=2) -> bool:
     """
     Verifica si un usuario específico está activo actualmente.
