@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
+import { useQueue } from '../../../context/QueueContext';
 import VenueLayoutPreview from './VenueLayoutPreview';
 import ModalPagoQR from './ModalPagoQR';
 import SeatMapModal from '../../eventos/SeatMapModal';
@@ -12,6 +13,7 @@ const QUEUE_URL = process.env.REACT_APP_QUEUE_URL || 'http://localhost:8003';
 
 function DetalleEvento() {
   const { id } = useParams();
+  const { estadoCola, estaEnCola, entrarACola, admitido, limpiarAdmitido, fueAdmitidoPorCola, resetearFlagCola } = useQueue();
   const [evento, setEvento] = useState(null);
   const [cargando, setCargando] = useState(true);
 
@@ -21,17 +23,20 @@ function DetalleEvento() {
   const [errorCompra, setErrorCompra] = useState('');
   const [waitlistInfo, setWaitlistInfo] = useState(null);
   const waitlistPollRef = useRef(null);
-  const pendingColaActionRef = useRef(null); // acción a ejecutar cuando el usuario sea admitido
+  const pendingColaActionRef = useRef(null);
 
   // Estados para el mapa de asientos interactivo
   const [selectedTicketType, setSelectedTicketType] = useState(null);
   const [mostrarSeatMap, setMostrarSeatMap] = useState(false);
   const [yaCompro, setYaCompro] = useState(false);
+  const [asientosSeleccionados, setAsientosSeleccionados] = useState([]);
+  const [seatMapDeadline, setSeatMapDeadline] = useState(null); // Persiste el deadline entre SeatMap ↔ QR
 
-  // Estados para la cola virtual (HS18)
+  // Bloqueo: el usuario está en cola de OTRO evento → no puede comprar aquí
+  const enColaDeOtroEvento = estaEnCola && estadoCola?.eventoId && String(estadoCola.eventoId) !== String(id);
+
+  // Estados locales para la cola
   const [verificandoCola, setVerificandoCola] = useState(false);
-  const [enCola, setEnCola] = useState(false);
-  const [colaInfo, setColaInfo] = useState(null); // { position, estimated_wait_minutes, queue_entry_id }
   const [colaError, setColaError] = useState('');
 
   useEffect(() => {
@@ -136,7 +141,6 @@ function DetalleEvento() {
   const verificarAccesoConCola = useCallback(async (ticketType, accionSinAsientos) => {
     const token = localStorage.getItem('token');
     if (!token || !id) {
-      // Sin token o sin evento, continuar normal
       if (accionSinAsientos) accionSinAsientos();
       else { setSelectedTicketType(ticketType); setMostrarSeatMap(true); }
       return;
@@ -152,23 +156,26 @@ function DetalleEvento() {
       const data = await res.json();
 
       if (res.status === 403) {
-        // Tiempo de acceso expirado
         setColaError(data.error || 'Tu tiempo en la cola ha expirado.');
         return;
       }
 
       if (data.queued) {
-        // Guardar contexto para cuando sea admitido
+        // El usuario debe esperar en cola
         setSelectedTicketType(ticketType);
         pendingColaActionRef.current = accionSinAsientos || null;
-        setEnCola(true);
-        setColaInfo({
+        entrarACola({
+          eventoId: id,
+          eventoNombre: evento?.nombre || '',
           position: data.position,
-          estimated_wait_minutes: data.estimated_wait_minutes,
-          queue_entry_id: data.queue_entry_id,
+          eta: data.estimated_wait_minutes,
+          etaSeconds: data.estimated_wait_seconds,
+          nextSlotSeconds: data.next_slot_seconds,
+          queueEntryId: data.queue_entry_id,
+          ticketType,
         });
       } else {
-        // Acceso libre — continuar al SeatMap o compra directa
+        // Admitido directamente — no hay cola activa en este momento
         if (accionSinAsientos) {
           accionSinAsientos();
         } else {
@@ -177,41 +184,35 @@ function DetalleEvento() {
         }
       }
     } catch (err) {
-      // Si service-queue no está disponible, permitir acceso (fail-open)
       console.warn('service-queue no disponible, permitiendo acceso:', err);
       if (accionSinAsientos) accionSinAsientos();
       else { setSelectedTicketType(ticketType); setMostrarSeatMap(true); }
     } finally {
       setVerificandoCola(false);
     }
-  }, [id]);
+  }, [id, evento, entrarACola]);
 
-  // Cuando el usuario es admitido desde la ColaEspera
-  const handleAdmitidoDesdeCola = useCallback(() => {
-    setEnCola(false);
-    setColaInfo(null);
-    const action = pendingColaActionRef.current;
-    pendingColaActionRef.current = null;
-    if (action) {
-      // Ticket sin mapa de asientos → compra directa
-      action();
-    } else if (selectedTicketType) {
-      // Ticket con mapa de asientos → abrir SeatMap
-      setMostrarSeatMap(true);
+  // Cuando el contexto global notifica admisión, abrir el SeatMap o compra directa
+  useEffect(() => {
+    if (admitido && String(admitido.eventoId) === String(id)) {
+      const action = pendingColaActionRef.current;
+      pendingColaActionRef.current = null;
+      limpiarAdmitido();
+      if (action) {
+        action();
+      } else {
+        setSelectedTicketType(admitido.ticketType || selectedTicketType);
+        setMostrarSeatMap(true);
+      }
     }
-  }, [selectedTicketType]);
-
-  // Si hubo error de expiración en la ColaEspera
-  const handleErrorDesdeCola = useCallback((msg) => {
-    setEnCola(false);
-    setColaInfo(null);
-    setColaError(msg);
-  }, []);
+  }, [admitido, id, selectedTicketType, limpiarAdmitido]);
 
   // Liberar slot en service-queue al cerrar el SeatMap sin comprar
   const handleCancelSeatMap = useCallback(async () => {
     setMostrarSeatMap(false);
     setSelectedTicketType(null);
+    setSeatMapDeadline(null);
+    resetearFlagCola();
     const token = localStorage.getItem('token');
     if (token && id) {
       try {
@@ -289,7 +290,14 @@ function DetalleEvento() {
                   {errorCompra}
                 </div>
               )}
-              {evento.tiposEntrada.map((t) => (
+              {enColaDeOtroEvento && (
+                <div style={{ padding: '12px 14px', background: '#fff3cd', color: '#856404', borderRadius: '8px', marginBottom: '12px', border: '1px solid #ffeaa7', fontSize: '0.9rem' }}>
+                  ⏳ Estás en cola de espera para otro evento. No puedes comprar entradas hasta que termines o salgas de esa cola.
+                </div>
+              )}
+              {evento.tiposEntrada.map((t) => {
+                const deshabilitado = cargandoCompra || verificandoCola || t.disponibles <= 0 || yaCompro || enColaDeOtroEvento;
+                return (
                 <div key={t.id} className="tipo-entrada-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #eee' }}>
                   <div>
                     <span className="tipo-nombre" style={{ display: 'block', fontWeight: 'bold' }}>{t.nombre}</span>
@@ -298,8 +306,7 @@ function DetalleEvento() {
                       {t.disponibles > 0 ? `${t.disponibles} disponibles` : 'Agotado'}
                     </span>
                   </div>
-                  
-                  {/* BOTÓN DE COMPRA — Pasa por la cola virtual (HS18) */}
+
                   {colaError && (
                     <div style={{ fontSize: '0.78rem', color: '#ef9a9a', marginBottom: '6px' }}>
                       {colaError}
@@ -308,27 +315,26 @@ function DetalleEvento() {
                   <button
                     onClick={() => {
                       if (t.filas && t.asientosPorFila) {
-                        // Con mapa de asientos → verificar cola primero
                         verificarAccesoConCola(t, null);
                       } else {
-                        // Sin mapa → verificar cola y luego compra directa
                         verificarAccesoConCola(t, () => handlePagarConQR(t.id, 1));
                       }
                     }}
-                    disabled={cargandoCompra || verificandoCola || t.disponibles <= 0 || yaCompro}
+                    disabled={deshabilitado}
                     style={{
                       padding: '8px 16px',
-                      background: (cargandoCompra || verificandoCola || t.disponibles <= 0 || yaCompro) ? '#ccc' : '#28a745',
+                      background: deshabilitado ? '#ccc' : '#28a745',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
-                      cursor: (cargandoCompra || verificandoCola || t.disponibles <= 0 || yaCompro) ? 'not-allowed' : 'pointer'
+                      cursor: deshabilitado ? 'not-allowed' : 'pointer'
                     }}
                   >
-                    {verificandoCola ? 'Verificando disponibilidad...' : cargandoCompra ? 'Procesando...' : (yaCompro ? 'Ya compraste entrada' : (t.filas && t.asientosPorFila ? 'Seleccionar Asientos' : 'Comprar'))}
+                    {enColaDeOtroEvento ? 'En cola de otro evento' : verificandoCola ? 'Verificando disponibilidad...' : cargandoCompra ? 'Procesando...' : (yaCompro ? 'Ya compraste entrada' : (t.filas && t.asientosPorFila ? 'Seleccionar Asientos' : 'Comprar'))}
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -348,7 +354,21 @@ function DetalleEvento() {
       {mostrarModal && ordenCompra && (
         <ModalPagoQR
           ordenData={ordenCompra}
-          onCerrar={() => { setMostrarModal(false); setOrdenCompra(null); }}
+          asientosSeleccionados={asientosSeleccionados}
+          hayColaActiva={fueAdmitidoPorCola}
+          onCerrar={() => { setMostrarModal(false); setOrdenCompra(null); setAsientosSeleccionados([]); setSeatMapDeadline(null); resetearFlagCola(); }}
+          onVolver={() => {
+            // Cancelar la compra pendiente PERO mantener el cupo en la cola
+            if (ordenCompra?.purchase_id) {
+              eventosService.cancelarCompraKeepQueue(ordenCompra.purchase_id).catch(() => {});
+            }
+            setMostrarModal(false);
+            setOrdenCompra(null);
+            // Reabrir el mapa de asientos con el mismo deadline (timer continúa)
+            if (selectedTicketType) {
+              setMostrarSeatMap(true);
+            }
+          }}
         />
       )}
 
@@ -359,24 +379,20 @@ function DetalleEvento() {
           onClose={handleCancelSeatMap}
           eventId={id}
           ticketType={selectedTicketType}
+          initialDeadline={seatMapDeadline}
+          initialSelected={asientosSeleccionados}
+          hayColaActiva={fueAdmitidoPorCola}
+          onDeadlineResolved={(dl) => setSeatMapDeadline(dl)}
           onConfirm={(selectedSeats) => {
+            setAsientosSeleccionados(selectedSeats.map(s => s.label || s));
             setMostrarSeatMap(false);
             handlePagarConQR(selectedTicketType.id, selectedSeats.length || 1);
           }}
         />
       )}
 
-      {/* PANTALLA DE COLA VIRTUAL (HS18) */}
-      {enCola && colaInfo && (
-        <ColaEspera
-          eventId={id}
-          queueEntryId={colaInfo.queue_entry_id}
-          posicionInicial={colaInfo.position}
-          etaInicial={colaInfo.estimated_wait_minutes}
-          onAdmitido={handleAdmitidoDesdeCola}
-          onError={handleErrorDesdeCola}
-        />
-      )}
+      {/* PANTALLA DE COLA VIRTUAL (HS18) — usa contexto global, se oculta al minimizar */}
+      <ColaEspera />
     </section>
   );
 }

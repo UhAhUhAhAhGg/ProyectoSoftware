@@ -366,6 +366,23 @@ export const eventosService = {
     return data;
   },
 
+  /**
+   * Cancela la compra y libera asientos PERO mantiene el cupo en la cola.
+   * Se usa cuando el usuario hace clic en "Volver" para re-seleccionar asientos.
+   */
+  cancelarCompraKeepQueue: async (purchaseId) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/purchase/${purchaseId}/cancel/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keep_queue: true }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'No se pudo cancelar la compra.');
+    }
+    return data;
+  },
+
   // ===== CONFIGURACIÓN DE COLA VIRTUAL =====
 
   getQueueConfig: async (eventoId) => {

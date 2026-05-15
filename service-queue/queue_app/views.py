@@ -7,6 +7,7 @@ US19: Posición y ETA en cola (QueuePositionView)
 """
 
 import requests
+from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
 from rest_framework.views import APIView
@@ -85,6 +86,77 @@ def _calculate_avg_transaction_time(event_id: str) -> float:
             return max(1.0, sum(times) / len(times))
 
     return default_minutes
+
+
+def _count_admitted(event_id_str: str) -> int:
+    """Cuenta usuarios admitidos vía QueueEntry (más confiable que active_sessions)."""
+    return QueueEntry.objects.filter(
+        event_id=event_id_str,
+        status='admitted',
+    ).count()
+
+
+def _expire_stale_admitted(event_id_str: str):
+    """
+    Marca como 'expired' los QueueEntries 'admitted' cuyo tiempo
+    de selección+pago ya venció (accessed_at + payment_timeout <= now).
+    Libera el cupo Y admite automáticamente al siguiente en la cola.
+    """
+    try:
+        config = QueueConfig.objects.get(event_id=event_id_str)
+        timeout_minutes = config.payment_timeout_minutes
+        max_users = config.max_concurrent_users
+    except QueueConfig.DoesNotExist:
+        return
+
+    # __lte para evitar ventana off-by-one: si accessed_at == cutoff, ya venció
+    cutoff = timezone.now() - timedelta(minutes=timeout_minutes)
+    expired = list(QueueEntry.objects.filter(
+        event_id=event_id_str,
+        status='admitted',
+        accessed_at__lte=cutoff,
+    ))
+    if not expired:
+        return
+
+    for entry in expired:
+        entry.status = 'expired'
+        entry.save()
+        remove_user_activity(event_id_str, str(entry.user_id))
+
+    # Admitir tantos usuarios de la cola como slots libres haya (basado en BD, no memoria)
+    admitted_count = _count_admitted(event_id_str)
+    slots_libres = max(0, max_users - admitted_count)
+    for _ in range(slots_libres):
+        _admit_next_from_queue(event_id_str)
+        if _count_admitted(event_id_str) >= max_users:
+            break
+
+
+def _seconds_until_next_slot(event_id_str: str) -> int:
+    """
+    Segundos hasta que se libere el próximo slot:
+    deadline del usuario admitido más antiguo - ahora.
+    Si no hay admitidos, retorna 0.
+    """
+    try:
+        config = QueueConfig.objects.get(event_id=event_id_str)
+        timeout_minutes = config.payment_timeout_minutes
+    except QueueConfig.DoesNotExist:
+        timeout_minutes = 15
+
+    oldest = QueueEntry.objects.filter(
+        event_id=event_id_str,
+        status='admitted',
+        accessed_at__isnull=False,
+    ).order_by('accessed_at').first()
+
+    if not oldest or not oldest.accessed_at:
+        return 0
+
+    deadline = oldest.accessed_at + timedelta(minutes=timeout_minutes)
+    delta = (deadline - timezone.now()).total_seconds()
+    return max(0, int(delta))
 
 
 def _admit_next_from_queue(event_id_str: str):
@@ -203,6 +275,9 @@ class QueueEnterView(APIView):
         user_id = str(request.user.id)
         event_id_str = str(event_id)
 
+        # Limpiar admitidos expirados antes de cualquier cálculo
+        _expire_stale_admitted(event_id_str)
+
         try:
             config = QueueConfig.objects.get(event_id=event_id_str)
             max_users = config.max_concurrent_users
@@ -231,7 +306,11 @@ class QueueEnterView(APIView):
                     )
             # Aún válido → refrescar heartbeat y dejar pasar
             register_user_activity(event_id_str, user_id)
-            return Response({"queued": False, "status": "admitted"}, status=200)
+            return Response({
+                "queued": False,
+                "status": "admitted",
+                "accessed_at": admitted_entry.accessed_at.isoformat() if admitted_entry.accessed_at else None,
+            }, status=200)
         except QueueEntry.DoesNotExist:
             pass
 
@@ -240,16 +319,36 @@ class QueueEnterView(APIView):
             waiting_entry = QueueEntry.objects.get(
                 user_id=user_id, event_id=event_id_str, status='waiting'
             )
+            # Si hay cupo (alguien salió/expiró), promover a admitido
+            # Usar conteo basado en BD para evitar desincronización con active_sessions
+            admitted_count = _count_admitted(event_id_str)
+            if admitted_count < max_users:
+                now = timezone.now()
+                waiting_entry.status = 'admitted'
+                waiting_entry.notified_at = now
+                waiting_entry.accessed_at = now
+                waiting_entry.save()
+                register_user_activity(event_id_str, user_id)
+                return Response({
+                    "queued": False,
+                    "status": "admitted",
+                    "accessed_at": now.isoformat(),
+                }, status=200)
+
             position = QueueEntry.objects.filter(
                 event_id=event_id_str,
                 status='waiting',
                 joined_at__lt=waiting_entry.joined_at,
             ).count() + 1
-            eta = round(position * _calculate_avg_transaction_time(event_id_str))
+            next_slot_seconds = _seconds_until_next_slot(event_id_str)
+            avg_transaction_seconds = round(_calculate_avg_transaction_time(event_id_str) * 60)
+            eta_seconds = next_slot_seconds + max(0, position - 1) * avg_transaction_seconds
             return Response({
                 "queued": True,
                 "position": position,
-                "estimated_wait_minutes": eta,
+                "estimated_wait_seconds": eta_seconds,
+                "estimated_wait_minutes": round(eta_seconds / 60),
+                "next_slot_seconds": next_slot_seconds,
                 "queue_entry_id": str(waiting_entry.id),
             }, status=200)
         except QueueEntry.DoesNotExist:
@@ -261,12 +360,27 @@ class QueueEnterView(APIView):
             user_id=user_id, event_id=event_id_str, status__in=['expired', 'left']
         ).delete()
 
-        active_count = get_active_users_count(event_id_str)
+        # Usar conteo basado en BD para evitar desincronización con active_sessions
+        admitted_count = _count_admitted(event_id_str)
 
-        if active_count < max_users:
-            # Cupo libre → admitir directamente sin pasar por la cola
+        if admitted_count < max_users:
+            # Cupo libre → admitir directamente y registrar accessed_at
+            now = timezone.now()
+            entry, _ = QueueEntry.objects.update_or_create(
+                user_id=user_id,
+                event_id=event_id_str,
+                defaults={
+                    'status': 'admitted',
+                    'notified_at': now,
+                    'accessed_at': now,
+                },
+            )
             register_user_activity(event_id_str, user_id)
-            return Response({"queued": False, "status": "admitted"}, status=200)
+            return Response({
+                "queued": False,
+                "status": "admitted",
+                "accessed_at": now.isoformat(),
+            }, status=200)
         else:
             # Sin cupo → encolar (no se registra como activo todavía)
             entry, _ = QueueEntry.objects.get_or_create(
@@ -283,12 +397,16 @@ class QueueEnterView(APIView):
                 status='waiting',
                 joined_at__lt=entry.joined_at,
             ).count() + 1
-            eta = round(position * _calculate_avg_transaction_time(event_id_str))
+            next_slot_seconds = _seconds_until_next_slot(event_id_str)
+            avg_transaction_seconds = round(_calculate_avg_transaction_time(event_id_str) * 60)
+            eta_seconds = next_slot_seconds + max(0, position - 1) * avg_transaction_seconds
 
             return Response({
                 "queued": True,
                 "position": position,
-                "estimated_wait_minutes": eta,
+                "estimated_wait_seconds": eta_seconds,
+                "estimated_wait_minutes": round(eta_seconds / 60),
+                "next_slot_seconds": next_slot_seconds,
                 "queue_entry_id": str(entry.id),
             }, status=200)
 
@@ -305,12 +423,12 @@ class QueueStatusView(APIView):
             return Response({"is_queue_active": False, "users_waiting": 0})
 
         users_waiting = QueueEntry.objects.filter(event_id=event_id_str, status='waiting').count()
-        active_count = get_active_users_count(event_id_str)
+        admitted_count = _count_admitted(event_id_str)
 
         return Response({
-            "is_queue_active": active_count >= config.max_concurrent_users,
+            "is_queue_active": admitted_count >= config.max_concurrent_users,
             "users_waiting": users_waiting,
-            "users_admitted": active_count,
+            "users_admitted": admitted_count,
             "max_concurrent_users": config.max_concurrent_users,
         })
 
@@ -328,6 +446,9 @@ class QueuePositionView(APIView):
     def get(self, request, event_id):
         user_id = str(request.user.id)
         event_id_str = str(event_id)
+
+        # Expirar admitidos vencidos antes de evaluar la posición
+        _expire_stale_admitted(event_id_str)
 
         try:
             entry = QueueEntry.objects.get(user_id=user_id, event_id=event_id_str)
@@ -355,27 +476,62 @@ class QueuePositionView(APIView):
             return Response({
                 "queued": False,
                 "status": "admitted",
+                "accessed_at": entry.accessed_at.isoformat() if entry.accessed_at else None,
                 "message": "¡Es tu turno! Ya puedes seleccionar tus asientos.",
             })
 
         if entry.status in ('expired', 'left'):
             return Response({"queued": False, "status": entry.status})
 
-        # Status == 'waiting': calcular posición y ETA
+        # Status == 'waiting': si hay cupo, admitir al usuario directamente
+        try:
+            config = QueueConfig.objects.get(event_id=event_id_str)
+            max_users = config.max_concurrent_users
+        except QueueConfig.DoesNotExist:
+            max_users = 9999
+
+        # Usar conteo basado en BD para evitar desincronización con active_sessions
+        admitted_count = _count_admitted(event_id_str)
+        # Solo admitir si el usuario es el primero en la cola (más antiguo)
+        is_first = not QueueEntry.objects.filter(
+            event_id=event_id_str,
+            status='waiting',
+            joined_at__lt=entry.joined_at,
+        ).exists()
+
+        if is_first and admitted_count < max_users:
+            now = timezone.now()
+            entry.status = 'admitted'
+            entry.notified_at = now
+            entry.accessed_at = now
+            entry.save()
+            register_user_activity(event_id_str, user_id)
+            return Response({
+                "queued": False,
+                "status": "admitted",
+                "accessed_at": now.isoformat(),
+                "message": "¡Es tu turno! Ya puedes seleccionar tus asientos.",
+            })
+
+        # Sigue esperando: calcular posición y ETA exacto
         position = QueueEntry.objects.filter(
             event_id=event_id_str,
             status='waiting',
             joined_at__lt=entry.joined_at,
         ).count() + 1
         total_waiting = QueueEntry.objects.filter(event_id=event_id_str, status='waiting').count()
-        eta = round(position * _calculate_avg_transaction_time(event_id_str))
+        next_slot_seconds = _seconds_until_next_slot(event_id_str)
+        avg_transaction_seconds = round(_calculate_avg_transaction_time(event_id_str) * 60)
+        eta_seconds = next_slot_seconds + max(0, position - 1) * avg_transaction_seconds
 
         return Response({
             "queued": True,
             "status": "waiting",
             "position": position,
             "total_waiting": total_waiting,
-            "estimated_wait_minutes": eta,
+            "estimated_wait_seconds": eta_seconds,
+            "estimated_wait_minutes": round(eta_seconds / 60),
+            "next_slot_seconds": next_slot_seconds,
             "joined_at": entry.joined_at.isoformat(),
         })
 
@@ -406,6 +562,30 @@ class QueueLeaveView(APIView):
         remove_user_activity(event_id_str, user_id)
         _admit_next_from_queue(event_id_str)
         return Response({"message": "Has salido de la cola. Tu cupo fue liberado."})
+
+
+class InternalAccessTimeView(APIView):
+    """
+    GET /api/v1/internal/access-time/<event_id>/<user_id>/
+    Endpoint INTERNO. service-events lo llama para saber cuándo el usuario
+    fue admitido al evento (accessed_at) y así calcular el expires_at del
+    Purchase tomando como punto de partida el momento de "Seleccionar Asientos".
+    """
+    permission_classes = []
+    authentication_classes = []
+
+    def get(self, request, event_id, user_id):
+        try:
+            entry = QueueEntry.objects.get(
+                event_id=event_id, user_id=user_id, status='admitted'
+            )
+            return Response({
+                "user_id": str(entry.user_id),
+                "event_id": str(entry.event_id),
+                "accessed_at": entry.accessed_at.isoformat() if entry.accessed_at else None,
+            })
+        except QueueEntry.DoesNotExist:
+            return Response({"error": "no admitted entry"}, status=404)
 
 
 class InternalQueueConfigSyncView(APIView):

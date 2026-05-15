@@ -386,6 +386,7 @@ function DetalleEventoModal({ evento, onClose, getRangoPrecios, user }) {
           eventoId={evento.id}
           promotorId={evento.promotorId}
           usuarioId={user?.id}
+          capacidadEvento={evento.capacidad}
         />
       </div>
     </div>
