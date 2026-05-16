@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
+import { recommendationsService } from '../../../services/recommendationsService';
+import EventCard from '../../EventCard';
+import EventSkeleton from '../../EventSkeleton';
 import './ExplorarEventos.css';
 
 function ExplorarEventos() {
@@ -36,12 +39,25 @@ function ExplorarEventos() {
     });
   }, [eventos, busqueda]);
 
+  const handleEventoView = (eventoId) => {
+    // Registrar que el usuario vio el evento para recomendaciones
+    recommendationsService.trackEventView(eventoId).catch(console.warn);
+  };
+
   if (cargando) {
     return (
-      <div className="explorar-eventos loading-state">
-        <div className="spinner"></div>
-        <p>Cargando eventos disponibles...</p>
-      </div>
+      <section className="explorar-eventos">
+        <div className="explorar-header-nav">
+          <Link to="/dashboard" className="btn-volver-dashboard">← Volver al dashboard</Link>
+        </div>
+        <header className="explorar-header">
+          <h2>Eventos Disponibles</h2>
+          <p>Selecciona un evento para ver su detalle y elegir el de tu interés.</p>
+        </header>
+        <div className="eventos-grid-comprador">
+          <EventSkeleton count={6} />
+        </div>
+      </section>
     );
   }
 
@@ -86,21 +102,9 @@ function ExplorarEventos() {
       ) : (
         <div className="eventos-grid-comprador">
           {eventosFiltrados.map((evento) => (
-            <article className="evento-card-comprador" key={evento.id}>
-              <img src={evento.imagen} alt={evento.nombre} />
-              <div className="card-body">
-                <h3>{evento.nombre}</h3>
-                <p className="meta">📅 {new Date(evento.fecha).toLocaleDateString('es-ES')} - {evento.hora}</p>
-                <p className="meta">📍 {evento.ubicacion}, {evento.ciudad}</p>
-                <p className="descripcion">{evento.descripcion}</p>
-              </div>
-              <footer className="card-footer">
-                <span className="precio">Desde ${evento.precio}</span>
-                <Link className="btn-detalle" to={`/dashboard/evento/${evento.id}`}>
-                  Ver detalle
-                </Link>
-              </footer>
-            </article>
+            <div key={evento.id} onClick={() => handleEventoView(evento.id)}>
+              <EventCard evento={evento} variant="comprador" />
+            </div>
           ))}
         </div>
       )}

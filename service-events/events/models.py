@@ -469,3 +469,109 @@ class SeatAuditLog(models.Model):
 
     def __str__(self):
         return f"{self.seat} - {self.action} - {self.created_at}"
+
+
+# ─── TIC-21: Recomendaciones personalizadas ──────────────────────────────────
+
+class UserBehavior(models.Model):
+    """
+    TIC-358: Registra interacciones del usuario con eventos.
+    Alimenta el motor de recomendaciones con señales de comportamiento.
+    Acciones posibles: view (ver evento), favorite (marcar favorito), purchase (comprar).
+    """
+    ACTION_CHOICES = [
+        ('view', 'Ver evento'),
+        ('favorite', 'Marcar favorito'),
+        ('purchase', 'Comprar'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField(db_index=True)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='behaviors')
+    action_type = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'User Behavior'
+        verbose_name_plural = 'User Behaviors'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user_id', 'action_type']),
+            models.Index(fields=['user_id', 'event']),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} - {self.action_type} - {self.event.name}"
+
+
+class UserPreference(models.Model):
+    """
+    TIC-359: Almacena el peso de preferencia de un usuario por categoría.
+    El peso se actualiza dinámicamente según el comportamiento (TIC-360).
+    Un peso mayor indica mayor afinidad con esa categoría.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField(db_index=True)
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='user_preferences')
+    weight = models.FloatField(default=0.0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'User Preference'
+        verbose_name_plural = 'User Preferences'
+        unique_together = ('user_id', 'category')
+        indexes = [
+            models.Index(fields=['user_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} - {self.category.name}: {self.weight}"
+
+
+# ─── TIC-22: Notificaciones de match ─────────────────────────────────────────
+
+class Notification(models.Model):
+    """
+    TIC-372: Historial de notificaciones enviadas al usuario.
+    Se crea cuando el motor de matching detecta un evento compatible con el perfil del usuario.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField(db_index=True)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='notifications')
+    message = models.TextField()
+    read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Notification'
+        verbose_name_plural = 'Notifications'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user_id', 'read']),
+            models.Index(fields=['user_id']),
+        ]
+
+    def __str__(self):
+        return f"Notif → {self.user_id} | {self.event.name} | leída={self.read}"
+
+
+class NotificationPreference(models.Model):
+    """
+    TIC-371: Preferencias de notificación por categoría por usuario.
+    Si enabled=True, el usuario recibirá notificaciones de eventos de esa categoría.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField(db_index=True)
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='notification_preferences')
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = 'Notification Preference'
+        verbose_name_plural = 'Notification Preferences'
+        unique_together = ('user_id', 'category')
+        indexes = [
+            models.Index(fields=['user_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} - {self.category.name}: {'on' if self.enabled else 'off'}"

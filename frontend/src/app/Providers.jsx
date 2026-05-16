@@ -2,14 +2,17 @@
 
 import { AuthProvider } from '../context/AuthContext';
 import { ThemeProvider } from '../context/ThemeContext';
+import { FavoritesProvider } from '../context/FavoritesContext';
 import ForbiddenToast from '../components/ForbiddenToast';
 
 export default function Providers({ children }) {
   return (
     <ThemeProvider>
       <AuthProvider>
-        {children}
-        <ForbiddenToast />
+        <FavoritesProvider>
+          {children}
+          <ForbiddenToast />
+        </FavoritesProvider>
       </AuthProvider>
     </ThemeProvider>
   );

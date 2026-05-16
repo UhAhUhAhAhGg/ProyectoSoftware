@@ -1,0 +1,126 @@
+/* EventSkeleton.css - Skeleton loaders para eventos */
+
+.evento-card-skeleton {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.3s ease-in;
+}
+
+/* Imagen esqueleto */
+.skeleton-image {
+  width: 100%;
+  height: 200px;
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 25%,
+    #e0e0e0 50%,
+    #f0f0f0 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Cuerpo del esqueleto */
+.card-body-skeleton {
+  padding: 1rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.skeleton {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 25%,
+    #e0e0e0 50%,
+    #f0f0f0 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+.skeleton-title {
+  height: 18px;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.skeleton-text {
+  height: 12px;
+  width: 100%;
+}
+
+.skeleton-text.short {
+  width: 60%;
+}
+
+/* Footer esqueleto */
+.card-footer-skeleton {
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  border-top: 1px solid #f0f0f0;
+}
+
+.skeleton-price {
+  height: 20px;
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.skeleton-button {
+  height: 40px;
+  width: 100px;
+  flex-shrink: 0;
+}
+
+/* Animación shimmer */
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* En grid */
+.eventos-grid-comprador .evento-card-skeleton,
+.eventos-grid-recomendaciones .evento-card-skeleton {
+  animation: fadeIn 0.3s ease-in;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .skeleton-image {
+    height: 150px;
+  }
+
+  .card-body-skeleton {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .card-footer-skeleton {
+    padding: 0.75rem;
+    flex-wrap: wrap;
+  }
+}
