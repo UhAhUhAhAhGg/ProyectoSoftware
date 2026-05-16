@@ -322,57 +322,62 @@ function ListaEventos() {
 
 function DetalleEventoModal({ evento, onClose, getRangoPrecios, user }) {
   const activos = evento.tiposEntrada?.filter(t => t.estado === 'activo') || [];
-  
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-confirmar" style={{ maxWidth: '600px', textAlign: 'left' }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
+    <div className="modal-overlay modal-overlay-scroll" onClick={onClose}>
+      <div
+        className="modal-confirmar modal-detalle-evento"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header fijo */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
           <div>
-            <h2 style={{ margin: '0 0 5px 0', color: 'var(--color-marron)' }}>{evento.nombre}</h2>
+            <h2 style={{ margin: '0 0 4px 0', color: 'var(--color-marron)', fontSize: '1.2rem' }}>{evento.nombre}</h2>
             {evento.categoriaNombre && (
-              <span style={{ display: 'inline-block', background: '#e0e0e0', color: '#333', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85rem' }}>
+              <span style={{ display: 'inline-block', background: '#e0e0e0', color: '#333', padding: '2px 8px', borderRadius: '4px', fontSize: '0.78rem' }}>
                 🏷️ {evento.categoriaNombre}
               </span>
             )}
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#999', marginTop: '-5px' }}>&times;</button>
-        </div>
-        
-        <div style={{ marginBottom: '20px' }}>
-            <img 
-              src={typeof evento.imagen === 'string' ? evento.imagen : 'https://via.placeholder.com/600x300?text=Sin+Imagen'} 
-              alt={evento.nombre} 
-              style={{ width: '100%', height: '250px', objectFit: 'cover', borderRadius: '8px' }}
-              onError={(e) => { e.target.onerror = null; e.target.src = "https://via.placeholder.com/600x300?text=Sin+Imagen" }}
-            />
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#999', marginTop: '-4px', lineHeight: 1 }}>&times;</button>
         </div>
 
-        <div style={{ display: 'flex', gap: '20px', marginBottom: '15px', color: 'var(--color-verde-gris)' }}>
-          <div>📅 {new Date(evento.fecha).toLocaleDateString('es-ES')} - {evento.hora}</div>
-          <div>📍 {evento.ubicacion}, {evento.ciudad}</div>
+        {/* Imagen compacta */}
+        <img
+          src={typeof evento.imagen === 'string' ? evento.imagen : 'https://via.placeholder.com/600x180?text=Sin+Imagen'}
+          alt={evento.nombre}
+          style={{ width: '100%', height: '160px', objectFit: 'cover', borderRadius: '8px', marginBottom: '12px' }}
+          onError={(e) => { e.target.onerror = null; e.target.src = "https://via.placeholder.com/600x180?text=Sin+Imagen"; }}
+        />
+
+        {/* Fecha y ubicación en una sola línea */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '10px', color: 'var(--color-verde-gris)', fontSize: '0.85rem' }}>
+          <span>📅 {new Date(evento.fecha).toLocaleDateString('es-ES')} · {evento.hora}</span>
+          <span>📍 {evento.ubicacion}, {evento.ciudad}</span>
         </div>
-        
-        <p style={{ lineHeight: '1.6', color: 'var(--color-negro)', marginBottom: '20px' }}>
+
+        {/* Descripción limitada a 3 líneas */}
+        <p style={{ lineHeight: '1.5', color: 'var(--color-negro)', marginBottom: '12px', fontSize: '0.9rem', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {evento.descripcion}
         </p>
-        
-        <div style={{ background: '#f5f5f5', padding: '15px', borderRadius: '8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <h4 style={{ margin: 0 }}>Tipos de Entrada</h4>
-            <span style={{ fontWeight: 'bold', color: 'var(--color-marron)' }}>{getRangoPrecios(evento)}</span>
+
+        {/* Tipos de entrada */}
+        <div style={{ background: '#f5f5f5', padding: '12px', borderRadius: '8px', marginBottom: '4px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <h4 style={{ margin: 0, fontSize: '0.95rem' }}>Tipos de Entrada</h4>
+            <span style={{ fontWeight: 'bold', color: 'var(--color-marron)', fontSize: '0.9rem' }}>{getRangoPrecios(evento)}</span>
           </div>
-          
           {activos.length > 0 ? (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
               {activos.map(t => (
-                <li key={t.id} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ddd', padding: '8px 0' }}>
+                <li key={t.id} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ddd', padding: '6px 0', fontSize: '0.88rem' }}>
                   <span>{t.nombre} <small style={{ color: '#888' }}>({t.cupoVendido || 0}/{t.cupoMaximo} vendidos)</small></span>
                   <span style={{ fontWeight: 'bold' }}>${t.precio}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p style={{ margin: '10px 0 0', fontStyle: 'italic', color: '#888' }}>No hay entradas creadas.</p>
+            <p style={{ margin: '6px 0 0', fontStyle: 'italic', color: '#888', fontSize: '0.85rem' }}>No hay entradas creadas.</p>
           )}
         </div>
 
@@ -381,6 +386,7 @@ function DetalleEventoModal({ evento, onClose, getRangoPrecios, user }) {
           eventoId={evento.id}
           promotorId={evento.promotorId}
           usuarioId={user?.id}
+          capacidadEvento={evento.capacidad}
         />
       </div>
     </div>

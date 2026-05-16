@@ -25,8 +25,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 from .models import TicketType, PaymentOrder # Asegúrate de importar tus modelos
+import math
 import secrets
 import uuid
+import requests as http_requests
+from django.conf import settings as django_settings
 from django.db.models import Max
 from datetime import timedelta
 from .permissions import IsAdministrador, IsPromotor, IsComprador
@@ -41,6 +44,35 @@ from .serializers import (
     TicketTypeCreateSerializer,
     QueueConfigSerializer,
 )
+
+
+def _notify_queue_release(event_id: str, user_id: str):
+    """Notifica a service-queue que un usuario liberó su cupo (compra completa/cancelada/expirada)."""
+    try:
+        url = f"{django_settings.QUEUE_SERVICE_URL}/api/v1/internal/release-user/"
+        http_requests.post(url, json={"event_id": event_id, "user_id": user_id}, timeout=3)
+    except Exception:
+        pass
+
+
+def _get_queue_access_time(event_id: str, user_id: str):
+    """
+    Consulta service-queue para obtener cuándo el usuario fue admitido al evento.
+    Retorna un datetime o None. Permite que el timer del Purchase empiece desde
+    'Seleccionar Asientos' y no desde la generación del QR.
+    """
+    try:
+        from django.utils.dateparse import parse_datetime
+        url = f"{django_settings.QUEUE_SERVICE_URL}/api/v1/internal/access-time/{event_id}/{user_id}/"
+        resp = http_requests.get(url, timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            accessed_at_str = data.get('accessed_at')
+            if accessed_at_str:
+                return parse_datetime(accessed_at_str)
+    except Exception:
+        pass
+    return None
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -737,8 +769,10 @@ class PurchaseView(APIView):
             }, status=status.HTTP_409_CONFLICT)
 
         total_price = ticket.price * quantity
-        # 👇 CAMBIADO A 1 MINUTO PARA PRUEBAS
-        expires_at = timezone.now() + timedelta(minutes=1)
+        # El timer empieza desde 'Seleccionar Asientos' (accessed_at en service-queue),
+        # no desde la generación del QR. Fallback: ahora si no hay registro.
+        start_time = _get_queue_access_time(str(event.id), str(user_id)) or timezone.now()
+        expires_at = start_time + timedelta(minutes=event.payment_timeout_minutes)
 
         purchase = Purchase.objects.create(
             user_id=user_id,
@@ -748,6 +782,11 @@ class PurchaseView(APIView):
             total_price=total_price,
             status='pending'
         )
+        # Sobrescribir created_at para que SimularPagoView y PurchaseStatusView
+        # (que calculan expires_at = created_at + timeout) usen el tiempo de admisión
+        # a la cola en vez del tiempo de creación de la orden.
+        Purchase.objects.filter(id=purchase.id).update(created_at=start_time)
+        purchase.refresh_from_db()
 
         payment_qr_base64 = None
         try:
@@ -793,11 +832,13 @@ class SimularPagoView(APIView):
         if purchase.status == 'cancelled':
             return Response({"error": "Esta orden fue cancelada"}, status=400)
 
-        # 👇 CAMBIADO A 1 MINUTO PARA PRUEBAS
-        expires_at = purchase.created_at + timedelta(minutes=1)
+        # Usar accessed_at del queue como inicio del timer (no purchase.created_at)
+        start_time = _get_queue_access_time(str(purchase.event.id), str(purchase.user_id)) or purchase.created_at
+        expires_at = start_time + timedelta(minutes=purchase.event.payment_timeout_minutes)
         if timezone.now() > expires_at:
             purchase.status = 'cancelled'
             purchase.save()
+            _notify_queue_release(str(purchase.event.id), str(purchase.user_id))
             return Response({"error": "El tiempo de pago expiró. Genera una nueva orden."}, status=410)
 
         backup_code = secrets.token_hex(5).upper()
@@ -833,6 +874,9 @@ class SimularPagoView(APIView):
             event.save()
 
         print(f"[PAGO SIMULADO] Compra {purchase.id} confirmada para usuario {purchase.user_id}")
+
+        # Liberar cupo en service-queue (compra completada exitosamente)
+        _notify_queue_release(str(event.id), str(purchase.user_id))
 
         # Enviar email con ticket al comprador
         user_email = request.user.email
@@ -873,19 +917,22 @@ class PurchaseStatusView(APIView):
         if str(purchase.user_id) != str(request.user.id):
             return Response({"error": "No autorizado"}, status=403)
 
-        # 👇 CAMBIADO A 1 MINUTO PARA PRUEBAS
-        expires_at = purchase.created_at + timedelta(minutes=1)
+        # Usar accessed_at del queue como inicio del timer (no purchase.created_at)
+        start_time = _get_queue_access_time(str(purchase.event.id), str(purchase.user_id)) or purchase.created_at
+        expires_at = start_time + timedelta(minutes=purchase.event.payment_timeout_minutes)
 
         if purchase.status == 'pending' and timezone.now() > expires_at:
             purchase.status = 'cancelled'
             purchase.save()
-            
+
             # Liberar asientos si la compra expiró por tiempo
             Seat.objects.filter(
                 ticket_type=purchase.ticket_type,
                 reserved_by=purchase.user_id,
                 status='reserved'
             ).update(status='available', reserved_by=None, reserved_at=None)
+
+            _notify_queue_release(str(purchase.event.id), str(purchase.user_id))
 
         data = {
             "purchase_id": str(purchase.id),
@@ -1450,6 +1497,11 @@ class PurchaseCancelView(APIView):
     POST /api/v1/purchase/<purchase_id>/cancel/
     Cancela una compra pendiente iniciada por el usuario.
     Solo se puede cancelar si el estado es 'pending' y pertenece al usuario autenticado.
+
+    Body (opcional):
+      { "keep_queue": true }  →  cancela la compra y libera asientos pero NO libera
+                                  el cupo en service-queue (útil para "volver atrás"
+                                  y re-seleccionar asientos sin perder el turno).
     """
     permission_classes = [IsAuthenticated]
 
@@ -1478,6 +1530,12 @@ class PurchaseCancelView(APIView):
             reserved_by=purchase.user_id,
             status='reserved'
         ).update(status='available', reserved_by=None, reserved_at=None)
+
+        # Si keep_queue=true, NO liberar el cupo en la cola (el usuario vuelve
+        # a seleccionar asientos pero sigue siendo su turno).
+        keep_queue = request.data.get('keep_queue', False)
+        if not keep_queue:
+            _notify_queue_release(str(purchase.event.id), str(purchase.user_id))
 
         return Response({
             "status": "success",
@@ -1574,6 +1632,29 @@ class QueueConfigView(APIView):
 
         if serializer.is_valid():
             serializer.save()
+            event.refresh_from_db()  # asegurar valores actualizados
+
+            # Sincronizar con service-queue: convertir threshold (%) → max_concurrent_users (absoluto)
+            threshold = event.waitlist_threshold
+            capacity = event.capacity or 1
+            max_concurrent = max(1, math.ceil(capacity * threshold / 100))
+            payment_timeout = event.payment_timeout_minutes
+
+            try:
+                # Endpoint interno: no autentica ni llama de vuelta → evita deadlock circular
+                queue_url = f"{django_settings.QUEUE_SERVICE_URL}/api/v1/internal/sync-queue-config/{event_id}/"
+                http_requests.post(
+                    queue_url,
+                    json={
+                        "max_concurrent_users": max_concurrent,
+                        "payment_timeout_minutes": payment_timeout,
+                    },
+                    headers={"Content-Type": "application/json"},
+                    timeout=4,
+                )
+            except Exception:
+                pass  # Falla silenciosa; la cola usará el valor previo
+
             return Response({
                 "status": "success",
                 "message": "Configuracion de cola actualizada correctamente.",

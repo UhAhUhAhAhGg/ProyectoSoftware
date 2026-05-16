@@ -400,6 +400,13 @@
   animation: fadeIn 0.3s ease;
 }
 
+/* Overlay para modales con contenido largo — permite scroll */
+.modal-overlay-scroll {
+  align-items: flex-start;
+  padding: 20px 0;
+  overflow-y: auto;
+}
+
 .modal-confirmar {
   background: white;
   border-radius: 15px;
@@ -408,6 +415,15 @@
   width: 90%;
   text-align: center;
   animation: slideUp 0.3s ease;
+}
+
+/* Modal de detalle de evento: más ancho y scrollable */
+.modal-detalle-evento {
+  max-width: 580px;
+  text-align: left;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  margin: auto;
 }
 
 .modal-icono {

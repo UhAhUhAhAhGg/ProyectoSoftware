@@ -172,6 +172,8 @@ SIMPLE_JWT = {
 
 # ─── Email Configuration (Gmail SMTP) ────────────────────────────────────────
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+QUEUE_SERVICE_URL = os.getenv('QUEUE_SERVICE_URL', 'http://service-queue:8000')
+
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True

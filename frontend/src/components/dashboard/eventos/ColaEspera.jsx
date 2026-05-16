@@ -1,13 +1,23 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { useQueue } from '../../../context/QueueContext';
 import './ColaEspera.css';
 
-const QUEUE_URL = process.env.REACT_APP_QUEUE_URL || 'http://localhost:8003';
-
-function ColaEspera({ eventId, queueEntryId, posicionInicial, etaInicial, onAdmitido, onError }) {
-  const [posicion, setPosicion] = useState(posicionInicial || '?');
-  const [eta, setEta] = useState(etaInicial || '?');
+/**
+ * Pantalla de cola de espera. Lee el estado del QueueContext (polling global)
+ * y permite al usuario:
+ *   - Minimizar para navegar por la app (sigue el polling y aparece banner flotante)
+ *   - Salir voluntariamente de la cola
+ *
+ * Muestra un countdown del TIEMPO RESTANTE (no del tiempo esperando).
+ * El backend devuelve estimated_wait_seconds basado en accessed_at del usuario
+ * actualmente admitido. El frontend lo decrementa cada segundo y se resincroniza
+ * en cada poll (cada 5s).
+ */
+function ColaEspera() {
+  const { estadoCola, minimizar, salirDeCola } = useQueue();
   const [puntos, setPuntos] = useState('');
-  const [tiempoEspera, setTiempoEspera] = useState(0); // segundos esperados
+  const [segundosRestantes, setSegundosRestantes] = useState(0);
+  const initialEtaRef = useRef(0);
 
   // Animación de puntos suspensivos
   useEffect(() => {
@@ -17,67 +27,43 @@ function ColaEspera({ eventId, queueEntryId, posicionInicial, etaInicial, onAdmi
     return () => clearInterval(interval);
   }, []);
 
-  // Contador de tiempo en espera
+  // Resincronizar con backend cada vez que llega un poll
+  useEffect(() => {
+    if (estadoCola?.etaSeconds !== undefined && estadoCola.etaSeconds !== null) {
+      setSegundosRestantes(estadoCola.etaSeconds);
+      // Guardar el ETA inicial más alto para la barra de progreso
+      if (estadoCola.etaSeconds > initialEtaRef.current) {
+        initialEtaRef.current = estadoCola.etaSeconds;
+      }
+    }
+  }, [estadoCola?.etaSeconds, estadoCola?.lastUpdate]);
+
+  // Countdown local cada segundo
   useEffect(() => {
     const interval = setInterval(() => {
-      setTiempoEspera((t) => t + 1);
+      setSegundosRestantes((t) => Math.max(0, t - 1));
     }, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Polling: consultar posición en la cola cada 5 segundos
-  const consultarPosicion = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token || !eventId) return;
+  if (!estadoCola || estadoCola.minimizado) return null;
 
-    try {
-      const res = await fetch(`${QUEUE_URL}/api/v1/queue/${eventId}/enter/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+  const posicion = estadoCola.position ?? '?';
 
-      const data = await res.json();
-
-      if (res.status === 403) {
-        // Tiempo expirado
-        onError && onError(data.error || 'Tu tiempo en la cola ha expirado.');
-        return;
-      }
-
-      if (data.queued === false) {
-        // ¡Fue admitido!
-        onAdmitido && onAdmitido();
-        return;
-      }
-
-      // Actualizar posición y ETA
-      if (data.position !== undefined) setPosicion(data.position);
-      if (data.estimated_wait_minutes !== undefined) setEta(data.estimated_wait_minutes);
-    } catch (err) {
-      console.error('Error consultando la cola:', err);
-    }
-  }, [eventId, onAdmitido, onError]);
-
-  useEffect(() => {
-    // Consultar inmediatamente y luego cada 5 segundos
-    consultarPosicion();
-    const interval = setInterval(consultarPosicion, 5000);
-    return () => clearInterval(interval);
-  }, [consultarPosicion]);
-
-  const formatTiempoEspera = (segs) => {
+  const formatRestante = (segs) => {
     const m = Math.floor(segs / 60);
     const s = segs % 60;
-    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+    if (m > 0) return `${m}m ${String(s).padStart(2, '0')}s`;
+    return `${s}s`;
   };
+
+  const progresoPorcentaje = initialEtaRef.current > 0
+    ? Math.min(100, Math.max(0, ((initialEtaRef.current - segundosRestantes) / initialEtaRef.current) * 100))
+    : 0;
 
   return (
     <div className="cola-espera-overlay">
       <div className="cola-espera-card">
-        {/* Icono animado */}
         <div className="cola-icono">⏳</div>
 
         <h2 className="cola-titulo">Estás en la cola de espera</h2>
@@ -85,39 +71,70 @@ function ColaEspera({ eventId, queueEntryId, posicionInicial, etaInicial, onAdmi
           Este evento tiene alta demanda en este momento{puntos}
         </p>
 
-        {/* Posición principal */}
         <div className="cola-posicion-wrap">
           <span className="cola-posicion-label">Tu posición</span>
           <span className="cola-posicion-numero">#{posicion}</span>
         </div>
 
-        {/* ETA */}
         <div className="cola-eta">
-          <span>⏱ Tiempo estimado de espera:</span>
-          <strong> ~{eta} {eta === 1 ? 'minuto' : 'minutos'}</strong>
+          <span>⏱ Tiempo restante para tu turno:</span>
+          <strong> {segundosRestantes > 0 ? formatRestante(segundosRestantes) : '¡Preparando tu acceso! 🎉'}</strong>
         </div>
 
-        {/* Barra de progreso visual */}
         <div className="cola-barra-wrap">
           <div className="cola-barra-label">
             <span>Avanzando en la fila</span>
-            <span>{formatTiempoEspera(tiempoEspera)} esperando</span>
+            <span>{progresoPorcentaje.toFixed(0)}%</span>
           </div>
           <div className="cola-barra">
             <div
               className="cola-barra-fill"
-              style={{ width: `${Math.min(100, (tiempoEspera / ((eta || 1) * 60)) * 100)}%` }}
+              style={{ width: `${progresoPorcentaje}%` }}
             />
           </div>
         </div>
 
         <p className="cola-aviso">
-          🔔 Cuando sea tu turno, esta pantalla desaparecerá automáticamente y podrás seleccionar tus asientos.
+          🔔 Cuando sea tu turno, esta pantalla aparecerá automáticamente y podrás seleccionar tus asientos.
         </p>
 
-        <p className="cola-no-cerrar">
-          ⚠️ No cierres esta ventana mientras esperas.
-        </p>
+        {/* Acciones */}
+        <div style={{ display: 'flex', gap: '10px', marginTop: '16px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <button
+            onClick={minimizar}
+            style={{
+              padding: '10px 18px',
+              background: '#3b82f6',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+            }}
+          >
+            📥 Minimizar y navegar
+          </button>
+          <button
+            onClick={() => {
+              if (window.confirm('¿Seguro que quieres salir de la cola? Perderás tu posición.')) {
+                salirDeCola();
+              }
+            }}
+            style={{
+              padding: '10px 18px',
+              background: '#64748b',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+            }}
+          >
+            🚪 Salir de la cola
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -44,6 +44,23 @@ function ExplorarEventos() {
     recommendationsService.trackEventView(eventoId).catch(console.warn);
   };
 
+  if (cargando) {
+    return (
+      <section className="explorar-eventos">
+        <div className="explorar-header-nav">
+          <Link to="/dashboard" className="btn-volver-dashboard">← Volver al dashboard</Link>
+        </div>
+        <header className="explorar-header">
+          <h2>Eventos Disponibles</h2>
+          <p>Selecciona un evento para ver su detalle y elegir el de tu interés.</p>
+        </header>
+        <div className="eventos-grid-comprador">
+          <EventSkeleton count={6} />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="explorar-eventos">
       <div className="explorar-header-nav">
@@ -64,11 +81,7 @@ function ExplorarEventos() {
         />
       </div>
 
-      {cargando ? (
-        <div className="eventos-grid-comprador">
-          <EventSkeleton count={6} />
-        </div>
-      ) : eventos.length === 0 ? (
+      {eventos.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">📭</div>
           <h3>No hay eventos disponibles en este momento</h3>
