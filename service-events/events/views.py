@@ -34,7 +34,7 @@ from django.db.models import Max
 from datetime import timedelta
 from .permissions import IsAdministrador, IsPromotor, IsComprador
 from .services import TicketGenerationService, send_ticket_email
-from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat, UserBehavior, registrar_comportamiento, UserFavorite
+from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat, UserBehavior, registrar_comportamiento, UserFavorite, Notification, generar_notificaciones_match
 from .serializers import (
     CategorySerializer,
     EventSerializer,
@@ -305,6 +305,10 @@ class EventViewSet(viewsets.ModelViewSet):
         event = self.get_object()
         event.status = 'published'
         event.save()
+        
+        # NUEVO — disparar notificaciones de match en < 5 minutos
+        generar_notificaciones_match(event)
+        
         return Response({'success': 'Event published'})
     
     @action(detail=True, methods=['get', 'put'], url_path='queue-config')
@@ -1768,3 +1772,115 @@ class UserFavoriteToggleView(APIView):
                 "message": f"'{event.name}' agregado a tus favoritos.",
                 "is_favorite": True,
             }, status=status.HTTP_201_CREATED)
+
+
+class UserNotificationsView(APIView):
+    """
+    GET /api/v1/users/{user_id}/notifications/
+    Lista todas las notificaciones del usuario (leídas y no leídas).
+
+    Query params opcionales:
+      ?leida=false  → solo no leídas
+      ?leida=true   → solo leídas
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        # Seguridad: solo el propio usuario puede ver sus notificaciones
+        if str(request.user.id) != str(user_id):
+            return Response(
+                {"error": "No tienes permiso para ver estas notificaciones."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        notificaciones = Notification.objects.filter(
+            user_id=user_id
+        ).select_related('event', 'event__category')
+
+        # Filtro opcional por estado de lectura
+        leida_param = request.query_params.get('leida', None)
+        if leida_param is not None:
+            leida_bool = leida_param.lower() == 'true'
+            notificaciones = notificaciones.filter(leida=leida_bool)
+
+        from .serializers import NotificationSerializer
+        serializer = NotificationSerializer(notificaciones, many=True)
+
+        return Response({
+            "status": "success",
+            "total": notificaciones.count(),
+            "no_leidas": Notification.objects.filter(
+                user_id=user_id, leida=False
+            ).count(),
+            "results": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+
+class UserNotificationReadView(APIView):
+    """
+    PATCH /api/v1/users/{user_id}/notifications/{notif_id}/read/
+    Marca una notificación específica como leída.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, user_id, notif_id):
+        # Seguridad: solo el propio usuario puede marcar sus notificaciones
+        if str(request.user.id) != str(user_id):
+            return Response(
+                {"error": "No tienes permiso para modificar estas notificaciones."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        notificacion = get_object_or_404(
+            Notification,
+            id=notif_id,
+            user_id=user_id
+        )
+
+        if notificacion.leida:
+            return Response({
+                "status": "info",
+                "message": "La notificación ya estaba marcada como leída.",
+            }, status=status.HTTP_200_OK)
+
+        notificacion.leida = True
+        notificacion.leida_at = timezone.now()
+        notificacion.save(update_fields=['leida', 'leida_at'])
+
+        from .serializers import NotificationSerializer
+        serializer = NotificationSerializer(notificacion)
+
+        return Response({
+            "status": "success",
+            "message": "Notificación marcada como leída.",
+            "data": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+
+class UserNotificationReadAllView(APIView):
+    """
+    PATCH /api/v1/users/{user_id}/notifications/read-all/
+    Marca TODAS las notificaciones no leídas del usuario como leídas.
+    Endpoint de utilidad para el botón 'Marcar todas como leídas'.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, user_id):
+        if str(request.user.id) != str(user_id):
+            return Response(
+                {"error": "No tienes permiso."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        ahora = timezone.now()
+
+        actualizadas = Notification.objects.filter(
+            user_id=user_id,
+            leida=False
+        ).update(leida=True, leida_at=ahora)
+
+        return Response({
+            "status": "success",
+            "message": f"{actualizadas} notificaciones marcadas como leídas.",
+            "actualizadas": actualizadas,
+        }, status=status.HTTP_200_OK)

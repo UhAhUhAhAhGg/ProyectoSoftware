@@ -11,6 +11,9 @@ from .views import (
     QueueConfigView,         # US14: configuracion de cola por promotor
     UserFavoritesView,       # NUEVO: listar favoritos
     UserFavoriteToggleView,  # NUEVO: agregar/quitar favorito
+    UserNotificationsView,       # NUEVO: listar notificaciones
+    UserNotificationReadView,    # NUEVO: marcar una notificación como leída
+    UserNotificationReadAllView, # NUEVO: marcar todas como leídas
 )
 
 app_name = 'events'
@@ -52,4 +55,21 @@ urlpatterns = [
     # NUEVO: Favoritos
     path('users/<uuid:user_id>/favorites/', UserFavoritesView.as_view(), name='user-favorites'),
     path('users/<uuid:user_id>/favorites/<uuid:event_id>/', UserFavoriteToggleView.as_view(), name='user-favorite-toggle'),
+
+    # NUEVO: Notificaciones
+    path(
+        'users/<uuid:user_id>/notifications/',
+        UserNotificationsView.as_view(),
+        name='user-notifications'
+    ),
+    path(
+        'users/<uuid:user_id>/notifications/read-all/',
+        UserNotificationReadAllView.as_view(),
+        name='user-notifications-read-all'
+    ),
+    path(
+        'users/<uuid:user_id>/notifications/<uuid:notif_id>/read/',
+        UserNotificationReadView.as_view(),
+        name='user-notification-read'
+    ),
 ]
