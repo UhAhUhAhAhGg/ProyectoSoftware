@@ -76,6 +76,11 @@ class Event(models.Model):
             models.Index(fields=['status']),
         ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Guardamos el estado al cargar desde BD para detectar cambios en el signal
+        self._previous_status = self.status
+
     def __str__(self):
         return self.name
 
