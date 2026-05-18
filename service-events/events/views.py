@@ -1895,3 +1895,19 @@ class AdminAuditLogListView(APIView):
             "total_pages": (total + page_size - 1) // page_size,
             "results": data,
         }, status=status.HTTP_200_OK)
+class EventAuditLogListView(generics.ListAPIView):
+    """
+    TIC-416: GET /admin/events/{id}/audit-log
+    Recupera el historial de cambios de un evento específico, 
+    paginado y ordenado por fecha descendente.
+    """
+    serializer_class = EventAuditLogSerializer
+    permission_classes = [permissions.IsAdminUser]
+    
+    def get_queryset(self):
+        # El 'id' del evento viene por la URL
+        event_id = self.kwargs.get('id')
+        
+        # Aprovechamos el índice 'eaudit_event_date_idx' que ya trae el modelo
+        # para que la consulta sea ultra rápida incluso con miles de logs.
+        return EventAuditLog.objects.filter(event_id=event_id).order_by('-created_at')

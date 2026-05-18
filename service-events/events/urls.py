@@ -56,4 +56,6 @@ urlpatterns = [
 
     # TIC-26: Auditoría de eventos
     path('admin/audit-log/', AdminAuditLogListView.as_view(), name='admin-audit-log'),
-]
+
+    path('admin/audit-log/', EventAuditLogListView.as_view(), name='event-specific-audit-log'),
+]

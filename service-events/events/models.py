@@ -647,4 +647,12 @@ class EventAuditLog(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.admin_email} → {self.action} | {self.event_name} | {self.created_at:%Y-%m-%d}"
+        return f"{self.admin_email} → {self.action} | {self.event_name} | {self.created_at:%Y-%m-%d}"
+class EventAuditLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EventAuditLog
+        fields = [
+            'id', 'event', 'event_name', 'admin_id', 'admin_email',
+            'action', 'reason', 'changed_fields', 'old_status',
+            'new_status', 'created_at'
+        ]
