@@ -1666,3 +1666,129 @@ class QueueConfigView(APIView):
             "message": "Error al validar los datos.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ─── TIC-25: Modificar/Dar de baja eventos (Admin) ───────────────────────────
+
+class AdminEventEditView(APIView):
+    """
+    TIC-406: PATCH /admin/events/{id}/
+    Permite a un administrador modificar cualquier campo de un evento
+    (nombre, fecha, capacidad, descripción, etc.) y registra la intervención.
+
+    Solo accesible por usuarios con rol Administrador o is_staff=True.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, event_id):
+        from .models import Event
+
+        user = request.user
+        if not (user.is_staff or (hasattr(user, 'role') and user.role and
+                user.role.get('name', '') in ['Administrador', 'admin'] if isinstance(user.role, dict)
+                else user.is_staff)):
+            # Verificación simplificada: cualquier usuario autenticado con is_staff
+            if not user.is_staff:
+                return Response(
+                    {"status": "error", "message": "Permisos insuficientes."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        try:
+            event = Event.objects.get(id=event_id)
+        except Event.DoesNotExist:
+            return Response(
+                {"status": "error", "message": "Evento no encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Campos permitidos para edición por admin
+        ALLOWED_FIELDS = [
+            'name', 'description', 'event_date', 'event_time',
+            'location', 'capacity', 'status', 'category',
+        ]
+
+        updated = {}
+        for field in ALLOWED_FIELDS:
+            if field in request.data:
+                setattr(event, field, request.data[field])
+                updated[field] = request.data[field]
+
+        if not updated:
+            return Response(
+                {"status": "error", "message": "No se enviaron campos para actualizar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = request.data.get('admin_reason', 'Modificación administrativa')
+        event.admin_status = 'modified'
+        event.admin_reason = reason
+        event.save()
+
+        return Response({
+            "status": "success",
+            "message": f"Evento '{event.name}' modificado correctamente.",
+            "updated_fields": list(updated.keys()),
+            "admin_reason": reason,
+        }, status=status.HTTP_200_OK)
+
+
+class AdminEventDeactivateView(APIView):
+    """
+    TIC-407: PATCH /admin/events/{id}/deactivate/
+    Da de baja un evento: cambia su status a 'cancelled' y registra
+    admin_status='deactivated' con el motivo obligatorio.
+
+    Solo accesible por usuarios con is_staff=True.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, event_id):
+        from .models import Event
+        from django.utils import timezone as tz
+
+        user = request.user
+        if not user.is_staff:
+            return Response(
+                {"status": "error", "message": "Permisos insuficientes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            event = Event.objects.get(id=event_id)
+        except Event.DoesNotExist:
+            return Response(
+                {"status": "error", "message": "Evento no encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if event.admin_status == 'deactivated':
+            return Response(
+                {"status": "error", "message": "El evento ya está dado de baja."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = request.data.get('reason', '')
+        if not reason:
+            return Response(
+                {"status": "error", "message": "El motivo de baja es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        event.status = 'cancelled'
+        event.admin_status = 'deactivated'
+        event.admin_reason = reason
+        event.cancelled_at = tz.now()
+        event.cancelled_by = user.id
+        event.cancellation_reason = reason
+        event.save(update_fields=[
+            'status', 'admin_status', 'admin_reason',
+            'cancelled_at', 'cancelled_by', 'cancellation_reason',
+        ])
+
+        return Response({
+            "status": "success",
+            "message": f"Evento '{event.name}' dado de baja correctamente.",
+            "event_id": str(event.id),
+            "admin_reason": reason,
+        }, status=status.HTTP_200_OK)
