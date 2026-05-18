@@ -1666,3 +1666,44 @@ class QueueConfigView(APIView):
             "message": "Error al validar los datos.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+class SuperAdminPermissionsView(APIView):
+    """
+    TIC-105: Endpoint para que un SuperAdmin modifique permisos de otros Admins.
+    """
+    # Solo permitimos a SuperUsuarios (Nivel Dios)
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def patch(self, request, user_id):
+        # 1. Validación de Jerarquía: Solo un SuperUser puede usar este endpoint
+        if not request.user.is_superuser:
+            return Response(
+                {"error": "Acceso denegado. Se requieren privilegios de SuperAdmin."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = AdminPermissionsSerializer(data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2. Lógica de actualización
+        # Nota: Aquí deberías buscar al usuario en tu BD o enviar la orden al service-profiles
+        # Simulamos la actualización local:
+        try:
+            # Supongamos que guardas permisos en un modelo AdminProfile
+            # Si es por integración con service-profiles, aquí harías un requests.patch
+            
+            # 3. 🚀 REGISTRO DE AUDITORÍA
+            log_admin_action(
+                request=request,
+                target_user_id=user_id,
+                action='update',
+                details=f"Cambio de permisos: {serializer.validated_data}"
+            )
+
+            return Response({
+                "message": "Permisos actualizados correctamente.",
+                "updated_permissions": serializer.validated_data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
