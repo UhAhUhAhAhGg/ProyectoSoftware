@@ -2,10 +2,10 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from .models import User, Role, Permission
 from django.core.cache import cache
-from .models import User, AccountDeletionLog
-from .models import User, Role, Permission, UserProfile
+from django.db import transaction
+from django.core.mail import send_mail
+from .models import User, Role, Permission, UserProfile, AccountDeletionLog, AdminAuditLog
 from .serializers import (
     UserSerializer,
     UserCreateSerializer,
@@ -522,6 +522,151 @@ class UserViewSet(viewsets.ModelViewSet):
         user.is_active = False
         user.save()
         return Response({'success': 'User deactivated'})
+
+    # ─── TIC-384: Gestión de usuarios desde panel Admin ──────────────────────
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='admin-list')
+    def admin_users(self, request):
+        """
+        TIC-384: GET /users/admin-list/
+        Lista paginada de todos los usuarios con filtros opcionales.
+        Solo accesible por admins o superadmins.
+
+        Query params:
+          - role: nombre del rol (ej: 'Comprador', 'Promotor', 'Administrador')
+          - account_status: 'active' | 'suspended' | 'banned'
+          - search: texto libre que busca en email
+          - page: número de página (default 1)
+          - page_size: resultados por página (default 20)
+        """
+        admin = request.user
+        if not admin.is_staff and not (admin.role and admin.role.name.lower() in ['administrador', 'admin', 'superadmin']):
+            return Response(
+                {"status": "error", "message": "Permisos insuficientes."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        qs = User.objects.select_related('role').order_by('-created_at')
+
+        # Filtros opcionales
+        role_name = request.query_params.get('role')
+        account_status = request.query_params.get('account_status')
+        search = request.query_params.get('search')
+
+        if role_name:
+            qs = qs.filter(role__name__iexact=role_name)
+        if account_status:
+            qs = qs.filter(account_status=account_status)
+        if search:
+            qs = qs.filter(email__icontains=search)
+
+        # Paginación simple
+        try:
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 20))
+        except ValueError:
+            page, page_size = 1, 20
+
+        total = qs.count()
+        start = (page - 1) * page_size
+        end = start + page_size
+        usuarios = qs[start:end]
+
+        data = []
+        for u in usuarios:
+            data.append({
+                "id": str(u.id),
+                "email": u.email,
+                "role": u.role.name if u.role else None,
+                "account_status": u.account_status,
+                "suspended_reason": u.suspended_reason,
+                "is_active": u.is_active,
+                "created_at": u.created_at.isoformat(),
+            })
+
+        return Response({
+            "status": "success",
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
+            "results": data,
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='suspend')
+    def suspend_user(self, request, pk=None):
+        """
+        TIC-384: PATCH /users/{id}/suspend/
+        Suspende la cuenta de un usuario y registra en AdminAuditLog.
+        Body: { "reason": "Motivo de la suspensión" }
+        """
+        admin = request.user
+        if not admin.is_staff and not (admin.role and admin.role.name.lower() in ['administrador', 'admin', 'superadmin']):
+            return Response({"status": "error", "message": "Permisos insuficientes."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            target = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({"status": "error", "message": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        reason = request.data.get('reason', '')
+        previous_status = target.account_status
+
+        target.account_status = 'suspended'
+        target.suspended_reason = reason
+        target.save(update_fields=['account_status', 'suspended_reason'])
+
+        AdminAuditLog.objects.create(
+            admin_id=admin.id,
+            admin_email=admin.email,
+            target_user_id=target.id,
+            target_user_email=target.email,
+            action='suspend',
+            reason=reason,
+            previous_status=previous_status,
+            new_status='suspended',
+        )
+
+        return Response({
+            "status": "success",
+            "message": f"Cuenta de {target.email} suspendida correctamente.",
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='reactivate')
+    def reactivate_user(self, request, pk=None):
+        """
+        TIC-384: PATCH /users/{id}/reactivate/
+        Reactiva la cuenta de un usuario suspendido y registra en AdminAuditLog.
+        """
+        admin = request.user
+        if not admin.is_staff and not (admin.role and admin.role.name.lower() in ['administrador', 'admin', 'superadmin']):
+            return Response({"status": "error", "message": "Permisos insuficientes."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            target = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({"status": "error", "message": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        previous_status = target.account_status
+        target.account_status = 'active'
+        target.suspended_reason = None
+        target.save(update_fields=['account_status', 'suspended_reason'])
+
+        AdminAuditLog.objects.create(
+            admin_id=admin.id,
+            admin_email=admin.email,
+            target_user_id=target.id,
+            target_user_email=target.email,
+            action='reactivate',
+            previous_status=previous_status,
+            new_status='active',
+        )
+
+        return Response({
+            "status": "success",
+            "message": f"Cuenta de {target.email} reactivada correctamente.",
+        }, status=status.HTTP_200_OK)
+
 
 class RoleViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Role.objects.all()
