@@ -51,6 +51,8 @@ urlpatterns = [
     path('seats/release-expired/', SeatReleaseExpiredView.as_view(), name='seat-release-expired'),
     # US14: Configuración de cola virtual por promotor (TIC-350, TIC-351, TIC-352)
     path('queue-config/<uuid:event_id>/', QueueConfigView.as_view(), name='queue-config'),
+    #US 21 RECOMENDACIONES PARA EL SISTEMA. 
+    path('my-recommendations/', UserRecommendationsAPIView.as_view(), name='user-specific-recommendations'),
 
     # NUEVO: Favoritos
     path('users/<uuid:user_id>/favorites/', UserFavoritesView.as_view(), name='user-favorites'),

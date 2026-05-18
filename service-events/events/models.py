@@ -527,6 +527,48 @@ class UserPreference(models.Model):
     def __str__(self):
         return f"{self.user_id} - {self.category.name}: {self.weight}"
 
+class RecommendationEngine:
+    @staticmethod
+    def get_custom_recommendations(user_id, limit=8):
+        """
+        TIC-21: Algoritmo que cruza preferencias y prioriza favoritos.
+        """
+        ahora = timezone.now()
+
+        # 1. Subquery para obtener el peso de la categoría (Preferencia)
+        weight_subquery = UserPreference.objects.filter(
+            user_id=user_id,
+            category_id=OuterRef('category_id')
+        ).values('weight')
+
+        # 2. Subquery para ver si el evento específico es un Favorito (Comportamiento)
+        is_fav_subquery = UserBehavior.objects.filter(
+            user_id=user_id,
+            event_id=OuterRef('pk'),
+            action_type='favorite'
+        )
+
+        # 3. Query principal con anotaciones de prioridad
+        events = Event.objects.filter(
+            date__gt=ahora,
+            is_active=True
+        ).annotate(
+            # Cruce: Traemos el peso de la categoría
+            category_affinity=Coalesce(Subquery(weight_subquery), Value(0.0)),
+            # Prioridad: ¿Es un favorito explícito?
+            is_favorite=Case(
+                When(is_fav_subquery.exists(), then=Value(True)),
+                default=Value(False),
+                output_field=BooleanField()
+            )
+        )
+
+        # 4. ORDEN DE PRIORIDAD:
+        # Primero los marcados como favoritos (True va antes que False en desc)
+        # Segundo los de mayor afinidad por categoría
+        # Tercero los más próximos en fecha
+        return events.order_by('-is_favorite', '-category_affinity', 'date')[:limit]
+
 
 # ─── TIC-22: Notificaciones de match ─────────────────────────────────────────
 
