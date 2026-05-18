@@ -58,6 +58,14 @@ urlpatterns = [
     path('users/<uuid:user_id>/favorites/', UserFavoritesView.as_view(), name='user-favorites'),
     path('users/<uuid:user_id>/favorites/<uuid:event_id>/', UserFavoriteToggleView.as_view(), name='user-favorite-toggle'),
 
+    path('users/<uuid:user_id>/notification-preferences/', 
+        NotificationPreferenceView.as_view(), 
+        name='set-notification-preferences'),
+    # recomendaciones hu21
+    path('users/<uuid:user_id>/recommendations/', 
+         UserRecommendationsListView.as_view(), 
+         name='user-recommendations-list'),
+    
     # NUEVO: Notificaciones
     path(
         'users/<uuid:user_id>/notifications/',

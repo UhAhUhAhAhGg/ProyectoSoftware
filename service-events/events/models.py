@@ -522,10 +522,13 @@ class UserPreference(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='user_preferences')
     weight = models.FloatField(default=0.0)
     updated_at = models.DateTimeField(auto_now=True)
+    notifications_enabled = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = 'User Preference'
         verbose_name_plural = 'User Preferences'
+        unique_together = ('user_id', 'category')
         unique_together = ('user_id', 'category')
         indexes = [
             models.Index(fields=['user_id']),

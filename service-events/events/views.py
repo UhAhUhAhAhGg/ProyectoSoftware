@@ -1911,6 +1911,30 @@ class StandardResultsSetPagination(pagination.PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 50
 
+class NotificationPreferenceView(APIView):
+    def put(self, request, user_id):
+        # Usamos el serializer de PREFERENCIAS para validar la lista de IDs
+        serializer = NotificationPreferenceUpdateSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            category_ids = serializer.validated_data['category_ids']
+            
+            # Apagamos todas primero (reset)
+            UserPreference.objects.filter(user_id=user_id).update(notifications_enabled=False)
+            
+            # Prendemos las que el usuario eligió
+            for cat_id in category_ids:
+                pref, created = UserPreference.objects.get_or_create(
+                    user_id=user_id,
+                    category_id=cat_id
+                )
+                pref.notifications_enabled = True
+                pref.save()
+                
+            return Response({"message": "Preferencias actualizadas"}, status=200)
+        
+        return Response(serializer.errors, status=400)
+
 class UserRecommendationsListView(generics.ListAPIView):
     """
     GET /users/{id}/recommendations
