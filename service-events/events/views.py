@@ -32,6 +32,10 @@ import requests as http_requests
 from django.conf import settings as django_settings
 from django.db.models import Max
 from datetime import timedelta
+from rest_framework import generics, pagination
+from .models import Event
+from .serializers import EventSerializer
+from .recommendations import RecommendationEngine
 from .permissions import IsAdministrador, IsPromotor, IsComprador
 from .services import TicketGenerationService, send_ticket_email
 from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat, UserBehavior, registrar_comportamiento, UserFavorite, Notification, generar_notificaciones_match
@@ -1884,3 +1888,38 @@ class UserNotificationReadAllView(APIView):
             "message": f"{actualizadas} notificaciones marcadas como leídas.",
             "actualizadas": actualizadas,
         }, status=status.HTTP_200_OK)
+
+class UserRecommendationsAPIView(APIView):
+    """
+    Endpoint para obtener eventos recomendados según comportamiento pasado.
+    """
+    def get(self, request):
+        user_id = request.query_params.get('user_id')
+        
+        if not user_id:
+            return Response(
+                {"error": "Se requiere user_id para generar recomendaciones personalizadas."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        events = RecommendationEngine.get_custom_recommendations(user_id)
+        serializer = EventSerializer(events, many=True)
+        
+        return Response(serializer.data)
+class StandardResultsSetPagination(pagination.PageNumberPagination):
+    page_size = 10  # Número de eventos por página
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+class UserRecommendationsListView(generics.ListAPIView):
+    """
+    GET /users/{id}/recommendations
+    Retorna lista paginada de eventos recomendados.
+    """
+    serializer_class = EventSerializer
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        # Capturamos el id del usuario desde la URL
+        user_id = self.kwargs.get('user_id')
+        return RecommendationEngine.get_recommendation_queryset(user_id)
