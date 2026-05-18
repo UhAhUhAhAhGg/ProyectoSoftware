@@ -11,6 +11,7 @@ from .views import (
     QueueConfigView,         # US14: configuracion de cola por promotor
     AdminEventEditView,      # TIC-406: editar evento por admin
     AdminEventDeactivateView, # TIC-407: dar de baja evento por admin
+    AdminAuditLogListView,   # TIC-421: historial de auditoria de eventos
 )
 
 app_name = 'events'
@@ -52,4 +53,7 @@ urlpatterns = [
     # TIC-25: Gestión administrativa de eventos
     path('admin/events/<uuid:event_id>/', AdminEventEditView.as_view(), name='admin-event-edit'),
     path('admin/events/<uuid:event_id>/deactivate/', AdminEventDeactivateView.as_view(), name='admin-event-deactivate'),
+
+    # TIC-26: Auditoría de eventos
+    path('admin/audit-log/', AdminAuditLogListView.as_view(), name='admin-audit-log'),
 ]
