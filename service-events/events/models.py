@@ -7,6 +7,10 @@ from django.conf import settings
 import requests
 import logging
 from django.core.mail import send_mail
+from django.db.models import Count, OuterRef, Subquery, Value, Case, When, BooleanField
+from django.db.models.functions import Coalesce
+from django.utils import timezone
+from .models import Event, UserPreference, UserBehavior
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +64,9 @@ class Event(models.Model):
     # Lista de espera
     waitlist_threshold = models.IntegerField(default=90)  # porcentaje
     waitlist_active = models.BooleanField(default=False)
+
+    # ... tus otros campos ...
+    is_featured = models.BooleanField(default=False) # Para marcar eventos "Premium" o destacados
 
     # Cola virtual: minutos para entrar cuando es su turno
     queue_timeout = models.IntegerField(default=10)
@@ -528,13 +535,42 @@ class UserPreference(models.Model):
         return f"{self.user_id} - {self.category.name}: {self.weight}"
 
 class RecommendationEngine:
+    
     @staticmethod
-    def get_recommendation_queryset(user_id):
+    def get_fallback_events(limit=10):
         """
-        Retorna el QuerySet base ordenado por relevancia para ser paginado.
+        Lógica de Fallback: Eventos para usuarios sin historial.
+        Prioridad: 1. Destacados, 2. Populares (más vistos/comprados), 3. Próximos.
         """
         ahora = timezone.now()
         
+        return Event.objects.filter(
+            date__gt=ahora,
+            is_active=True
+        ).annotate(
+            # Contamos interacciones totales de todos los usuarios para medir popularidad
+            total_interactions=Count('behaviors')
+        ).order_by(
+            '-is_featured',      # Suponiendo que tienes este campo (TIC-Destacados)
+            '-total_interactions', # Los más populares globalmente
+            'date'               # Los más cercanos
+        )[:limit]
+
+    @staticmethod
+    def get_recommendation_queryset(user_id):
+        """
+        TIC-21: Retorna recomendaciones personalizadas o fallback si es usuario nuevo.
+        """
+        ahora = timezone.now()
+
+        # 1. Verificamos si el usuario tiene historial de preferencias
+        has_history = UserPreference.objects.filter(user_id=user_id).exists()
+
+        if not has_history:
+            # 🚀 LOGICA FALLBACK: Si no hay historial, usamos el motor de populares/destacados
+            return RecommendationEngine.get_fallback_events()
+
+        # 2. Si tiene historial, aplicamos el algoritmo de relevancia que ya teníamos
         weight_subquery = UserPreference.objects.filter(
             user_id=user_id,
             category_id=OuterRef('category_id')
@@ -555,8 +591,10 @@ class RecommendationEngine:
                 When(is_fav_subquery.exists(), then=Value(True)),
                 default=Value(False),
                 output_field=BooleanField()
-            )
-        ).order_by('-is_favorite', '-category_affinity', 'date')
+            ),
+            # También incluimos popularidad global como tercer criterio de desempate
+            global_popularity=Count('behaviors')
+        ).order_by('-is_favorite', '-category_affinity', '-global_popularity', 'date')
 
 # ─── TIC-22: Notificaciones de match ─────────────────────────────────────────
 
