@@ -9,6 +9,8 @@ from .views import (
     SeatListView, SeatReserveView, SeatBulkReserveView,
     SeatReleaseExpiredView,  # US20: barrendero
     QueueConfigView,         # US14: configuracion de cola por promotor
+    UserFavoritesView,       # NUEVO: listar favoritos
+    UserFavoriteToggleView,  # NUEVO: agregar/quitar favorito
 )
 
 app_name = 'events'
@@ -46,4 +48,8 @@ urlpatterns = [
     path('seats/release-expired/', SeatReleaseExpiredView.as_view(), name='seat-release-expired'),
     # US14: Configuración de cola virtual por promotor (TIC-350, TIC-351, TIC-352)
     path('queue-config/<uuid:event_id>/', QueueConfigView.as_view(), name='queue-config'),
+
+    # NUEVO: Favoritos
+    path('users/<uuid:user_id>/favorites/', UserFavoritesView.as_view(), name='user-favorites'),
+    path('users/<uuid:user_id>/favorites/<uuid:event_id>/', UserFavoriteToggleView.as_view(), name='user-favorite-toggle'),
 ]

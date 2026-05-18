@@ -575,3 +575,52 @@ class NotificationPreference(models.Model):
 
     def __str__(self):
         return f"{self.user_id} - {self.category.name}: {'on' if self.enabled else 'off'}"
+
+
+class UserFavorite(models.Model):
+    """
+    TIC-361: Almacena los eventos marcados como favoritos por cada usuario.
+    La combinación user_id + event es única para evitar duplicados.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField(db_index=True)
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='favorited_by'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'User Favorite'
+        verbose_name_plural = 'User Favorites'
+        unique_together = ('user_id', 'event')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} → {self.event.name}"
+
+
+# ─── Helper para registrar comportamiento ─────────────────────────────────────
+
+def registrar_comportamiento(user_id, event, action_type):
+    """
+    Helper para registrar comportamiento sin duplicar lógica.
+    Llámala desde cualquier view que necesite registrar una interacción.
+    
+    Args:
+        user_id: UUID del usuario
+        event: Objeto Event
+        action_type: 'view', 'favorite', o 'purchase'
+    """
+    try:
+        UserBehavior.objects.create(
+            user_id=user_id,
+            event=event,
+            action_type=action_type,
+        )
+    except Exception as e:
+        logger.warning(f"[UserBehavior] No se pudo registrar: {e}")

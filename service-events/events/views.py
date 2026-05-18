@@ -34,7 +34,7 @@ from django.db.models import Max
 from datetime import timedelta
 from .permissions import IsAdministrador, IsPromotor, IsComprador
 from .services import TicketGenerationService, send_ticket_email
-from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat
+from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat, UserBehavior, registrar_comportamiento, UserFavorite
 from .serializers import (
     CategorySerializer,
     EventSerializer,
@@ -118,6 +118,20 @@ class EventViewSet(viewsets.ModelViewSet):
         elif self.action in ['partial_update', 'update']:
             return EventUpdateSerializer
         return EventSerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        """GET /events/{id}/ — registra la visualización como comportamiento"""
+        instance = self.get_object()
+
+        # Registrar automáticamente la interacción 'view'
+        registrar_comportamiento(
+            user_id=request.user.id,
+            event=instance,
+            action_type='view'
+        )
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
     def update(self, request, *args, **kwargs):
         """Editar un evento validando permisos y estado (PUT/PATCH)"""
@@ -855,6 +869,13 @@ class SimularPagoView(APIView):
         purchase.backup_code = backup_code
         purchase.qr_code = qr_code_base64
         purchase.save()
+
+        # NUEVO — registrar comportamiento de compra
+        registrar_comportamiento(
+            user_id=purchase.user_id,
+            event=purchase.event,
+            action_type='purchase'
+        )
 
         # Marcar los asientos reservados por este usuario como vendidos
         Seat.objects.filter(
@@ -1666,3 +1687,84 @@ class QueueConfigView(APIView):
             "message": "Error al validar los datos.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UserFavoritesView(APIView):
+    """
+    GET  /api/v1/users/{user_id}/favorites/
+        Lista todos los eventos favoritos del usuario.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        # Seguridad: solo el propio usuario puede ver sus favoritos
+        if str(request.user.id) != str(user_id):
+            return Response(
+                {"error": "No tienes permiso para ver los favoritos de otro usuario."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        favoritos = UserFavorite.objects.filter(
+            user_id=user_id
+        ).select_related('event', 'event__category')
+
+        from .serializers import UserFavoriteSerializer
+        serializer = UserFavoriteSerializer(favoritos, many=True)
+
+        return Response({
+            "status": "success",
+            "count": favoritos.count(),
+            "results": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class UserFavoriteToggleView(APIView):
+    """
+    POST /api/v1/users/{user_id}/favorites/{event_id}/
+    Toggle: si ya es favorito lo quita, si no lo agrega.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id, event_id):
+        # Seguridad: solo el propio usuario puede gestionar sus favoritos
+        if str(request.user.id) != str(user_id):
+            return Response(
+                {"error": "No tienes permiso para modificar los favoritos de otro usuario."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        event = get_object_or_404(Event, id=event_id)
+
+        favorito_existente = UserFavorite.objects.filter(
+            user_id=user_id,
+            event=event
+        ).first()
+
+        if favorito_existente:
+            # Ya era favorito → desmarcar
+            favorito_existente.delete()
+            return Response({
+                "status": "removed",
+                "message": f"'{event.name}' eliminado de tus favoritos.",
+                "is_favorite": False,
+            }, status=status.HTTP_200_OK)
+
+        else:
+            # No era favorito → marcar
+            UserFavorite.objects.create(
+                user_id=user_id,
+                event=event
+            )
+
+            # Registrar también como comportamiento de interés
+            registrar_comportamiento(
+                user_id=user_id,
+                event=event,
+                action_type='favorite'
+            )
+
+            return Response({
+                "status": "added",
+                "message": f"'{event.name}' agregado a tus favoritos.",
+                "is_favorite": True,
+            }, status=status.HTTP_201_CREATED)
