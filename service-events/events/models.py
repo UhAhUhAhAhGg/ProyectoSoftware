@@ -589,3 +589,62 @@ class NotificationPreference(models.Model):
 
     def __str__(self):
         return f"{self.user_id} - {self.category.name}: {'on' if self.enabled else 'off'}"
+
+
+# ─── TIC-26: Auditoría de eventos ─────────────────────────────────────────────
+
+class EventAuditLog(models.Model):
+    """
+    TIC-415: Registro completo de todas las intervenciones administrativas
+    sobre eventos. Captura qué cambió, quién lo hizo y cuándo.
+
+    Acciones posibles:
+      - edit: Modificación de campos del evento
+      - deactivate: Dar de baja el evento
+      - reactivate: Reactivar evento previamente dado de baja
+    """
+    ACTION_CHOICES = [
+        ('edit', 'Edición de campos'),
+        ('deactivate', 'Dar de baja'),
+        ('reactivate', 'Reactivar evento'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # Evento intervenido
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='audit_logs',
+    )
+    event_name = models.CharField(max_length=200)  # snapshot del nombre al momento
+
+    # Admin que ejecutó la acción
+    admin_id = models.UUIDField(db_index=True)
+    admin_email = models.EmailField()
+
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES, db_index=True)
+    reason = models.TextField(null=True, blank=True)
+
+    # Snapshot de qué cambió (JSON-like string o texto libre)
+    changed_fields = models.JSONField(null=True, blank=True)  # {campo: {old: x, new: y}}
+    old_status = models.CharField(max_length=20, null=True, blank=True)
+    new_status = models.CharField(max_length=20, null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Event Audit Log'
+        verbose_name_plural = 'Event Audit Logs'
+        ordering = ['-created_at']
+        # TIC-416: Índices para consultas eficientes de auditoría
+        indexes = [
+            models.Index(fields=['event'], name='eaudit_event_idx'),
+            models.Index(fields=['admin_id'], name='eaudit_admin_idx'),
+            models.Index(fields=['action'], name='eaudit_action_idx'),
+            models.Index(fields=['created_at'], name='eaudit_created_idx'),
+            models.Index(fields=['event', 'created_at'], name='eaudit_event_date_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.admin_email} → {self.action} | {self.event_name} | {self.created_at:%Y-%m-%d}"

@@ -1775,6 +1775,7 @@ class AdminEventDeactivateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        old_status = event.status
         event.status = 'cancelled'
         event.admin_status = 'deactivated'
         event.admin_reason = reason
@@ -1786,9 +1787,111 @@ class AdminEventDeactivateView(APIView):
             'cancelled_at', 'cancelled_by', 'cancellation_reason',
         ])
 
+        # TIC-415: Registrar en EventAuditLog
+        try:
+            from .models import EventAuditLog
+            EventAuditLog.objects.create(
+                event=event,
+                event_name=event.name,
+                admin_id=user.id,
+                admin_email=getattr(user, 'email', str(user.id)),
+                action='deactivate',
+                reason=reason,
+                old_status=old_status,
+                new_status='cancelled',
+            )
+        except Exception:
+            pass  # El audit log nunca rompe la respuesta principal
+
         return Response({
             "status": "success",
             "message": f"Evento '{event.name}' dado de baja correctamente.",
             "event_id": str(event.id),
             "admin_reason": reason,
+        }, status=status.HTTP_200_OK)
+
+
+# ─── TIC-26: Auditoría de eventos ─────────────────────────────────────────────
+
+class AdminAuditLogListView(APIView):
+    """
+    TIC-421: GET /admin/audit-log/
+    Retorna el historial de intervenciones administrativas sobre eventos.
+    Soporta filtros y paginación.
+
+    Query params:
+      - event_id: UUID del evento
+      - admin_id: UUID del administrador
+      - action: 'edit' | 'deactivate' | 'reactivate'
+      - date_from: fecha ISO (ej: 2026-01-01)
+      - date_to: fecha ISO (ej: 2026-12-31)
+      - page: número de página (default 1)
+      - page_size: resultados por página (default 20)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .models import EventAuditLog
+
+        user = request.user
+        if not user.is_staff:
+            return Response(
+                {"status": "error", "message": "Permisos insuficientes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        qs = EventAuditLog.objects.select_related('event').order_by('-created_at')
+
+        # Filtros
+        event_id = request.query_params.get('event_id')
+        admin_id = request.query_params.get('admin_id')
+        action = request.query_params.get('action')
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+
+        if event_id:
+            qs = qs.filter(event_id=event_id)
+        if admin_id:
+            qs = qs.filter(admin_id=admin_id)
+        if action:
+            qs = qs.filter(action=action)
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        # Paginación
+        try:
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 20))
+        except ValueError:
+            page, page_size = 1, 20
+
+        total = qs.count()
+        start = (page - 1) * page_size
+        registros = qs[start:start + page_size]
+
+        data = []
+        for log in registros:
+            data.append({
+                "id": str(log.id),
+                "event_id": str(log.event_id),
+                "event_name": log.event_name,
+                "admin_id": str(log.admin_id),
+                "admin_email": log.admin_email,
+                "action": log.action,
+                "reason": log.reason,
+                "changed_fields": log.changed_fields,
+                "old_status": log.old_status,
+                "new_status": log.new_status,
+                "created_at": log.created_at.isoformat(),
+            })
+
+        return Response({
+            "status": "success",
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
+            "results": data,
         }, status=status.HTTP_200_OK)
