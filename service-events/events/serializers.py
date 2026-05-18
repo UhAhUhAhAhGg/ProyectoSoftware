@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Event, TicketType
+from .models import Category, Event, TicketType, UserFavorite, Notification
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -222,3 +222,41 @@ class QueueConfigSerializer(serializers.ModelSerializer):
                 "El tiempo de pago no puede superar 60 minutos."
             )
         return value
+
+
+class UserFavoriteSerializer(serializers.ModelSerializer):
+    event_detail = EventSerializer(source='event', read_only=True)
+
+    class Meta:
+        model = UserFavorite
+        fields = ['id', 'event', 'event_detail', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    event_nombre = serializers.CharField(
+        source='event.name',
+        read_only=True,
+        default=None
+    )
+    event_fecha = serializers.DateField(
+        source='event.event_date',
+        read_only=True,
+        default=None
+    )
+
+    class Meta:
+        model = Notification
+        fields = [
+            'id',
+            'tipo',
+            'titulo',
+            'mensaje',
+            'leida',
+            'created_at',
+            'leida_at',
+            'event',
+            'event_nombre',
+            'event_fecha',
+        ]
+        read_only_fields = ['id', 'created_at', 'leida_at']
