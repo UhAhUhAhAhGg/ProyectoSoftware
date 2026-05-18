@@ -16,6 +16,11 @@ from django.db import transaction, IntegrityError
 from .permissions import IsAdminWithAudit
 from django.utils import timezone
 import qrcode
+import csv
+from django.http import HttpResponse
+from rest_framework.views import APIView
+from .models import EventAuditLog
+from .permissions import IsAdminWithAudit # Reutilizamos tu permiso de JWT
 import io
 import base64
 from django.db import transaction
@@ -1907,3 +1912,41 @@ class EventAuditLogListView(generics.ListAPIView):
     def get_queryset(self):
         event_id = self.kwargs.get('id')
         return EventAuditLog.objects.filter(event_id=event_id).order_by('-created_at')
+class ExportAuditLogCSVView(APIView):
+    """
+    TIC-122: Endpoint GET /admin/audit-log/export
+    Genera y retorna un CSV con el historial de auditoría.
+    """
+    permission_classes = [IsAdminWithAudit]
+
+    def get(self, request):
+        # 1. Configurar la respuesta para descarga de archivo
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="audit_log_export.csv"'
+        
+        # Opcional: Permitir filtros por fecha si vienen en los query params
+        queryset = EventAuditLog.objects.all().order_by('-created_at')
+
+        # 2. Crear el escritor de CSV
+        writer = csv.writer(response)
+        
+        # 3. Escribir los encabezados (Headers)
+        writer.writerow([
+            'ID Log', 'Fecha', 'Evento', 'Admin Email', 
+            'Acción', 'Razón', 'Estado Anterior', 'Estado Nuevo'
+        ])
+
+        # 4. Escribir los datos
+        for log in queryset:
+            writer.writerow([
+                log.id,
+                log.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                log.event_name,
+                log.admin_email,
+                log.get_action_display() if hasattr(log, 'get_action_display') else log.action,
+                log.reason or '',
+                log.old_status or 'N/A',
+                log.new_status or 'N/A'
+            ])
+
+        return response
