@@ -575,3 +575,30 @@ class NotificationPreference(models.Model):
 
     def __str__(self):
         return f"{self.user_id} - {self.category.name}: {'on' if self.enabled else 'off'}"
+    
+
+class AdminAuditLog(models.Model):
+    """
+    TIC-101: Registro de auditoría para acciones administrativas.
+    """
+    ACTION_CHOICES = [
+        ('create', 'Creación'),
+        ('suspend', 'Suspensión'),
+        ('delete', 'Baja/Eliminación'),
+        ('update', 'Actualización'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    admin_id = models.UUIDField(db_index=True)  # Quién lo hizo
+    target_user_id = models.UUIDField(db_index=True)  # A quién se lo hizo
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    details = models.TextField(blank=True, null=True) # Ej: "Se suspendió por comportamiento indebido"
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Admin Audit Log'
+
+    def __str__(self):
+        return f"{self.admin_id} - {self.action} -> {self.target_user_id}"
