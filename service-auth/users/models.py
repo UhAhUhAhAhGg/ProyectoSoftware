@@ -79,6 +79,9 @@ class User(AbstractBaseUser):
     )
     suspended_reason = models.TextField(null=True, blank=True)
 
+    # TIC-393: Rol SuperAdmin — privilegios máximos del sistema
+    is_superadmin = models.BooleanField(default=False, db_index=True)
+
     objects = UserManager()
 
     USERNAME_FIELD = 'email'
@@ -164,6 +167,14 @@ class AdminAuditLog(models.Model):
         ('role_change', 'Cambiar rol'),
         ('create_admin', 'Crear administrador'),
         ('update_admin', 'Actualizar permisos administrador'),
+        ('grant_superadmin', 'Otorgar SuperAdmin'),
+        ('revoke_superadmin', 'Revocar SuperAdmin'),
+    ]
+
+    # TIC-394: Categoría de la acción para diferenciar contexto de auditoría
+    ACTION_CATEGORY_CHOICES = [
+        ('user_mgmt', 'Gestión de usuarios'),
+        ('admin_mgmt', 'Gestión de administradores'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -177,6 +188,13 @@ class AdminAuditLog(models.Model):
     target_user_email = models.EmailField()
 
     action = models.CharField(max_length=30, choices=ACTION_CHOICES, db_index=True)
+    # TIC-394: Categoría para filtrar por tipo de operación
+    action_category = models.CharField(
+        max_length=20,
+        choices=ACTION_CATEGORY_CHOICES,
+        default='user_mgmt',
+        db_index=True,
+    )
     reason = models.TextField(null=True, blank=True)
 
     # Estado anterior y nuevo (para auditoría completa)

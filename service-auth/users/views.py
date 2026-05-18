@@ -6,6 +6,7 @@ from django.core.cache import cache
 from django.db import transaction
 from django.core.mail import send_mail
 from .models import User, Role, Permission, UserProfile, AccountDeletionLog, AdminAuditLog
+from .decorators import superadmin_required, log_superadmin_action
 from .serializers import (
     UserSerializer,
     UserCreateSerializer,
@@ -665,6 +666,60 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response({
             "status": "success",
             "message": f"Cuenta de {target.email} reactivada correctamente.",
+        }, status=status.HTTP_200_OK)
+
+    # ─── TIC-393/TIC-400: Gestión de SuperAdmins ────────────────────────────────
+
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='grant-superadmin')
+    @superadmin_required
+    @log_superadmin_action(action='grant_superadmin', category='admin_mgmt')
+    def grant_superadmin(self, request, pk=None):
+        """
+        TIC-393/TIC-400: PATCH /users/{id}/grant-superadmin/
+        Otorga privilegios de SuperAdmin a un administrador existente.
+        Solo accesible por SuperAdmins.
+        """
+        try:
+            target = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({"status": "error", "message": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not (target.role and target.role.name.lower() in ['administrador', 'admin']):
+            return Response(
+                {"status": "error", "message": "Solo se puede otorgar SuperAdmin a usuarios con rol Administrador."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target.is_superadmin = True
+        target.is_staff = True
+        target.save(update_fields=['is_superadmin', 'is_staff'])
+
+        return Response({
+            "status": "success",
+            "message": f"{target.email} ahora tiene privilegios de SuperAdmin.",
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='revoke-superadmin')
+    @superadmin_required
+    @log_superadmin_action(action='revoke_superadmin', category='admin_mgmt')
+    def revoke_superadmin(self, request, pk=None):
+        """
+        TIC-393/TIC-400: PATCH /users/{id}/revoke-superadmin/
+        Revoca los privilegios de SuperAdmin de un administrador.
+        Solo accesible por SuperAdmins.
+        """
+        try:
+            target = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({"status": "error", "message": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        target.is_superadmin = False
+        target.is_staff = False
+        target.save(update_fields=['is_superadmin', 'is_staff'])
+
+        return Response({
+            "status": "success",
+            "message": f"Privilegios de SuperAdmin revocados para {target.email}.",
         }, status=status.HTTP_200_OK)
 
 
