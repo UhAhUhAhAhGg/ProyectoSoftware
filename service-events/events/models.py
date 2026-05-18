@@ -66,6 +66,20 @@ class Event(models.Model):
     # Timeout de pago en minutos
     payment_timeout_minutes = models.IntegerField(default=15)
 
+    # TIC-405: Gestión administrativa de eventos
+    ADMIN_STATUS_CHOICES = [
+        ('none', 'Sin intervención'),
+        ('modified', 'Modificado por admin'),
+        ('deactivated', 'Dado de baja por admin'),
+    ]
+    admin_status = models.CharField(
+        max_length=20,
+        choices=ADMIN_STATUS_CHOICES,
+        default='none',
+        db_index=True,
+    )
+    admin_reason = models.TextField(null=True, blank=True)
+
     class Meta:
         verbose_name = 'Event'
         verbose_name_plural = 'Events'
