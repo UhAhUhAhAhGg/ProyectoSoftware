@@ -13,6 +13,7 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db import transaction, IntegrityError
+from .permissions import IsAdminWithAudit
 from django.utils import timezone
 import qrcode
 import io
@@ -1897,17 +1898,12 @@ class AdminAuditLogListView(APIView):
         }, status=status.HTTP_200_OK)
 class EventAuditLogListView(generics.ListAPIView):
     """
-    TIC-416: GET /admin/events/{id}/audit-log
-    Recupera el historial de cambios de un evento específico, 
-    paginado y ordenado por fecha descendente.
+    GET /admin/events/{id}/audit-log
+    Protegido: Solo Administradores con claim 'audit_view' en su JWT.
     """
     serializer_class = EventAuditLogSerializer
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsAdminWithAudit]
     
     def get_queryset(self):
-        # El 'id' del evento viene por la URL
         event_id = self.kwargs.get('id')
-        
-        # Aprovechamos el índice 'eaudit_event_date_idx' que ya trae el modelo
-        # para que la consulta sea ultra rápida incluso con miles de logs.
         return EventAuditLog.objects.filter(event_id=event_id).order_by('-created_at')
