@@ -1593,6 +1593,47 @@ class SeatReleaseExpiredView(APIView):
             "message": "Asiento liberado correctamente.",
         }, status=200)
 
+class AdminUserDeleteView(APIView):
+    """
+    TIC-100: Endpoint para dar de baja cuentas de usuarios.
+    Solo accesible por administradores.
+    """
+    # Aseguramos que solo un admin autenticado pueda entrar
+    permission_classes = [permissions.IsAdminUser]
+
+    def delete(self, request, user_id):
+        # 1. Validación de Seguridad: Impedir que el admin se elimine a sí mismo
+        # request.user.id es el UUID del admin autenticado
+        if str(request.user.id) == str(user_id):
+            return Response(
+                {"error": "Acción no permitida: Un administrador no puede eliminar su propia cuenta."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 2. Lógica de borrado (Depende de tu implementación)
+        # En microservicios, lo ideal es llamar a service-profiles para borrar allá.
+        # Pero si guardas una referencia local en UserPreference o UserBehavior,
+        # aquí deberíamos limpiar esos datos.
+        
+        try:
+            # Ejemplo: Borramos comportamientos y preferencias locales de ese usuario
+            from .models import UserBehavior, UserPreference
+            UserBehavior.objects.filter(user_id=user_id).delete()
+            UserPreference.objects.filter(user_id=user_id).delete()
+            
+            # Nota: Aquí deberías disparar una petición DELETE a service-profiles 
+            # si quieres que la cuenta desaparezca del sistema central.
+            
+            return Response(
+                {"message": f"Usuario {user_id} dado de baja correctamente de service-events."},
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return Response(
+                {"error": f"Error al procesar la baja: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class QueueConfigView(APIView):
     """

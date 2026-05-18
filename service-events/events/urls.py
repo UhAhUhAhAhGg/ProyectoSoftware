@@ -46,4 +46,8 @@ urlpatterns = [
     path('seats/release-expired/', SeatReleaseExpiredView.as_view(), name='seat-release-expired'),
     # US14: Configuración de cola virtual por promotor (TIC-350, TIC-351, TIC-352)
     path('queue-config/<uuid:event_id>/', QueueConfigView.as_view(), name='queue-config'),
+    #us 23
+    path('admin/users/<uuid:user_id>/', 
+         AdminUserDeleteView.as_view(), 
+         name='admin-delete-user'),
 ]
