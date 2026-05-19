@@ -9,7 +9,8 @@ const eventos = [
     precio: "Bs. 70",
     fecha: "20/04/2026",
     lugar: "La Paz - Palacio Portales",
-    imagen: "/eventos/evento1.jpeg"
+    imagen: "/eventos/evento1.jpeg",
+    estado: "activo"
   },
   {
     id: 2,
@@ -17,7 +18,8 @@ const eventos = [
     precio: "Bs. 400",
     fecha: "20/04/2026",
     lugar: "Santa Cruz - Estadio Real Santa Cruz",
-    imagen: "/eventos/evento2.jpeg"
+    imagen: "/eventos/evento2.jpeg",
+    estado: "activo"
   },
   {
     id: 3,
@@ -25,7 +27,8 @@ const eventos = [
     precio: "Bs. 120",
     fecha: "20/04/2026",
     lugar: "Cochabamba - Teatro Acha",
-    imagen: "/eventos/evento3.jpeg"
+    imagen: "/eventos/evento3.jpeg",
+    estado: "activo"
   }
 ];
 
