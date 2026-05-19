@@ -6,6 +6,7 @@ from .views import (
     PermissionViewSet,
     AdminUserManagementView,
     AdminSuspendUserView,
+    SuperadminAdminListCreateView,
 )
 
 router = DefaultRouter()
@@ -26,5 +27,10 @@ urlpatterns = [
         'admin/users/<uuid:pk>/suspend/',
         AdminSuspendUserView.as_view(),
         name='admin-suspend-user'
+    ),
+    path(
+        'superadmin/admins/',
+        SuperadminAdminListCreateView.as_view(),
+        name='superadmin-admin-list-create'
     ),
 ]

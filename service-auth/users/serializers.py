@@ -252,6 +252,47 @@ class AdminLoginSerializer(serializers.Serializer):
         }
 
 
+class AdminDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer completo para listar cuentas de Administrador
+    con su estado, perfil y permisos actuales.
+    """
+    role_name = serializers.CharField(source='role.name', read_only=True)
+    full_name = serializers.SerializerMethodField()
+    phone = serializers.SerializerMethodField()
+    estado = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'email',
+            'role_name',
+            'full_name',
+            'phone',
+            'is_active',
+            'is_staff',
+            'estado',
+            'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_full_name(self, obj):
+        if hasattr(obj, 'profile'):
+            return obj.profile.full_name
+        return None
+
+    def get_phone(self, obj):
+        if hasattr(obj, 'profile'):
+            return obj.profile.phone
+        return None
+
+    def get_estado(self, obj):
+        if not obj.is_active:
+            return 'suspendido'
+        return 'activo'
+
+
 # --- CREAR USUARIO POR ADMIN ---
 class AdminCreateUserSerializer(serializers.ModelSerializer):
     """
