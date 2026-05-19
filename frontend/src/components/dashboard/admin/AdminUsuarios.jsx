@@ -30,6 +30,8 @@ function AdminUsuarios({ module }) {
   const [loadingUsuarios, setLoadingUsuarios] = useState(false);
   const [filtroEstado, setFiltroEstado] = useState('todos');
   const [searchTerm, setSearchTerm] = useState('');
+  const [paginaActual, setPaginaActual] = useState(1);
+  const usuariosPorPagina = 10;
   
   // --- Estado para modal de acciones ---
   const [modalOpen, setModalOpen] = useState(false);
@@ -211,6 +213,22 @@ function AdminUsuarios({ module }) {
     return cumpleFiltroEstado && cumplebúsqueda;
   });
 
+  // Paginación
+const indiceUltimoUsuario = paginaActual * usuariosPorPagina;
+const indicePrimerUsuario = indiceUltimoUsuario - usuariosPorPagina;
+
+const usuariosPaginados = usuariosFiltrados.slice(
+  indicePrimerUsuario,
+  indiceUltimoUsuario
+);
+
+const totalPaginas = Math.ceil(
+  usuariosFiltrados.length / usuariosPorPagina
+);
+
+const cambiarPagina = (numeroPagina) => {
+  setPaginaActual(numeroPagina);
+};
   const obtenerEstado = (usuario) => {
     if (usuario.status === 'suspended') return 'suspendido';
     if (usuario.status === 'deleted') return 'baja';
@@ -410,7 +428,7 @@ function AdminUsuarios({ module }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {usuariosFiltrados.map((usuario) => (
+                  {usuariosPaginados.map((usuario) => (
                     <tr key={usuario.id}>
                       <td>
                         <div className="usuario-info">
@@ -485,6 +503,21 @@ function AdminUsuarios({ module }) {
                   ))}
                 </tbody>
               </table>
+              {totalPaginas > 1 && (
+  <div className="admin-pagination">
+    {Array.from({ length: totalPaginas }, (_, index) => (
+      <button
+        key={index + 1}
+        className={`admin-page-btn ${
+          paginaActual === index + 1 ? 'active' : ''
+        }`}
+        onClick={() => cambiarPagina(index + 1)}
+      >
+        {index + 1}
+      </button>
+    ))}
+  </div>
+)}
             </div>
           )}
         </>
