@@ -106,6 +106,29 @@ function ListaEventos() {
     return min === max ? `Desde $${min}` : `$${min} - $${max}`;
   };
 
+  const exportarHistorialCSV = async () => {
+  try {
+    const response = await fetch(
+      'http://localhost:8000/api/auditoria/exportar-csv/'
+    );
+
+    const blob = await response.blob();
+
+    const url = window.URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'historial_auditoria.csv';
+
+    document.body.appendChild(link);
+    link.click();
+
+    link.remove();
+  } catch (error) {
+    alert('Error al exportar historial');
+  }
+};
+
   if (cargando) {
     return (
       <div className="lista-eventos-loading">
