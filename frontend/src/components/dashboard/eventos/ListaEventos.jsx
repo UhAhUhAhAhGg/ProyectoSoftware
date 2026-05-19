@@ -382,6 +382,48 @@ function DetalleEventoModal({ evento, onClose, getRangoPrecios, user }) {
         </div>
 
         {/* Configuración de Cola Virtual */}
+        {/* Historial de cambios */}
+<div style={{
+  background: '#f8f8f8',
+  padding: '12px',
+  borderRadius: '8px',
+  marginTop: '14px',
+  marginBottom: '14px'
+}}>
+  <h4 style={{ marginBottom: '10px', fontSize: '0.95rem' }}>
+    🕘 Historial de Cambios
+  </h4>
+
+  <div style={{
+    borderBottom: '1px solid #ddd',
+    paddingBottom: '8px',
+    marginBottom: '8px',
+    fontSize: '0.85rem'
+  }}>
+    <strong>Campo:</strong> Nombre<br />
+    <strong>Anterior:</strong> Festival Primavera<br />
+    <strong>Nuevo:</strong> Festival Primavera 2026
+  </div>
+
+  <div style={{
+    borderBottom: '1px solid #ddd',
+    paddingBottom: '8px',
+    marginBottom: '8px',
+    fontSize: '0.85rem'
+  }}>
+    <strong>Campo:</strong> Capacidad<br />
+    <strong>Anterior:</strong> 500<br />
+    <strong>Nuevo:</strong> 650
+  </div>
+
+  <div style={{
+    fontSize: '0.85rem'
+  }}>
+    <strong>Campo:</strong> Ubicación<br />
+    <strong>Anterior:</strong> Teatro Municipal<br />
+    <strong>Nuevo:</strong> Arena Central
+  </div>
+</div>
         <ConfiguracionCola
           eventoId={evento.id}
           promotorId={evento.promotorId}
