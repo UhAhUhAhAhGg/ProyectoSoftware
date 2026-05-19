@@ -4,6 +4,7 @@ import { eventosService } from '../../../services/eventosService';
 import { recommendationsService } from '../../../services/recommendationsService';
 import EventCard from '../../EventCard';
 import EventSkeleton from '../../EventSkeleton';
+import Recommendations from './Recommendations';
 import './ExplorarEventos.css';
 
 function ExplorarEventos() {
@@ -71,7 +72,7 @@ function ExplorarEventos() {
         <h2>Eventos Disponibles</h2>
         <p>Selecciona un evento para ver su detalle y elegir el de tu interés.</p>
       </header>
-
+      <Recommendations />
       <div className="busqueda-wrapper">
         <input
           type="text"
