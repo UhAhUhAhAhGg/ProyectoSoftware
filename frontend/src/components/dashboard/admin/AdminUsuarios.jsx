@@ -24,6 +24,13 @@ function AdminUsuarios({ module }) {
   // --- Estado para invitar nuevo admin ---
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviting, setInviting] = useState(false);
+  const [selectedPermissions, setSelectedPermissions] = useState([]);
+  const availablePermissions = [
+  'Gestionar Usuarios',
+  'Gestionar Eventos',
+  'Ver Reportes',
+  'Configuración del Sistema',
+];
 
   // --- Estado para tabla de usuarios ---
   const [usuarios, setUsuarios] = useState([]);
@@ -115,6 +122,13 @@ function AdminUsuarios({ module }) {
     }
     setTimeout(() => setActionMessage(''), 15000);
   };
+  const handlePermissionChange = (permission) => {
+  setSelectedPermissions((prev) =>
+    prev.includes(permission)
+      ? prev.filter((p) => p !== permission)
+      : [...prev, permission]
+  );
+};
 
   const handleApprove = async (id) => {
     try {
@@ -260,6 +274,27 @@ function AdminUsuarios({ module }) {
               >
                 {inviting ? 'Generando...' : 'Generar Enlace'}
               </button>
+              <div style={{ marginTop: '20px' }}>
+  <h4 style={{ marginBottom: '12px' }}>
+    Permisos del Administrador
+  </h4>
+
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+    {availablePermissions.map((permission) => (
+      <label
+        key={permission}
+        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+      >
+        <input
+          type="checkbox"
+          checked={selectedPermissions.includes(permission)}
+          onChange={() => handlePermissionChange(permission)}
+        />
+        {permission}
+      </label>
+    ))}
+  </div>
+</div>
             </form>
           </div>
 
