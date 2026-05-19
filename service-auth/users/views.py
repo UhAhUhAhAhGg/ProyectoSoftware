@@ -1,3 +1,4 @@
+from rest_framework.views import APIView
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -533,3 +534,247 @@ class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Permission.objects.all()
     serializer_class = PermissionSerializer
     permission_classes = [IsAuthenticated]
+
+
+# --- ENDPOINTS DE ADMINISTRACIÓN ---
+class AdminUserManagementView(APIView):
+    """
+    POST /api/admin/users/
+    El administrador crea una cuenta de Promotor o Comprador.
+    Incluye creación de UserProfile local y perfil remoto
+    en service-profiles según el rol.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _es_admin(self, user):
+        return (
+            getattr(user, 'is_staff', False) or
+            (user.role and user.role.name.lower() in ['administrador', 'admin'])
+        )
+
+    def post(self, request):
+        if not self._es_admin(request.user):
+            return Response(
+                {"error": "No tienes permisos de Administrador."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        from .serializers import AdminCreateUserSerializer
+        serializer = AdminCreateUserSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": "Error en los datos enviados.",
+                "details": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+
+        # Verificar email único
+        if User.objects.filter(email=data['email']).exists():
+            return Response({
+                "status": "error",
+                "message": "El correo ya está registrado en el sistema."
+            }, status=status.HTTP_409_CONFLICT)
+
+        # Obtener el rol
+        try:
+            rol = Role.objects.get(name=data['role_name'])
+        except Role.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": f"El rol '{data['role_name']}' no existe en la base de datos."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            with transaction.atomic():
+                # 1. Crear el User
+                user = User(
+                    email=data['email'],
+                    role=rol,
+                    is_active=True  # Admin crea directamente activo
+                )
+                user.set_password(data['password'])
+                user.save()
+
+                # 2. Actualizar UserProfile local (el signal ya lo creó automáticamente)
+                profile, _ = UserProfile.objects.get_or_create(
+                    user=user,
+                    defaults={
+                        'first_name': '',
+                        'last_name': '',
+                        'phone': '',
+                        'date_of_birth': data['date_of_birth'],
+                    }
+                )
+                profile.first_name = data['first_name']
+                profile.last_name = data['last_name']
+                profile.phone = data['phone']
+                profile.date_of_birth = data['date_of_birth']
+                profile.save()
+
+                # 3. Token interno para llamar a service-profiles
+                internal_payload = {
+                    'user_id': str(user.id),
+                    'email': user.email,
+                    'role': data['role_name'],
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+                }
+                internal_token = jwt.encode(
+                    internal_payload,
+                    settings.SECRET_KEY,
+                    algorithm='HS256'
+                )
+
+                profiles_url = getattr(
+                    settings, 'PROFILES_SERVICE_URL', 'http://localhost:8001'
+                )
+
+                # 4. Crear perfil remoto según el rol
+                profiles_url = getattr(
+                    settings, 'PROFILES_SERVICE_URL', 'http://service-profiles:8000'
+                )
+
+                try:
+                    if data['role_name'] == 'Promotor':
+                        response = requests.post(
+                            f"{profiles_url}/api/profiles/promotor-profiles/",
+                            json={
+                                "user_id": str(user.id),
+                                "company_name": data['company_name'],
+                                "comercial_nit": data['comercial_nit'],
+                                "bank_account": data['bank_account'],
+                            },
+                            headers={"Authorization": f"Bearer {internal_token}"},
+                            timeout=5
+                        )
+                    else:
+                        # Comprador
+                        response = requests.post(
+                            f"{profiles_url}/api/profiles/buyer-profiles/",
+                            json={"user_id": str(user.id)},
+                            headers={"Authorization": f"Bearer {internal_token}"},
+                            timeout=5
+                        )
+
+                    if response.status_code not in (200, 201):
+                        raise Exception(
+                            f"Error al crear perfil remoto: {response.text}"
+                        )
+                except (requests.ConnectionError, requests.Timeout, Exception) as e:
+                    # Si el servicio de perfiles no está disponible, el usuario se crea igualmente
+                    # pero se genera un warning en los logs
+                    print(f"WARNING: No se pudo crear perfil remoto para {user.email}: {str(e)}")
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": "Error al crear el usuario.",
+                "detalle": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({
+            "status": "success",
+            "message": f"Cuenta de {data['role_name']} creada correctamente.",
+            "data": {
+                "id": str(user.id),
+                "email": user.email,
+                "role": data['role_name'],
+                "is_active": user.is_active,
+            }
+        }, status=status.HTTP_201_CREATED)
+
+
+class AdminSuspendUserView(APIView):
+    """
+    PATCH /api/admin/users/{id}/suspend/
+    Suspende una cuenta de Promotor o Comprador.
+    El motivo es obligatorio para cumplir auditoría.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _es_admin(self, user):
+        return (
+            getattr(user, 'is_staff', False) or
+            (user.role and user.role.name.lower() in ['administrador', 'admin'])
+        )
+
+    def patch(self, request, pk):
+        if not self._es_admin(request.user):
+            return Response(
+                {"error": "No tienes permisos de Administrador."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Motivo obligatorio
+        motivo = request.data.get('motivo', '').strip()
+        if not motivo:
+            return Response({
+                "status": "error",
+                "message": "El motivo de suspensión es obligatorio."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(motivo) < 10:
+            return Response({
+                "status": "error",
+                "message": "El motivo debe tener al menos 10 caracteres."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Obtener el usuario a suspender
+        try:
+            usuario_objetivo = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Usuario no encontrado."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # El admin no puede suspenderse a sí mismo
+        if str(usuario_objetivo.id) == str(request.user.id):
+            return Response({
+                "status": "error",
+                "message": "No puedes suspender tu propia cuenta."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Solo se puede suspender Promotores y Compradores
+        roles_suspendibles = ['promotor', 'comprador', 'buyer']
+        if not usuario_objetivo.role or \
+           usuario_objetivo.role.name.lower() not in roles_suspendibles:
+            return Response({
+                "status": "error",
+                "message": "Solo se pueden suspender cuentas de Promotor o Comprador."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verificar si ya está suspendido
+        if not usuario_objetivo.is_active:
+            return Response({
+                "status": "error",
+                "message": "La cuenta ya está suspendida."
+            }, status=status.HTTP_409_CONFLICT)
+
+        # Suspender y registrar auditoría
+        from .models import SuspensionLog
+        with transaction.atomic():
+            usuario_objetivo.is_active = False
+            usuario_objetivo.save(update_fields=['is_active'])
+
+            SuspensionLog.objects.create(
+                user_email=usuario_objetivo.email,
+                user_role=usuario_objetivo.role.name if usuario_objetivo.role else 'Sin rol',
+                motivo=motivo,
+                suspendido_por_email=request.user.email,
+            )
+
+        return Response({
+            "status": "success",
+            "message": f"Cuenta de {usuario_objetivo.email} suspendida correctamente.",
+            "data": {
+                "user_id": str(usuario_objetivo.id),
+                "email": usuario_objetivo.email,
+                "role": usuario_objetivo.role.name if usuario_objetivo.role else None,
+                "is_active": False,
+                "motivo": motivo,
+                "suspendido_por": request.user.email,
+            }
+        }, status=status.HTTP_200_OK)

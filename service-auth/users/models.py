@@ -122,3 +122,25 @@ class AccountDeletionLog(models.Model):
 
     def __str__(self):
         return f"{self.user_email} - {self.deleted_at}"
+
+
+class SuspensionLog(models.Model):
+    """
+    Registra cada suspensión de cuenta para auditoría.
+    No usa ForeignKey al User porque el usuario podría
+    ser eliminado posteriormente.
+    """
+    user_email = models.EmailField()
+    user_role = models.CharField(max_length=50, null=True, blank=True)
+    motivo = models.TextField()
+    suspendido_por_email = models.EmailField()
+    suspended_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'suspension_logs'
+        verbose_name = 'Registro de Suspensión'
+        verbose_name_plural = 'Registros de Suspensiones'
+        ordering = ['-suspended_at']
+
+    def __str__(self):
+        return f"{self.user_email} — {self.suspended_at}"

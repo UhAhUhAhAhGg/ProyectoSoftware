@@ -250,3 +250,72 @@ class AdminLoginSerializer(serializers.Serializer):
             'access': str(refresh.access_token),
             'refresh': str(refresh),
         }
+
+
+# --- CREAR USUARIO POR ADMIN ---
+class AdminCreateUserSerializer(serializers.ModelSerializer):
+    """
+    Serializer para que el administrador cree cuentas
+    de Promotor o Comprador con todos los datos necesarios.
+    """
+    password = serializers.CharField(write_only=True, min_length=8)
+    role_name = serializers.ChoiceField(
+        choices=['Promotor', 'Comprador'],
+        write_only=True
+    )
+    first_name = serializers.CharField(max_length=100)
+    last_name = serializers.CharField(max_length=100)
+    phone = serializers.CharField(max_length=50)
+    date_of_birth = serializers.DateField()
+
+    # Campos exclusivos para Promotor
+    company_name = serializers.CharField(
+        max_length=100, required=False, allow_blank=True
+    )
+    comercial_nit = serializers.CharField(
+        max_length=50, required=False, allow_blank=True
+    )
+    bank_account = serializers.CharField(
+        max_length=50, required=False, allow_blank=True
+    )
+
+    class Meta:
+        model = User
+        fields = [
+            'email', 'password', 'role_name',
+            'first_name', 'last_name', 'phone', 'date_of_birth',
+            'company_name', 'comercial_nit', 'bank_account',
+        ]
+
+    def validate(self, data):
+        import re
+        password = data.get('password', '')
+
+        if len(password) < 8:
+            raise serializers.ValidationError(
+                {"password": "La contraseña debe tener al menos 8 caracteres."}
+            )
+        if not re.search(r'[A-Z]', password):
+            raise serializers.ValidationError(
+                {"password": "La contraseña debe contener al menos una mayúscula."}
+            )
+        if not re.search(r'\d', password):
+            raise serializers.ValidationError(
+                {"password": "La contraseña debe contener al menos un número."}
+            )
+
+        # Validar campos obligatorios para Promotor
+        if data.get('role_name') == 'Promotor':
+            if not data.get('company_name'):
+                raise serializers.ValidationError(
+                    {"company_name": "El nombre de empresa es obligatorio para Promotores."}
+                )
+            if not data.get('comercial_nit'):
+                raise serializers.ValidationError(
+                    {"comercial_nit": "El NIT comercial es obligatorio para Promotores."}
+                )
+            if not data.get('bank_account'):
+                raise serializers.ValidationError(
+                    {"bank_account": "La cuenta bancaria es obligatoria para Promotores."}
+                )
+        return data
