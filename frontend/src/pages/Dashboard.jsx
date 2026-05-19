@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { useNotifications } from '../context/NotificationContext';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import OpcionesComprador from '../components/dashboard/OpcionesComprador';
@@ -11,11 +10,8 @@ import './Dashboard.css';
 function Dashboard() {
   const { user, isAuthenticated, isComprador, isPromotor, isAdministrador, logout } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
-  const { notificaciones, marcarTodasComoLeidas, conteoNoLeidas } = useNotifications();
   const navigate = useNavigate();
   const [sidebarAbierto, setSidebarAbierto] = useState(false);
-<<<<<<< Updated upstream
-=======
   const [notificaciones, setNotificaciones] = useState([
     { id: 1, mensaje: '¡Bienvenido a tu panel!', leida: false },
     { id: 2, mensaje: 'Completa tu perfil para mejores recomendaciones', leida: false },
@@ -34,7 +30,6 @@ function Dashboard() {
     leida: false
   }
   ]);
->>>>>>> Stashed changes
 
   // Redirigir si no está autenticado o si es admin (debe ir a /admin/dashboard)
   useEffect(() => {
@@ -45,6 +40,13 @@ function Dashboard() {
       window.location.href = '/admin/dashboard';
     }
   }, [isAuthenticated, isAdministrador, navigate]);
+
+
+
+  // Marcar notificaciones como leídas
+  const marcarComoLeidas = () => {
+    setNotificaciones(notificaciones.map(n => ({ ...n, leida: true })));
+  };
 
   // Mostrar loading mientras se verifica autenticación
   if (!user) {
@@ -81,21 +83,18 @@ function Dashboard() {
 
           {/* Notificaciones */}
           <div className="notificaciones-dropdown">
-            <button className="btn-notificaciones" onClick={marcarTodasComoLeidas}>
+            <button className="btn-notificaciones" onClick={marcarComoLeidas}>
               🔔
-              {conteoNoLeidas > 0 && (
+              {notificaciones.filter(n => !n.leida).length > 0 && (
                 <span className="notificaciones-badge">
-                  {conteoNoLeidas}
+                  {notificaciones.filter(n => !n.leida).length}
                 </span>
               )}
             </button>
             <div className="notificaciones-menu">
-              {notificaciones && notificaciones.length > 0 ? (
+              {notificaciones.length > 0 ? (
                 notificaciones.map(n => (
                   <div key={n.id} className={`notificacion-item ${!n.leida ? 'no-leida' : ''}`}>
-<<<<<<< Updated upstream
-                    {n.mensaje || n.title}
-=======
                     <div>
   <strong>{n.nombreEvento}</strong>
 
@@ -107,7 +106,6 @@ function Dashboard() {
     Ver evento
   </Link>
 </div>
->>>>>>> Stashed changes
                   </div>
                 ))
               ) : (
