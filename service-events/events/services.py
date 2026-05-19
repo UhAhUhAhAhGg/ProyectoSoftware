@@ -16,6 +16,9 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Tabl
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from .models import Purchase
+import logging
+from .models import UserPreference, Notification
+from django.utils import timezone
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -483,27 +486,13 @@ matching_logger = logging.getLogger(__name__)
 
 class MatchingService:
     """
-    TIC-373: Servicio de matching evento-usuario.
-
-    Flujo:
-      1. Recibe un evento recién publicado.
-      2. Verifica que tenga categoría asignada.
-      3. Busca todos los usuarios que tienen NotificationPreference habilitada
-         para esa categoría.
-      4. Por cada usuario, crea una Notification (evita duplicados).
-      5. Registra cuántas notificaciones se generaron.
+    TIC-373 Adaptado: Servicio de matching evento-usuario.
     """
 
     @classmethod
     def procesar_evento_publicado(cls, event):
         """
         Punto de entrada principal. Llamado por el signal post_save de Event.
-
-        Args:
-            event: Instancia del modelo Event con status='published'.
-
-        Returns:
-            int: Número de notificaciones creadas.
         """
         if not event.category:
             matching_logger.info(
@@ -511,74 +500,64 @@ class MatchingService:
             )
             return 0
 
-        # Usuarios que quieren recibir notifs de esta categoría
-        preferencias = NotificationPreference.objects.filter(
+        # 🚀 ADAPTACIÓN: Usamos UserPreference y el campo notifications_enabled
+        preferencias = UserPreference.objects.filter(
             category=event.category,
-            enabled=True,
+            notifications_enabled=True, # 👈 Tu campo
         ).values_list('user_id', flat=True)
 
         if not preferencias:
             matching_logger.info(
-                f"[TIC-373] Sin usuarios suscritos a '{event.category.name}' — "
-                f"ninguna notificación creada."
+                f"[TIC-373] Sin usuarios suscritos a '{event.category.name}'."
             )
             return 0
 
+        # Construcción del mensaje (Asegúrate de que los campos existan en Event)
+        # Usamos .get() o f-strings seguros por si event_date varía
+        fecha_str = event.date.strftime('%d/%m/%Y') if hasattr(event, 'date') else "próximamente"
+        
         mensaje = (
             f"¡Nuevo evento de {event.category.name}! "
-            f"'{event.name}' el {event.event_date.strftime('%d/%m/%Y')} "
-            f"en {event.location}. ¡No te lo pierdas!"
+            f"'{event.name}' el {fecha_str}. ¡No te lo pierdas!"
         )
 
         creadas = 0
         for user_id in preferencias:
-            # Evitar duplicar si ya existe una notif para este evento+usuario
+            # Evitar duplicar: Si el usuario ya tiene una notif de este evento, no crear otra
             _, fue_creada = Notification.objects.get_or_create(
                 user_id=user_id,
                 event=event,
-                defaults={'message': mensaje},
+                defaults={
+                    'titulo': "¡Nuevo Match!", 
+                    'mensaje': mensaje,
+                    'tipo': 'match'
+                },
             )
             if fue_creada:
                 creadas += 1
 
         matching_logger.info(
-            f"[TIC-373] Matching completado: evento='{event.name}' | "
-            f"categoría='{event.category.name}' | notificaciones creadas={creadas}"
+            f"[TIC-373] Matching completado para '{event.name}': {creadas} creadas."
         )
         return creadas
 
     @classmethod
     def notificaciones_usuario(cls, user_id, solo_no_leidas=False):
-        """
-        Retorna las notificaciones de un usuario ordenadas por fecha desc.
-        Usado por el endpoint GET /users/{id}/notifications (TIC-375).
-
-        Args:
-            user_id: UUID del usuario.
-            solo_no_leidas: Si True, filtra solo las no leídas.
-        """
+        """Para el endpoint GET /users/{id}/notifications"""
         qs = Notification.objects.filter(user_id=user_id).select_related('event')
         if solo_no_leidas:
-            qs = qs.filter(read=False)
+            qs = qs.filter(leida=False) # 👈 Usamos tu campo 'leida'
         return qs.order_by('-created_at')
 
     @classmethod
     def marcar_leida(cls, user_id, notification_id):
-        """
-        Marca una notificación como leída.
-        Usado por el endpoint PATCH /users/{id}/notifications/{notif_id}/read (TIC-376).
-
-        Returns:
-            Notification actualizada, o None si no existe/no pertenece al usuario.
-        """
+        """Para el endpoint PATCH de lectura"""
         try:
             notif = Notification.objects.get(id=notification_id, user_id=user_id)
-            if not notif.read:
-                notif.read = True
-                notif.save(update_fields=['read'])
+            if not notif.leida:
+                notif.leida = True
+                notif.leida_at = timezone.now()
+                notif.save(update_fields=['leida', 'leida_at'])
             return notif
         except Notification.DoesNotExist:
-            matching_logger.warning(
-                f"[TIC-373] Notificación {notification_id} no encontrada para user={user_id}"
-            )
             return None
