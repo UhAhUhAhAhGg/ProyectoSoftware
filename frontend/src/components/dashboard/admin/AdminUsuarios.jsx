@@ -45,6 +45,7 @@ function AdminUsuarios({ module }) {
     usuario: null,
   });
   const [procesando, setProcesando] = useState(false);
+  const [actionHistory, setActionHistory] = useState([]);
 
   // --- Estadísticas ---
   const [stats, setStats] = useState({
@@ -178,9 +179,25 @@ function AdminUsuarios({ module }) {
       if (modalConfig.actionType === 'suspend') {
         await userManagementService.suspenderUsuario(modalConfig.usuario.id, motivo);
         showMessage('✅ Usuario suspendido correctamente', 'success');
+        setActionHistory((prev) => [
+  {
+    action: 'Suspensión',
+    user: modalConfig.usuario.email,
+    date: new Date().toLocaleString(),
+  },
+  ...prev,
+]);
       } else if (modalConfig.actionType === 'deactivate') {
         await userManagementService.darDeBajaUsuario(modalConfig.usuario.id, motivo);
         showMessage('✅ Usuario dado de baja correctamente', 'success');
+        setActionHistory((prev) => [
+  {
+    action: 'Baja',
+    user: modalConfig.usuario.email,
+    date: new Date().toLocaleString(),
+  },
+  ...prev,
+]);
       }
       
       setModalOpen(false);
@@ -198,6 +215,14 @@ function AdminUsuarios({ module }) {
     try {
       await userManagementService.reactivarUsuario(usuario.id);
       showMessage('✅ Usuario reactivado correctamente', 'success');
+      setActionHistory((prev) => [
+  {
+    action: 'Reactivación',
+    user: usuario.email,
+    date: new Date().toLocaleString(),
+  },
+  ...prev,
+]);
       cargarUsuarios();
     } catch (error) {
       showMessage('❌ Error al reactivar usuario', 'error');
@@ -525,6 +550,36 @@ function AdminUsuarios({ module }) {
         </>
       )}
 
+      <div style={{ marginTop: '32px' }}>
+  <h3 style={{ marginBottom: '16px' }}>
+    📋 Historial de Acciones
+  </h3>
+
+  {actionHistory.length === 0 ? (
+    <p style={{ opacity: 0.7 }}>
+      No hay acciones registradas.
+    </p>
+  ) : (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {actionHistory.map((item, index) => (
+        <div
+          key={index}
+          style={{
+            padding: '12px',
+            borderRadius: '8px',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}
+        >
+          <strong>{item.action}</strong> — {item.user}
+          <div style={{ fontSize: '12px', opacity: 0.7 }}>
+            {item.date}
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
       {/* Modal de confirmación de acción */}
       <AdminActionModal
         isOpen={modalOpen}
