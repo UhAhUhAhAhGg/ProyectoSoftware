@@ -21,6 +21,7 @@ function AdminEventsTable() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalAction, setModalAction] = useState(null);
   const [takedownReason, setTakedownReason] = useState('');
+  const [additionalDetails, setAdditionalDetails] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'event_date', direction: 'desc' });
 
   useEffect(() => {
@@ -351,8 +352,8 @@ function AdminEventsTable() {
                 </select>
                 <textarea
                   placeholder="Detalles adicionales (opcional)..."
-                  value={takedownReason}
-                  onChange={(e) => setTakedownReason(e.target.value)}
+                  value={additionalDetails}
+                  onChange={(e) => setAdditionalDetails(e.target.value)}
                   className="reason-textarea"
                   rows="4"
                 />
@@ -366,7 +367,11 @@ function AdminEventsTable() {
               <button onClick={() => setModalOpen(false)} className="btn btn-secondary">
                 Cancelar
               </button>
-              <button onClick={handleTakedown} className="btn btn-danger">
+              <button
+                onClick={handleTakedown}
+                className="btn btn-danger"
+                disabled={!takedownReason.trim()}
+                >
                 Confirmar Baja
               </button>
             </div>
