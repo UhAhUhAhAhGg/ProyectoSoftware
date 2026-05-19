@@ -197,4 +197,4 @@ class AdminAuditLog(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.admin_email} → {self.action} sobre {self.target_user_email}"
+        return f"{self.admin_email} → {self.action} sobre {self.target_user_email}"

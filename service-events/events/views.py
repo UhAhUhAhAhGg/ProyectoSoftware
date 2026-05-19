@@ -35,6 +35,7 @@ from datetime import timedelta
 from .permissions import IsAdministrador, IsPromotor, IsComprador
 from .services import TicketGenerationService, send_ticket_email
 from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat, UserBehavior, registrar_comportamiento, UserFavorite, Notification, generar_notificaciones_match
+from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat, UserBehavior, registrar_comportamiento, UserFavorite, Notification, generar_notificaciones_match
 from .serializers import (
     CategorySerializer,
     EventSerializer,
@@ -118,6 +119,20 @@ class EventViewSet(viewsets.ModelViewSet):
         elif self.action in ['partial_update', 'update']:
             return EventUpdateSerializer
         return EventSerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        """GET /events/{id}/ — registra la visualización como comportamiento"""
+        instance = self.get_object()
+
+        # Registrar automáticamente la interacción 'view'
+        registrar_comportamiento(
+            user_id=request.user.id,
+            event=instance,
+            action_type='view'
+        )
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
     def retrieve(self, request, *args, **kwargs):
         """GET /events/{id}/ — registra la visualización como comportamiento"""
@@ -305,6 +320,10 @@ class EventViewSet(viewsets.ModelViewSet):
         event = self.get_object()
         event.status = 'published'
         event.save()
+        
+        # NUEVO — disparar notificaciones de match en < 5 minutos
+        generar_notificaciones_match(event)
+        
         
         # NUEVO — disparar notificaciones de match en < 5 minutos
         generar_notificaciones_match(event)
@@ -873,6 +892,13 @@ class SimularPagoView(APIView):
         purchase.backup_code = backup_code
         purchase.qr_code = qr_code_base64
         purchase.save()
+
+        # NUEVO — registrar comportamiento de compra
+        registrar_comportamiento(
+            user_id=purchase.user_id,
+            event=purchase.event,
+            action_type='purchase'
+        )
 
         # NUEVO — registrar comportamiento de compra
         registrar_comportamiento(

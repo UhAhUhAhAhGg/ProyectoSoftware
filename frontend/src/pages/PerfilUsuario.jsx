@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../services/apiHelper';
+import NotificationPreferences from '../components/NotificationPreferences';
 import './PerfilUsuario.css';
 
 function PerfilUsuario() {
@@ -236,6 +237,8 @@ function PerfilUsuario() {
             </Link>
           </div>
         </form>
+
+        <NotificationPreferences />
 
         <section className="danger-zone">
           <h3>Zona de privacidad</h3>

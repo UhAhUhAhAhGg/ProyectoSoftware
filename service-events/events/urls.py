@@ -9,6 +9,11 @@ from .views import (
     SeatListView, SeatReserveView, SeatBulkReserveView,
     SeatReleaseExpiredView,  # US20: barrendero
     QueueConfigView,         # US14: configuracion de cola por promotor
+    UserFavoritesView,       # NUEVO: listar favoritos
+    UserFavoriteToggleView,  # NUEVO: agregar/quitar favorito
+    UserNotificationsView,       # NUEVO: listar notificaciones
+    UserNotificationReadView,    # NUEVO: marcar una notificación como leída
+    UserNotificationReadAllView, # NUEVO: marcar todas como leídas
 )
 
 app_name = 'events'
@@ -46,8 +51,25 @@ urlpatterns = [
     path('seats/release-expired/', SeatReleaseExpiredView.as_view(), name='seat-release-expired'),
     # US14: Configuración de cola virtual por promotor (TIC-350, TIC-351, TIC-352)
     path('queue-config/<uuid:event_id>/', QueueConfigView.as_view(), name='queue-config'),
-    #us 23
-    path('admin/users/<uuid:user_id>/', 
-         AdminUserDeleteView.as_view(), 
-         name='admin-delete-user'),
+
+    # NUEVO: Favoritos
+    path('users/<uuid:user_id>/favorites/', UserFavoritesView.as_view(), name='user-favorites'),
+    path('users/<uuid:user_id>/favorites/<uuid:event_id>/', UserFavoriteToggleView.as_view(), name='user-favorite-toggle'),
+
+    # NUEVO: Notificaciones
+    path(
+        'users/<uuid:user_id>/notifications/',
+        UserNotificationsView.as_view(),
+        name='user-notifications'
+    ),
+    path(
+        'users/<uuid:user_id>/notifications/read-all/',
+        UserNotificationReadAllView.as_view(),
+        name='user-notifications-read-all'
+    ),
+    path(
+        'users/<uuid:user_id>/notifications/<uuid:notif_id>/read/',
+        UserNotificationReadView.as_view(),
+        name='user-notification-read'
+    ),
 ]
