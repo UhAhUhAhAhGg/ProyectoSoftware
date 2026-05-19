@@ -41,6 +41,18 @@ function Dashboard() {
     }
   }, [isAuthenticated, isAdministrador, navigate]);
 
+  useEffect(() => {
+  const interval = setInterval(() => {
+
+    // Simulación de actualización automática del badge
+    setNotificaciones((prev) => [...prev]);
+
+  }, 10000); // actualiza cada 10 segundos
+
+  return () => clearInterval(interval);
+
+}, []);
+
 
 
   // Marcar notificaciones como leídas
