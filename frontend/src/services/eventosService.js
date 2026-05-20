@@ -31,7 +31,7 @@ const mapTipoEntrada = (t) => ({
   asientosPorFila: t.seats_per_row ?? null,
 });
 
-const mapEvento = (e) => {
+export const mapEvento = (e) => {
   // Delega en mapTipoEntrada para que tipoZona, esVIP, filas, asientosPorFila
   // estén disponibles en getEventosDisponibles y getEventosByPromotor también.
   const tiposEntrada = (e.tickets ?? []).map(mapTipoEntrada);
@@ -313,9 +313,26 @@ export const eventosService = {
         quantity,
       }),
     });
-    const data = await res.json();
+
+    // Parseo defensivo: si el backend devuelve HTML (error 500/404), evitar
+    // que el SyntaxError de JSON oculte la causa real.
+    const contentType = res.headers.get('content-type') || '';
+    let data = {};
+    if (contentType.includes('application/json')) {
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = {};
+      }
+    } else {
+      // Respuesta no-JSON: el backend devolvio HTML/texto plano
+      const text = await res.text().catch(() => '');
+      console.warn(`[realizarCompra] Backend devolvio ${res.status} con content-type=${contentType}. Body: ${text.slice(0, 200)}`);
+      data = { error: `Error del servidor (${res.status}). Revisa los logs del backend.` };
+    }
+
     if (!res.ok) {
-      const error = new Error(data.error || data.detail || 'No se pudo procesar la compra.');
+      const error = new Error(data.error || data.detail || `No se pudo procesar la compra (HTTP ${res.status}).`);
       error.status = res.status;
       error.errorCode = data.error_code;
       throw error;

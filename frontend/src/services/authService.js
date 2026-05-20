@@ -63,7 +63,7 @@ export const authService = {
       throw new Error(msg);
     }
 
-    // El backend devuelve: { status, data: { id, email, role, ... }, access, refresh }
+    // El backend devuelve: { status, data: { id, email, role, is_superadmin, ... }, access, refresh }
     const userData = data.data || {};
 
     return {
@@ -73,6 +73,14 @@ export const authService = {
           id: userData.id,
           email: userData.email,
           role: userData.role,
+          // TIC-393: incluir is_superadmin y otros flags admin para que el frontend
+          // pueda diferenciar entre Admin y SuperAdmin
+          is_superadmin: userData.is_superadmin || false,
+          is_staff: userData.is_staff || false,
+          account_status: userData.account_status || 'active',
+          nombre: userData.profile?.first_name
+            ? `${userData.profile.first_name} ${userData.profile.last_name || ''}`.trim()
+            : userData.email,
         },
         token: data.access,
         refresh: data.refresh,

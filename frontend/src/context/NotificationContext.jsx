@@ -53,10 +53,12 @@ export const NotificationProvider = ({ children }) => {
   const cargarNotificaciones = useCallback(async () => {
     try {
       const data = await notificationService.getNotificaciones();
-      setNotificaciones(data || []);
+      // El servicio puede devolver array directo o { results: [...] }
+      const lista = Array.isArray(data) ? data : (data?.results || []);
+      setNotificaciones(lista);
     } catch (err) {
-      console.error('Error cargando notificaciones:', err);
-      setError(err.message);
+      console.warn('Error cargando notificaciones (fallback a vacio):', err?.message);
+      setNotificaciones([]);
     }
   }, []);
 
@@ -138,8 +140,10 @@ export const NotificationProvider = ({ children }) => {
     await actualizarPreferencias(nuevasPreferencias);
   }, [preferencias, actualizarPreferencias]);
 
-  // Obtener conteo de no leídas
-  const conteoNoLeidas = notificaciones.filter(n => !n.leida).length;
+  // Obtener conteo de no leídas (con guard por si llega no-array)
+  const conteoNoLeidas = Array.isArray(notificaciones)
+    ? notificaciones.filter(n => !n.leida).length
+    : 0;
 
   const value = {
     notificaciones,

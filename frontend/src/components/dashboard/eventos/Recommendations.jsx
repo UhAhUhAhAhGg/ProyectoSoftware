@@ -1,9 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { recommendationsService } from '../../services/recommendationsService';
-import { useFavorites } from '../../context/FavoritesContext';
-import EventCard from '../EventCard';
-import EventSkeleton from '../EventSkeleton';
+import { recommendationsService } from '../../../services/recommendationsService';
+import { useFavorites } from '../../../context/FavoritesContext';
+import EventCard from '../../EventCard';
+import EventSkeleton from '../../EventSkeleton';
 import './Recommendations.css';
 
 function Recommendations() {

@@ -3,28 +3,46 @@ import { apiFetch } from './apiHelper';
 const PROFILES_URL = process.env.NEXT_PUBLIC_PROFILES_URL || 'http://localhost:8001';
 const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:8000';
 
+const EVENTS_URL = process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002';
+
+// Helper para obtener el user_id del usuario logueado
+const getCurrentUserId = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    return user.id || null;
+  } catch {
+    return null;
+  }
+};
+
 export const notificationService = {
-  // Obtener todas las notificaciones del usuario
+  // Obtener todas las notificaciones del usuario (TIC-375)
   getNotificaciones: async () => {
+    const userId = getCurrentUserId();
+    if (!userId) return { results: [] };
     try {
-      const res = await apiFetch(`${PROFILES_URL}/api/v1/notifications/`);
-      if (!res.ok) throw new Error('Error cargando notificaciones');
-      return await res.json();
+      const res = await apiFetch(`${EVENTS_URL}/api/v1/users/${userId}/notifications/`);
+      if (!res.ok) return { results: [] };
+      const data = await res.json();
+      return data.results ? data : { results: data };
     } catch (error) {
-      console.error('Error en getNotificaciones:', error);
-      throw error;
+      console.warn('Notificaciones no disponibles (fallback a lista vacia):', error?.message);
+      return { results: [] };
     }
   },
 
   // Obtener notificaciones no leídas
   getNotificacionesNoLeidas: async () => {
+    const userId = getCurrentUserId();
+    if (!userId) return { results: [] };
     try {
-      const res = await apiFetch(`${PROFILES_URL}/api/v1/notifications/?unread=true`);
-      if (!res.ok) throw new Error('Error cargando notificaciones no leídas');
-      return await res.json();
+      const res = await apiFetch(`${EVENTS_URL}/api/v1/users/${userId}/notifications/?leida=false`);
+      if (!res.ok) return { results: [] };
+      const data = await res.json();
+      return data.results ? data : { results: data };
     } catch (error) {
-      console.error('Error en getNotificacionesNoLeidas:', error);
-      throw error;
+      console.warn('No-leidas no disponibles (fallback a lista vacia):', error?.message);
+      return { results: [] };
     }
   },
 
@@ -85,10 +103,10 @@ export const notificationService = {
   getPreferencias: async () => {
     try {
       const res = await apiFetch(`${AUTH_URL}/api/v1/users/me/notification-preferences/`);
-      if (!res.ok) throw new Error('Error cargando preferencias');
+      if (!res.ok) throw new Error('Endpoint no disponible');
       return await res.json();
     } catch (error) {
-      console.error('Error en getPreferencias:', error);
+      console.warn('Preferencias no disponibles (usando defaults):', error?.message);
       // Retornar preferencias por defecto si el endpoint no existe
       return {
         email_enabled: true,

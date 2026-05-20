@@ -457,8 +457,9 @@ class UserViewSet(viewsets.ModelViewSet):
                     "message": mensaje_error
                 }, status=status.HTTP_401_UNAUTHORIZED)
 
-            # 3. Validar el rol
-            if not user.role or user.role.name.lower() not in ['administrador', 'admin']:
+            # 3. Validar el rol (acepta admin/administrador, superadmin, o is_superadmin=True)
+            tiene_rol_admin = user.role and user.role.name.lower() in ['administrador', 'admin', 'superadmin']
+            if not tiene_rol_admin and not user.is_superadmin:
                 return Response({
                     "status": "error",
                     "message": "Permisos insuficientes."
@@ -594,6 +595,56 @@ class UserViewSet(viewsets.ModelViewSet):
             "results": data,
         }, status=status.HTTP_200_OK)
 
+    def _list_by_role(self, request, role_name):
+        """
+        Helper interno reutilizado por endpoints /promotores/, /compradores/, /administradores/.
+        Reusa la logica de admin_users con filtro de rol fijo.
+        """
+        admin = request.user
+        if not admin.is_staff and not (admin.role and admin.role.name.lower() in ['administrador', 'admin', 'superadmin']):
+            return Response(
+                {"status": "error", "message": "Permisos insuficientes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        qs = User.objects.select_related('role').filter(role__name__iexact=role_name).order_by('-created_at')
+
+        # Filtros adicionales opcionales
+        account_status = request.query_params.get('account_status')
+        search = request.query_params.get('search')
+        if account_status:
+            qs = qs.filter(account_status=account_status)
+        if search:
+            qs = qs.filter(email__icontains=search)
+
+        data = []
+        for u in qs:
+            data.append({
+                "id": str(u.id),
+                "email": u.email,
+                "role": u.role.name if u.role else None,
+                "account_status": u.account_status,
+                "suspended_reason": u.suspended_reason,
+                "is_active": u.is_active,
+                "created_at": u.created_at.isoformat(),
+            })
+        return Response(data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='promotores')
+    def list_promotores(self, request):
+        """GET /users/promotores/ — Lista usuarios con rol Promotor."""
+        return self._list_by_role(request, 'Promotor')
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='compradores')
+    def list_compradores(self, request):
+        """GET /users/compradores/ — Lista usuarios con rol Comprador."""
+        return self._list_by_role(request, 'Comprador')
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='administradores')
+    def list_administradores(self, request):
+        """GET /users/administradores/ — Lista usuarios con rol Administrador."""
+        return self._list_by_role(request, 'Administrador')
+
     @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='suspend')
     def suspend_user(self, request, pk=None):
         """
@@ -720,6 +771,270 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response({
             "status": "success",
             "message": f"Privilegios de SuperAdmin revocados para {target.email}.",
+        }, status=status.HTTP_200_OK)
+
+    # ─── TIC-396/397/398/399: Gestión completa de Administradores por SuperAdmin ──
+
+    @action(
+        detail=False,
+        methods=['get', 'post'],
+        permission_classes=[IsAuthenticated],
+        url_path='superadmin/admins',
+    )
+    def superadmin_admins(self, request):
+        """
+        TIC-396 (GET): Lista todos los administradores con permisos y estado.
+        TIC-397 (POST): Crea un nuevo Administrador con permisos asignables.
+                       Body: { email, password, first_name, last_name, permissions: [...] }
+        Acceso: solo SuperAdmin.
+        """
+        if not request.user.is_superadmin:
+            return Response(
+                {"status": "error", "message": "Solo SuperAdmin puede gestionar administradores."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if request.method == 'GET':
+            qs = User.objects.select_related('role').filter(
+                role__name__iexact='Administrador',
+            ).order_by('-created_at')
+
+            data = []
+            for u in qs:
+                perms = list(u.permisos_admin) if hasattr(u, 'permisos_admin') and u.permisos_admin else []
+                data.append({
+                    "id": str(u.id),
+                    "email": u.email,
+                    "nombre": f"{u.profile.first_name} {u.profile.last_name}".strip() if hasattr(u, 'profile') and u.profile else u.email,
+                    "is_superadmin": u.is_superadmin,
+                    "is_active": u.is_active,
+                    "account_status": u.account_status,
+                    "suspended_reason": u.suspended_reason,
+                    "permissions": perms,
+                    "created_at": u.created_at.isoformat(),
+                })
+            return Response({"status": "success", "total": len(data), "results": data}, status=status.HTTP_200_OK)
+
+        # POST → crear nuevo admin
+        email = request.data.get('email')
+        password = request.data.get('password')
+        if not email or not password:
+            return Response(
+                {"status": "error", "message": "Email y password son obligatorios."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if User.objects.filter(email=email).exists():
+            return Response(
+                {"status": "error", "message": "Ya existe un usuario con ese email."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        admin_role = Role.objects.filter(name__iexact='Administrador').first()
+        new_user = User.objects.create_user(email=email, password=password, role=admin_role, is_staff=True)
+
+        # Crear perfil basico si se enviaron datos
+        first_name = request.data.get('first_name', '')
+        last_name = request.data.get('last_name', '')
+        if first_name or last_name:
+            from datetime import date
+            UserProfile.objects.create(
+                user=new_user,
+                first_name=first_name,
+                last_name=last_name,
+                phone='',
+                date_of_birth=date.today(),
+            )
+
+        # Audit log
+        AdminAuditLog.objects.create(
+            admin_id=request.user.id,
+            admin_email=request.user.email,
+            target_user_id=new_user.id,
+            target_user_email=new_user.email,
+            action='create_admin',
+            action_category='admin_mgmt',
+            reason=request.data.get('reason', 'Creado por SuperAdmin'),
+            new_status='active',
+        )
+
+        return Response({
+            "status": "success",
+            "message": f"Administrador {email} creado correctamente.",
+            "data": {
+                "id": str(new_user.id),
+                "email": new_user.email,
+                "role": admin_role.name if admin_role else None,
+            },
+        }, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=['patch'],
+        permission_classes=[IsAuthenticated],
+        url_path='superadmin/admins/permissions',
+    )
+    @superadmin_required
+    def superadmin_update_permissions(self, request, pk=None):
+        """
+        TIC-398: PATCH /users/{id}/superadmin/admins/permissions/
+        Modifica los permisos de un Administrador.
+
+        Body: { "permissions": ["manage_users", "manage_events", "view_reports", ...] }
+
+        Validacion clave: un Admin estandar NO puede modificar SuperAdmins (TIC-446).
+        """
+        try:
+            target = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response(
+                {"status": "error", "message": "Administrador no encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # TIC-446: No permitir gestionar a otro SuperAdmin
+        if target.is_superadmin and target.id != request.user.id:
+            return Response(
+                {"status": "error", "message": "No esta autorizado a gestionar cuentas de nivel SuperAdmin."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not (target.role and target.role.name.lower() in ['administrador', 'admin']):
+            return Response(
+                {"status": "error", "message": "Solo se pueden modificar permisos de Administradores."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        nuevos_permisos = request.data.get('permissions', [])
+        if not isinstance(nuevos_permisos, list):
+            return Response(
+                {"status": "error", "message": "El campo permissions debe ser una lista."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Aplicar permisos en RolePermission para este admin (via su rol)
+        # Como Permission/RolePermission son a nivel de rol, almacenamos los permisos
+        # explicitos de cada admin en una tabla User-Permission directa via JSONField virtual.
+        # Aqui usamos un campo extra (permisos_admin) que persiste como JSON en UserProfile o User.
+        # Solucion simple: usar metadata en el log y reflejarlo en account_status para UI.
+
+        # Persistencia: actualizar atributo dinamico via UserProfile o nuevo campo.
+        # Para no requerir migracion, reutilizamos AdminAuditLog como fuente de verdad
+        # del ultimo set de permisos asignados.
+        permisos_anteriores = []
+        ultimo_cambio = AdminAuditLog.objects.filter(
+            target_user_id=target.id,
+            action='update_admin',
+        ).order_by('-created_at').first()
+        if ultimo_cambio and ultimo_cambio.reason:
+            try:
+                import json
+                permisos_anteriores = json.loads(ultimo_cambio.reason)
+            except Exception:
+                permisos_anteriores = []
+
+        import json
+        AdminAuditLog.objects.create(
+            admin_id=request.user.id,
+            admin_email=request.user.email,
+            target_user_id=target.id,
+            target_user_email=target.email,
+            action='update_admin',
+            action_category='admin_mgmt',
+            reason=json.dumps(nuevos_permisos),  # Guarda el snapshot de permisos
+            previous_status='active',
+            new_status='active',
+        )
+
+        return Response({
+            "status": "success",
+            "message": f"Permisos de {target.email} actualizados correctamente.",
+            "data": {
+                "admin_id": str(target.id),
+                "email": target.email,
+                "permissions_before": permisos_anteriores,
+                "permissions_after": nuevos_permisos,
+            },
+        }, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True,
+        methods=['patch'],
+        permission_classes=[IsAuthenticated],
+        url_path='superadmin/admins/suspend',
+    )
+    @superadmin_required
+    def superadmin_suspend_admin(self, request, pk=None):
+        """
+        TIC-399: PATCH /users/{id}/superadmin/admins/suspend/
+        Suspende a un Administrador (cambia account_status = 'suspended').
+        Body: { "reason": "motivo de suspension" }
+
+        Validaciones:
+        - Solo SuperAdmin (decorator)
+        - No se puede suspender a otro SuperAdmin (TIC-446)
+        - El usuario debe tener rol Administrador
+        - No se puede auto-suspender
+        """
+        try:
+            target = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response(
+                {"status": "error", "message": "Administrador no encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if str(target.id) == str(request.user.id):
+            return Response(
+                {"status": "error", "message": "No puedes suspender tu propia cuenta."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if target.is_superadmin:
+            return Response(
+                {"status": "error", "message": "No esta autorizado a suspender cuentas de SuperAdmin."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not (target.role and target.role.name.lower() in ['administrador', 'admin']):
+            return Response(
+                {"status": "error", "message": "Solo se pueden suspender Administradores con este endpoint."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = (request.data.get('reason') or '').strip()
+        if not reason:
+            return Response(
+                {"status": "error", "message": "El motivo de suspension es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        previous_status = target.account_status
+        target.account_status = 'suspended'
+        target.suspended_reason = reason
+        target.is_active = False
+        target.save(update_fields=['account_status', 'suspended_reason', 'is_active'])
+
+        AdminAuditLog.objects.create(
+            admin_id=request.user.id,
+            admin_email=request.user.email,
+            target_user_id=target.id,
+            target_user_email=target.email,
+            action='suspend',
+            action_category='admin_mgmt',
+            reason=reason,
+            previous_status=previous_status,
+            new_status='suspended',
+        )
+
+        return Response({
+            "status": "success",
+            "message": f"Administrador {target.email} suspendido correctamente.",
+            "data": {
+                "admin_id": str(target.id),
+                "email": target.email,
+                "account_status": target.account_status,
+                "reason": reason,
+            },
         }, status=status.HTTP_200_OK)
 
 

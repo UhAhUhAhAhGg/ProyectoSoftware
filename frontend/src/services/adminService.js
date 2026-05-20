@@ -4,15 +4,37 @@ const API_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:8000';
 
 export const adminService = {
   /**
-   * Obtiene lista de administradores activos
+   * Obtiene lista de administradores con permisos y estado.
+   * TIC-396: GET /users/superadmin/admins/
    */
   getAdministradores: async () => {
     try {
-      const response = await api.get(`${API_URL}/api/v1/users/administrators/`);
+      const response = await api.get(`${API_URL}/api/v1/users/superadmin/admins/`);
+      // El endpoint devuelve { status, total, results: [...] }
+      return response.data?.results || [];
+    } catch (error) {
+      console.warn('Error al obtener administradores:', error?.message);
+      return [];
+    }
+  },
+
+  /**
+   * Crea un nuevo Administrador.
+   * TIC-397: POST /users/superadmin/admins/
+   */
+  crearAdministrador: async ({ email, password, first_name, last_name, reason }) => {
+    try {
+      const response = await api.post(`${API_URL}/api/v1/users/superadmin/admins/`, {
+        email,
+        password,
+        first_name,
+        last_name,
+        reason,
+      });
       return response.data;
     } catch (error) {
-      console.error('Error al obtener administradores:', error);
-      throw error;
+      console.error('Error al crear administrador:', error?.response?.data || error?.message);
+      throw new Error(error?.response?.data?.message || 'Error al crear administrador');
     }
   },
 
@@ -43,33 +65,36 @@ export const adminService = {
   },
 
   /**
-   * Actualiza permisos de un administrador
+   * Actualiza permisos de un administrador.
+   * TIC-398: PATCH /users/{id}/superadmin/admins/permissions/
    */
   updateAdminPermissions: async (adminId, permissions) => {
     try {
-      const response = await api.patch(`${API_URL}/api/v1/users/${adminId}/permissions/`, {
-        permissions: permissions
-      });
+      const response = await api.patch(
+        `${API_URL}/api/v1/users/${adminId}/superadmin/admins/permissions/`,
+        { permissions }
+      );
       return response.data;
     } catch (error) {
-      console.error('Error al actualizar permisos:', error);
-      throw error;
+      console.error('Error al actualizar permisos:', error?.response?.data || error?.message);
+      throw new Error(error?.response?.data?.message || 'Error al actualizar permisos');
     }
   },
 
   /**
-   * Desactiva/suspende una cuenta de administrador
+   * Suspende una cuenta de administrador.
+   * TIC-399: PATCH /users/{id}/superadmin/admins/suspend/
    */
   deactivateAdmin: async (adminId, reason = '') => {
     try {
-      const response = await api.patch(`${API_URL}/api/v1/users/${adminId}/`, {
-        is_active: false,
-        deactivation_reason: reason
-      });
+      const response = await api.patch(
+        `${API_URL}/api/v1/users/${adminId}/superadmin/admins/suspend/`,
+        { reason }
+      );
       return response.data;
     } catch (error) {
-      console.error('Error al desactivar administrador:', error);
-      throw error;
+      console.error('Error al suspender administrador:', error?.response?.data || error?.message);
+      throw new Error(error?.response?.data?.message || 'Error al suspender administrador');
     }
   },
 
