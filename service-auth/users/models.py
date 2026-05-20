@@ -82,6 +82,11 @@ class User(AbstractBaseUser):
     # TIC-393: Rol SuperAdmin — privilegios máximos del sistema
     is_superadmin = models.BooleanField(default=False, db_index=True)
 
+    # TIC-398: Permisos asignados a un Administrador por el SuperAdmin.
+    # Lista de strings, p.ej. ['manage_users', 'manage_events', 'view_reports'].
+    # Solo aplica a usuarios con rol Administrador; vacío para otros roles.
+    admin_permissions = models.JSONField(default=list, blank=True)
+
     objects = UserManager()
 
     USERNAME_FIELD = 'email'

@@ -1074,7 +1074,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
             data = []
             for u in qs:
-                perms = list(u.permisos_admin) if hasattr(u, 'permisos_admin') and u.permisos_admin else []
+                perms = list(u.admin_permissions or [])
                 data.append({
                     "id": str(u.id),
                     "email": u.email,
@@ -1103,32 +1103,57 @@ class UserViewSet(viewsets.ModelViewSet):
             )
 
         admin_role = Role.objects.filter(name__iexact='Administrador').first()
-        new_user = User.objects.create_user(email=email, password=password, role=admin_role, is_staff=True)
-
-        # Crear perfil basico si se enviaron datos
-        first_name = request.data.get('first_name', '')
-        last_name = request.data.get('last_name', '')
-        if first_name or last_name:
-            from datetime import date
-            UserProfile.objects.create(
-                user=new_user,
-                first_name=first_name,
-                last_name=last_name,
-                phone='',
-                date_of_birth=date.today(),
+        # TIC-397/443: persistir los permisos asignados al crear
+        permissions = request.data.get('permissions', []) or []
+        if not isinstance(permissions, list):
+            return Response(
+                {"status": "error", "message": "El campo permissions debe ser una lista."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Audit log
-        AdminAuditLog.objects.create(
-            admin_id=request.user.id,
-            admin_email=request.user.email,
-            target_user_id=new_user.id,
-            target_user_email=new_user.email,
-            action='create_admin',
-            action_category='admin_mgmt',
-            reason=request.data.get('reason', 'Creado por SuperAdmin'),
-            new_status='active',
-        )
+        first_name = request.data.get('first_name', '')
+        last_name = request.data.get('last_name', '')
+        phone = request.data.get('phone', '')
+
+        try:
+            with transaction.atomic():
+                new_user = User.objects.create_user(
+                    email=email,
+                    password=password,
+                    role=admin_role,
+                    is_staff=True,
+                    admin_permissions=permissions,
+                )
+
+                # Un signal post_save puede crear el UserProfile vacio; usamos
+                # update_or_create para evitar duplicate key y aun asi poblar campos.
+                if first_name or last_name or phone:
+                    from datetime import date
+                    UserProfile.objects.update_or_create(
+                        user=new_user,
+                        defaults={
+                            'first_name': first_name,
+                            'last_name': last_name,
+                            'phone': phone,
+                            'date_of_birth': date.today(),
+                        },
+                    )
+
+                AdminAuditLog.objects.create(
+                    admin_id=request.user.id,
+                    admin_email=request.user.email,
+                    target_user_id=new_user.id,
+                    target_user_email=new_user.email,
+                    action='create_admin',
+                    action_category='admin_mgmt',
+                    reason=request.data.get('reason') or f"Permisos iniciales: {', '.join(permissions) if permissions else 'ninguno'}",
+                    new_status='active',
+                )
+        except Exception as e:
+            return Response(
+                {"status": "error", "message": f"No se pudo crear el administrador: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         return Response({
             "status": "success",
@@ -1137,6 +1162,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 "id": str(new_user.id),
                 "email": new_user.email,
                 "role": admin_role.name if admin_role else None,
+                "permissions": permissions,
             },
         }, status=status.HTTP_201_CREATED)
 
@@ -1184,28 +1210,12 @@ class UserViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Aplicar permisos en RolePermission para este admin (via su rol)
-        # Como Permission/RolePermission son a nivel de rol, almacenamos los permisos
-        # explicitos de cada admin en una tabla User-Permission directa via JSONField virtual.
-        # Aqui usamos un campo extra (permisos_admin) que persiste como JSON en UserProfile o User.
-        # Solucion simple: usar metadata en el log y reflejarlo en account_status para UI.
+        # TIC-398/445: persistir los permisos en User.admin_permissions
+        permisos_anteriores = list(target.admin_permissions or [])
+        target.admin_permissions = nuevos_permisos
+        target.save(update_fields=['admin_permissions'])
 
-        # Persistencia: actualizar atributo dinamico via UserProfile o nuevo campo.
-        # Para no requerir migracion, reutilizamos AdminAuditLog como fuente de verdad
-        # del ultimo set de permisos asignados.
-        permisos_anteriores = []
-        ultimo_cambio = AdminAuditLog.objects.filter(
-            target_user_id=target.id,
-            action='update_admin',
-        ).order_by('-created_at').first()
-        if ultimo_cambio and ultimo_cambio.reason:
-            try:
-                import json
-                permisos_anteriores = json.loads(ultimo_cambio.reason)
-            except Exception:
-                permisos_anteriores = []
-
-        import json
+        # Registrar en bitacora para auditoria
         AdminAuditLog.objects.create(
             admin_id=request.user.id,
             admin_email=request.user.email,
@@ -1213,7 +1223,7 @@ class UserViewSet(viewsets.ModelViewSet):
             target_user_email=target.email,
             action='update_admin',
             action_category='admin_mgmt',
-            reason=json.dumps(nuevos_permisos),  # Guarda el snapshot de permisos
+            reason=f"Permisos: [{', '.join(permisos_anteriores) or '-'}] → [{', '.join(nuevos_permisos) or '-'}]",
             previous_status='active',
             new_status='active',
         )

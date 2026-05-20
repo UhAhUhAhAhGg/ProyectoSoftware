@@ -20,15 +20,17 @@ export const adminService = {
 
   /**
    * Crea un nuevo Administrador.
-   * TIC-397: POST /users/superadmin/admins/
+   * TIC-397/443: POST /users/superadmin/admins/
    */
-  crearAdministrador: async ({ email, password, first_name, last_name, reason }) => {
+  crearAdministrador: async ({ email, password, first_name, last_name, phone, permissions, reason }) => {
     try {
       const response = await api.post(`${API_URL}/api/v1/users/superadmin/admins/`, {
         email,
         password,
         first_name,
         last_name,
+        phone,
+        permissions: permissions || [],
         reason,
       });
       return response.data;
