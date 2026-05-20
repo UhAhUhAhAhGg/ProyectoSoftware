@@ -229,9 +229,11 @@ export const AuthProvider = ({ children }) => {
   const isComprador = user?.role === 'Comprador';
   const isPromotor = user?.role === 'Promotor';
   const isAdministrador = user?.role === 'Administrador';
+  const isSuperAdmin = user?.role === 'SuperAdmin';
 
   // Ruta de dashboard según el rol del usuario
   const getDashboardPath = () => {
+    if (isSuperAdmin) return '/superadmin/dashboard';
     if (isAdministrador) return '/admin/dashboard';
     if (isPromotor) return '/dashboard/promotor';
     return '/dashboard/comprador';
@@ -251,6 +253,7 @@ export const AuthProvider = ({ children }) => {
     isComprador,
     isPromotor,
     isAdministrador,
+    isSuperAdmin,
     getDashboardPath,
     sessionExpired,
     clearSessionExpired,

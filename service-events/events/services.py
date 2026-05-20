@@ -16,6 +16,9 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Tabl
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from .models import Purchase
+import logging
+from .models import UserPreference, Notification
+from django.utils import timezone
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -468,3 +471,93 @@ class BehaviorAnalysisService:
             .select_related('category')
             .order_by('-weight')
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MatchingService — TIC-373
+# Al publicarse un nuevo evento, compara su categoría contra los perfiles
+# de usuarios con preferencias activas y genera Notification para los matches.
+# ─────────────────────────────────────────────────────────────────────────────
+
+from .models import Notification, NotificationPreference
+
+matching_logger = logging.getLogger(__name__)
+
+
+class MatchingService:
+    """
+    TIC-373 Adaptado: Servicio de matching evento-usuario.
+    """
+
+    @classmethod
+    def procesar_evento_publicado(cls, event):
+        """
+        Punto de entrada principal. Llamado por el signal post_save de Event.
+        """
+        if not event.category:
+            matching_logger.info(
+                f"[TIC-373] Evento '{event.name}' sin categoría — matching omitido."
+            )
+            return 0
+
+        # 🚀 ADAPTACIÓN: Usamos UserPreference y el campo notifications_enabled
+        preferencias = UserPreference.objects.filter(
+            category=event.category,
+            notifications_enabled=True, # 👈 Tu campo
+        ).values_list('user_id', flat=True)
+
+        if not preferencias:
+            matching_logger.info(
+                f"[TIC-373] Sin usuarios suscritos a '{event.category.name}'."
+            )
+            return 0
+
+        # Construcción del mensaje (Asegúrate de que los campos existan en Event)
+        # Usamos .get() o f-strings seguros por si event_date varía
+        fecha_str = event.date.strftime('%d/%m/%Y') if hasattr(event, 'date') else "próximamente"
+        
+        mensaje = (
+            f"¡Nuevo evento de {event.category.name}! "
+            f"'{event.name}' el {fecha_str}. ¡No te lo pierdas!"
+        )
+
+        creadas = 0
+        for user_id in preferencias:
+            # Evitar duplicar: Si el usuario ya tiene una notif de este evento, no crear otra
+            _, fue_creada = Notification.objects.get_or_create(
+                user_id=user_id,
+                event=event,
+                defaults={
+                    'titulo': "¡Nuevo Match!", 
+                    'mensaje': mensaje,
+                    'tipo': 'match'
+                },
+            )
+            if fue_creada:
+                creadas += 1
+
+        matching_logger.info(
+            f"[TIC-373] Matching completado para '{event.name}': {creadas} creadas."
+        )
+        return creadas
+
+    @classmethod
+    def notificaciones_usuario(cls, user_id, solo_no_leidas=False):
+        """Para el endpoint GET /users/{id}/notifications"""
+        qs = Notification.objects.filter(user_id=user_id).select_related('event')
+        if solo_no_leidas:
+            qs = qs.filter(leida=False) # 👈 Usamos tu campo 'leida'
+        return qs.order_by('-created_at')
+
+    @classmethod
+    def marcar_leida(cls, user_id, notification_id):
+        """Para el endpoint PATCH de lectura"""
+        try:
+            notif = Notification.objects.get(id=notification_id, user_id=user_id)
+            if not notif.leida:
+                notif.leida = True
+                notif.leida_at = timezone.now()
+                notif.save(update_fields=['leida', 'leida_at'])
+            return notif
+        except Notification.DoesNotExist:
+            return None

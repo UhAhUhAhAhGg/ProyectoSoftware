@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Event, TicketType
+from .models import AdminAuditLog, Category, Event, TicketType, UserFavorite, Notification, EventAuditLog
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -50,13 +50,14 @@ class EventSerializer(serializers.ModelSerializer):
             'capacity',
             'image',
             'status',
+            'admin_status',
             'created_at',
             'category',
             'category_name',
             'tickets',
             'disponibilidad'
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'created_at', 'admin_status']
 
     def get_disponibilidad(self, obj):
         # Si el evento no está publicado, no debe mostrarse como disponible
@@ -222,3 +223,86 @@ class QueueConfigSerializer(serializers.ModelSerializer):
                 "El tiempo de pago no puede superar 60 minutos."
             )
         return value
+
+
+class UserFavoriteSerializer(serializers.ModelSerializer):
+    event_detail = EventSerializer(source='event', read_only=True)
+
+    class Meta:
+        model = UserFavorite
+        fields = ['id', 'event', 'event_detail', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    event_nombre = serializers.CharField(
+        source='event.name',
+        read_only=True,
+        default=None
+    )
+    event_fecha = serializers.DateField(
+        source='event.event_date',
+        read_only=True,
+        default=None
+    )
+
+    class Meta:
+        model = Notification
+        fields = [
+            'id',
+            'tipo',
+            'titulo',
+            'mensaje',
+            'leida',
+            'created_at',
+            'leida_at',
+            'event',
+            'event_nombre',
+            'event_fecha',
+        ]
+        read_only_fields = ['id', 'created_at', 'leida_at']
+
+class NotificationPreferenceUpdateSerializer(serializers.Serializer):
+    """
+    Serializer específico para la subtarea: 
+    PUT /users/{id}/notification-preferences
+    """
+    category_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=True,
+        help_text="Lista de IDs de categorías para activar notificaciones."
+    )
+
+
+class AdminAuditLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AdminAuditLog
+        fields = [
+            'id',
+            'evento_id',
+            'evento_nombre',
+            'accion',
+            'motivo',
+            'campos_modificados',
+            'ejecutado_por_email',
+            'ejecutado_por_id',
+            'created_at',
+        ]
+        read_only_fields = fields
+
+
+class EventAuditLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EventAuditLog
+        fields = [
+            'id',
+            'evento_id',
+            'evento_nombre',
+            'operacion',
+            'estado_anterior',
+            'estado_nuevo',
+            'campos_modificados',
+            'motivo_baja',
+            'created_at',
+        ]
+        read_only_fields = fields

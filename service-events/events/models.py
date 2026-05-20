@@ -66,20 +66,6 @@ class Event(models.Model):
     # Timeout de pago en minutos
     payment_timeout_minutes = models.IntegerField(default=15)
 
-    # TIC-405: Gestión administrativa de eventos
-    ADMIN_STATUS_CHOICES = [
-        ('none', 'Sin intervención'),
-        ('modified', 'Modificado por admin'),
-        ('deactivated', 'Dado de baja por admin'),
-    ]
-    admin_status = models.CharField(
-        max_length=20,
-        choices=ADMIN_STATUS_CHOICES,
-        default='none',
-        db_index=True,
-    )
-    admin_reason = models.TextField(null=True, blank=True)
-
     class Meta:
         verbose_name = 'Event'
         verbose_name_plural = 'Events'
@@ -89,6 +75,11 @@ class Event(models.Model):
             models.Index(fields=['event_date']),
             models.Index(fields=['status']),
         ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Guardamos el estado al cargar desde BD para detectar cambios en el signal
+        self._previous_status = self.status
 
     def __str__(self):
         return self.name
@@ -549,24 +540,102 @@ class Notification(models.Model):
     TIC-372: Historial de notificaciones enviadas al usuario.
     Se crea cuando el motor de matching detecta un evento compatible con el perfil del usuario.
     """
+    TIPO_CHOICES = [
+        ('new_event_match', 'Nuevo evento compatible'),
+        ('waitlist_turn',   'Turno en lista de espera'),
+        ('purchase_confirmed', 'Compra confirmada'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user_id = models.UUIDField(db_index=True)
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='notifications')
-    message = models.TextField()
-    read = models.BooleanField(default=False)
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        null=True, blank=True
+    )
+    tipo = models.CharField(max_length=30, choices=TIPO_CHOICES)
+    titulo = models.CharField(max_length=200)
+    mensaje = models.TextField()
+    leida = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    leida_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = 'Notification'
         verbose_name_plural = 'Notifications'
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['user_id', 'read']),
             models.Index(fields=['user_id']),
+            models.Index(fields=['user_id', 'leida']),
         ]
 
     def __str__(self):
-        return f"Notif → {self.user_id} | {self.event.name} | leída={self.read}"
+        return f"{self.user_id} — {self.titulo}"
+
+
+def generar_notificaciones_match(event):
+    """
+    Genera notificaciones para usuarios con afinidad a la categoría
+    del evento recién publicado. Se ejecuta en segundo plano con un
+    thread para garantizar entrega en < 5 minutos.
+
+    Criterio de match: usuario que tenga al menos 1 interacción
+    (view, favorite, purchase) con un evento de la misma categoría.
+    """
+    import threading
+
+    def _ejecutar():
+        try:
+            if not event.category:
+                return
+
+            # Obtener user_ids con afinidad a esta categoría
+            user_ids_con_afinidad = UserBehavior.objects.filter(
+                event__category=event.category
+            ).values_list('user_id', flat=True).distinct()
+
+            notificaciones_a_crear = []
+            for user_id in user_ids_con_afinidad:
+                # Evitar notificar al propio promotor del evento
+                if str(user_id) == str(event.promoter_id):
+                    continue
+
+                # Evitar duplicar notificación para el mismo evento y usuario
+                ya_notificado = Notification.objects.filter(
+                    user_id=user_id,
+                    event=event,
+                    tipo='new_event_match'
+                ).exists()
+
+                if not ya_notificado:
+                    notificaciones_a_crear.append(Notification(
+                        user_id=user_id,
+                        event=event,
+                        tipo='new_event_match',
+                        titulo=f"🎯 Nuevo evento: {event.name}",
+                        mensaje=(
+                            f"Hay un nuevo evento de {event.category.name} "
+                            f"que podría interesarte: '{event.name}' "
+                            f"el {event.event_date.strftime('%d/%m/%Y')} en {event.location}."
+                        ),
+                        leida=False,
+                    ))
+
+            if notificaciones_a_crear:
+                Notification.objects.bulk_create(notificaciones_a_crear)
+                logger.info(
+                    f"[Notificaciones] {len(notificaciones_a_crear)} "
+                    f"generadas para evento '{event.name}'"
+                )
+
+        except Exception as e:
+            logger.error(f"[Notificaciones] Error al generar matches: {e}")
+
+    # Ejecutar en thread separado para no bloquear el request
+    # Garantiza entrega en < 5 minutos al dispararse inmediatamente
+    hilo = threading.Thread(target=_ejecutar, daemon=True)
+    hilo.start()
 
 
 class NotificationPreference(models.Model):
@@ -589,70 +658,3 @@ class NotificationPreference(models.Model):
 
     def __str__(self):
         return f"{self.user_id} - {self.category.name}: {'on' if self.enabled else 'off'}"
-
-
-# ─── TIC-26: Auditoría de eventos ─────────────────────────────────────────────
-
-class EventAuditLog(models.Model):
-    """
-    TIC-415: Registro completo de todas las intervenciones administrativas
-    sobre eventos. Captura qué cambió, quién lo hizo y cuándo.
-
-    Acciones posibles:
-      - edit: Modificación de campos del evento
-      - deactivate: Dar de baja el evento
-      - reactivate: Reactivar evento previamente dado de baja
-    """
-    ACTION_CHOICES = [
-        ('edit', 'Edición de campos'),
-        ('deactivate', 'Dar de baja'),
-        ('reactivate', 'Reactivar evento'),
-    ]
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
-    # Evento intervenido
-    event = models.ForeignKey(
-        Event,
-        on_delete=models.CASCADE,
-        related_name='audit_logs',
-    )
-    event_name = models.CharField(max_length=200)  # snapshot del nombre al momento
-
-    # Admin que ejecutó la acción
-    admin_id = models.UUIDField(db_index=True)
-    admin_email = models.EmailField()
-
-    action = models.CharField(max_length=20, choices=ACTION_CHOICES, db_index=True)
-    reason = models.TextField(null=True, blank=True)
-
-    # Snapshot de qué cambió (JSON-like string o texto libre)
-    changed_fields = models.JSONField(null=True, blank=True)  # {campo: {old: x, new: y}}
-    old_status = models.CharField(max_length=20, null=True, blank=True)
-    new_status = models.CharField(max_length=20, null=True, blank=True)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = 'Event Audit Log'
-        verbose_name_plural = 'Event Audit Logs'
-        ordering = ['-created_at']
-        # TIC-416: Índices para consultas eficientes de auditoría
-        indexes = [
-            models.Index(fields=['event'], name='eaudit_event_idx'),
-            models.Index(fields=['admin_id'], name='eaudit_admin_idx'),
-            models.Index(fields=['action'], name='eaudit_action_idx'),
-            models.Index(fields=['created_at'], name='eaudit_created_idx'),
-            models.Index(fields=['event', 'created_at'], name='eaudit_event_date_idx'),
-        ]
-
-    def __str__(self):
-        return f"{self.admin_email} → {self.action} | {self.event_name} | {self.created_at:%Y-%m-%d}"
-class EventAuditLogSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = EventAuditLog
-        fields = [
-            'id', 'event', 'event_name', 'admin_id', 'admin_email',
-            'action', 'reason', 'changed_fields', 'old_status',
-            'new_status', 'created_at'
-        ]

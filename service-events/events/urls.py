@@ -1,17 +1,29 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    CategoryViewSet, EventViewSet, TicketTypeViewSet,
-    PurchaseView, SimularPagoView, PurchaseStatusView,
-    SeatConfigurationView, ValidateTicketView, WaitlistView,
-    LogoutView, PurchaseHistoryView, PurchaseDetailView,
-    PurchaseDownloadPDFView, PurchaseCancelView,
-    SeatListView, SeatReserveView, SeatBulkReserveView,
+    AdminAuditLogView,
+    AdminEventoBajaView,
+    AdminEventoModificarView,
+    CategoryViewSet,
+    EventViewSet,
+    SuperAdminManageView,
+    TicketTypeViewSet,
+    PurchaseView,
+    SimularPagoView,
+    PurchaseStatusView,
+    SeatConfigurationView,
+    ValidateTicketView,
+    WaitlistView,
+    LogoutView,
+    PurchaseHistoryView,
+    PurchaseDetailView,
+    PurchaseDownloadPDFView,
+    PurchaseCancelView,
+    SeatListView,
+    SeatReserveView,
+    SeatBulkReserveView,
     SeatReleaseExpiredView,  # US20: barrendero
     QueueConfigView,         # US14: configuracion de cola por promotor
-    AdminEventEditView,      # TIC-406: editar evento por admin
-    AdminEventDeactivateView, # TIC-407: dar de baja evento por admin
-    AdminAuditLogListView,   # TIC-421: historial de auditoria de eventos
 )
 
 app_name = 'events'
@@ -49,16 +61,4 @@ urlpatterns = [
     path('seats/release-expired/', SeatReleaseExpiredView.as_view(), name='seat-release-expired'),
     # US14: Configuración de cola virtual por promotor (TIC-350, TIC-351, TIC-352)
     path('queue-config/<uuid:event_id>/', QueueConfigView.as_view(), name='queue-config'),
-
-    # TIC-25: Gestión administrativa de eventos
-    path('admin/events/<uuid:event_id>/', AdminEventEditView.as_view(), name='admin-event-edit'),
-    path('admin/events/<uuid:event_id>/deactivate/', AdminEventDeactivateView.as_view(), name='admin-event-deactivate'),
-
-    # TIC-26: Auditoría de eventos
-    path('admin/audit-log/', AdminAuditLogListView.as_view(), name='admin-audit-log'),
-
-    path('admin/audit-log/', EventAuditLogListView.as_view(), name='event-specific-audit-log'),
-    path('admin/audit-log/export/', 
-     ExportAuditLogCSVView.as_view(), 
-     name='export-audit-log-csv'),
 ]

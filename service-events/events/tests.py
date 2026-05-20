@@ -3,14 +3,15 @@ from rest_framework import status
 from django.urls import reverse
 import uuid
 
-from .models import Event, TicketType, Purchase, Waitlist
+from .models import Event, TicketType, Purchase, Waitlist, AdminAuditLog
 
 
 
 class FakeUser:
-    def __init__(self, user_id):
+    def __init__(self, user_id, email=None):
         self.id = user_id
         self.pk = user_id
+        self.email = email or f'user-{user_id}@example.com'
         self.is_authenticated = True
         self.is_active = True
         self.is_staff = False
@@ -518,6 +519,130 @@ class ValidateTicketTestCase(APITestCase):
 
         purchase.refresh_from_db()
         self.assertEqual(purchase.status, 'used')
+
+
+# =============================================
+# PA Tests - Eventos Administrativos y Auditoría
+# =============================================
+
+class AdminEventAuditTestCase(APITestCase):
+    """
+    Verifica que el listado público excluya eventos dados de baja y que
+    las acciones de baja/modificación queden registradas en AdminAuditLog.
+    """
+
+    def setUp(self):
+        self.normal_user_id = uuid.uuid4()
+        self.normal_user = FakeUser(self.normal_user_id)
+
+        self.admin_id = uuid.uuid4()
+        self.admin = FakeUser(self.admin_id)
+        self.admin.is_staff = True
+        self.admin.email = 'admin@example.com'
+
+        self.visible_event = Event.objects.create(
+            promoter_id=uuid.uuid4(),
+            name="Evento Visible",
+            description="Evento publicado visible",
+            event_date="2026-12-01",
+            event_time="20:00",
+            location="Cochabamba",
+            capacity=100,
+            status='published'
+        )
+
+        self.baja_event = Event.objects.create(
+            promoter_id=uuid.uuid4(),
+            name="Evento Dado de Baja",
+            description="Evento que debería quedar oculto",
+            event_date="2026-12-05",
+            event_time="20:00",
+            location="Cochabamba",
+            capacity=100,
+            status='published',
+            admin_status='dado_de_baja',
+            admin_baja_motivo='Violación de términos',
+            admin_baja_at='2026-11-01T12:00:00Z',
+            admin_baja_por='admin@example.com'
+        )
+
+        self.audit_event = Event.objects.create(
+            promoter_id=uuid.uuid4(),
+            name="Evento Auditoría",
+            description="Evento para pruebas de auditoría",
+            event_date="2026-12-10",
+            event_time="20:00",
+            location="Cochabamba",
+            capacity=100,
+            status='published'
+        )
+
+    def _extract_results(self, response):
+        return response.data.get('results', response.data)
+
+    def test_public_list_excludes_events_dado_de_baja(self):
+        self.client.force_authenticate(user=self.normal_user)
+        url = reverse('events:event-list')
+
+        response = self.client.get(url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        results = self._extract_results(response)
+        self.assertIsInstance(results, list)
+        ids = [item['id'] for item in results]
+
+        self.assertIn(str(self.visible_event.id), ids)
+        self.assertNotIn(str(self.baja_event.id), ids)
+
+    def test_admin_list_can_include_bajas_with_flag(self):
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('events:event-list')
+
+        response = self.client.get(url, {'incluir_bajas': 'true'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        results = self._extract_results(response)
+        ids = [item['id'] for item in results]
+
+        self.assertIn(str(self.visible_event.id), ids)
+        self.assertIn(str(self.baja_event.id), ids)
+
+    def test_admin_baja_action_creates_admin_audit_log(self):
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('events:admin-evento-baja', kwargs={'event_id': self.audit_event.id})
+
+        response = self.client.patch(url, {
+            'motivo': 'Incumplimiento legal del evento'
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.audit_event.refresh_from_db()
+        self.assertEqual(self.audit_event.admin_status, 'dado_de_baja')
+
+        audit_entry = AdminAuditLog.objects.filter(evento_id=self.audit_event.id, accion='baja').first()
+        self.assertIsNotNone(audit_entry)
+        self.assertEqual(audit_entry.motivo, 'Incumplimiento legal del evento')
+        self.assertEqual(audit_entry.ejecutado_por_email, self.admin.email)
+        self.assertEqual(audit_entry.campos_modificados['admin_status']['antes'], 'visible')
+        self.assertEqual(audit_entry.campos_modificados['admin_status']['despues'], 'dado_de_baja')
+
+    def test_admin_modify_action_creates_admin_audit_log(self):
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('events:admin-evento-modificar', kwargs={'event_id': self.audit_event.id})
+
+        response = self.client.patch(url, {
+            'motivo': 'Actualización por requerimiento legal',
+            'name': 'Evento Auditoría Modificado'
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.audit_event.refresh_from_db()
+        self.assertEqual(self.audit_event.name, 'Evento Auditoría Modificado')
+
+        audit_entry = AdminAuditLog.objects.filter(evento_id=self.audit_event.id, accion='modificacion').first()
+        self.assertIsNotNone(audit_entry)
+        self.assertEqual(audit_entry.ejecutado_por_email, self.admin.email)
+        self.assertEqual(audit_entry.campos_modificados['name']['despues'], 'Evento Auditoría Modificado')
 
 
 # =============================================

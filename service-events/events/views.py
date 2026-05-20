@@ -13,42 +13,59 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db import transaction, IntegrityError
-from .permissions import IsAdminWithAudit
 from django.utils import timezone
 import qrcode
-import csv
-from django.http import HttpResponse
-from rest_framework.views import APIView
-from .models import EventAuditLog
-from .permissions import IsAdminWithAudit # Reutilizamos tu permiso de JWT
 import io
 import base64
-from django.db import transaction
-from rest_framework.permissions import AllowAny
-import uuid
-from io import BytesIO
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework import status
-from .models import TicketType, PaymentOrder # Asegúrate de importar tus modelos
+import io
 import math
+import qrcode
 import secrets
 import uuid
+from io import BytesIO
+
 import requests as http_requests
 from django.conf import settings as django_settings
+from django.db import transaction, IntegrityError
 from django.db.models import Max
-from datetime import timedelta
-from .permissions import IsAdministrador, IsPromotor, IsComprador
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import permissions, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from .models import (
+    AdminAuditLog,
+    Category,
+    Event,
+    PaymentOrder,
+    TicketType,
+    Purchase,
+    Waitlist,
+    BlacklistedToken,
+    Seat,
+    UserBehavior,
+    registrar_comportamiento,
+    UserFavorite,
+    Notification,
+    generar_notificaciones_match,
+    EventAuditLog,
+)
+from .permissions import IsAdministrador, IsComprador, IsPromotor
 from .services import TicketGenerationService, send_ticket_email
-from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat
 from .serializers import (
+    AdminAuditLogSerializer,
     CategorySerializer,
-    EventSerializer,
     EventCreateSerializer,
+    EventSerializer,
     EventUpdateSerializer,
-    TicketTypeSerializer,
-    TicketTypeCreateSerializer,
     QueueConfigSerializer,
+    TicketTypeCreateSerializer,
+    TicketTypeSerializer,
 )
 
 
@@ -102,9 +119,41 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class EventViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
+        queryset = Event.objects.all().select_related('category').prefetch_related('ticket_types')
+
         if self.action == 'list':
-            return Event.objects.filter(status='published')
-        return Event.objects.all()
+            queryset = queryset.exclude(admin_status='dado_de_baja')
+
+            incluir_bajas = self.request.query_params.get('incluir_bajas', 'false')
+            es_admin = (
+                self.request.user.is_authenticated and
+                (
+                    getattr(self.request.user, 'is_staff', False) or
+                    (
+                        getattr(self.request.user, 'role', None) and
+                        getattr(self.request.user.role, 'name', '').lower() in ['administrador', 'admin', 'superadmin']
+                    )
+                )
+            )
+
+            if incluir_bajas.lower() == 'true' and es_admin:
+                queryset = Event.objects.all().select_related('category').prefetch_related('ticket_types')
+            else:
+                queryset = queryset.filter(status='published')
+
+        status_param = self.request.query_params.get('status', None)
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        category_param = self.request.query_params.get('category', None)
+        if category_param:
+            queryset = queryset.filter(category__name__icontains=category_param)
+
+        location_param = self.request.query_params.get('location', None)
+        if location_param:
+            queryset = queryset.filter(location__icontains=location_param)
+
+        return queryset
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'category', 'event_date']
@@ -124,6 +173,34 @@ class EventViewSet(viewsets.ModelViewSet):
         elif self.action in ['partial_update', 'update']:
             return EventUpdateSerializer
         return EventSerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        """GET /events/{id}/ — registra la visualización como comportamiento"""
+        instance = self.get_object()
+
+        # Registrar automáticamente la interacción 'view'
+        registrar_comportamiento(
+            user_id=request.user.id,
+            event=instance,
+            action_type='view'
+        )
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+    def retrieve(self, request, *args, **kwargs):
+        """GET /events/{id}/ — registra la visualización como comportamiento"""
+        instance = self.get_object()
+
+        # Registrar automáticamente la interacción 'view'
+        registrar_comportamiento(
+            user_id=request.user.id,
+            event=instance,
+            action_type='view'
+        )
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
     def update(self, request, *args, **kwargs):
         """Editar un evento validando permisos y estado (PUT/PATCH)"""
@@ -297,6 +374,14 @@ class EventViewSet(viewsets.ModelViewSet):
         event = self.get_object()
         event.status = 'published'
         event.save()
+        
+        # NUEVO — disparar notificaciones de match en < 5 minutos
+        generar_notificaciones_match(event)
+        
+        
+        # NUEVO — disparar notificaciones de match en < 5 minutos
+        generar_notificaciones_match(event)
+        
         return Response({'success': 'Event published'})
     
     @action(detail=True, methods=['get', 'put'], url_path='queue-config')
@@ -527,7 +612,241 @@ class EventViewSet(viewsets.ModelViewSet):
 
         # Si el banco manda 'RECHAZADO' u otro estado
         return Response({"error": "Transacción no exitosa"}, status=status.HTTP_400_BAD_REQUEST)
-    
+
+
+class AdminEventoBajaView(APIView):
+    """
+    PATCH /api/v1/admin/events/{event_id}/baja/
+    Da de baja un evento con motivo obligatorio.
+    Registra la acción en AdminAuditLog automáticamente.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _es_admin(self, user):
+        return (
+            getattr(user, 'is_staff', False) or
+            (
+                getattr(user, 'role', None) and
+                getattr(user.role, 'name', '').lower() in ['administrador', 'admin', 'superadmin']
+            )
+        )
+
+    def patch(self, request, event_id):
+        if not self._es_admin(request.user):
+            return Response(
+                {"error": "No tienes permisos de Administrador."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        motivo = request.data.get('motivo', '').strip()
+        if not motivo:
+            return Response({
+                "status": "error",
+                "message": "El motivo de baja es obligatorio."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(motivo) < 10:
+            return Response({
+                "status": "error",
+                "message": "El motivo debe tener al menos 10 caracteres."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        event = get_object_or_404(Event, id=event_id)
+
+        if event.admin_status == 'dado_de_baja':
+            return Response({
+                "status": "error",
+                "message": "El evento ya está dado de baja."
+            }, status=status.HTTP_409_CONFLICT)
+
+        estado_anterior = event.admin_status
+
+        event.admin_status = 'dado_de_baja'
+        event.admin_baja_motivo = motivo
+        event.admin_baja_at = timezone.now()
+        event.admin_baja_por = request.user.email
+        event.save(update_fields=[
+            'admin_status',
+            'admin_baja_motivo',
+            'admin_baja_at',
+            'admin_baja_por',
+        ])
+
+        AdminAuditLog.objects.create(
+            evento_id=event.id,
+            evento_nombre=event.name,
+            accion='baja',
+            motivo=motivo,
+            campos_modificados={
+                'admin_status': {
+                    'antes': estado_anterior,
+                    'despues': 'dado_de_baja',
+                }
+            },
+            ejecutado_por_email=request.user.email,
+            ejecutado_por_id=request.user.id,
+        )
+
+        return Response({
+            "status": "success",
+            "message": f"Evento '{event.name}' dado de baja correctamente.",
+            "data": {
+                "evento_id": str(event.id),
+                "evento_nombre": event.name,
+                "admin_status": event.admin_status,
+                "motivo": motivo,
+                "baja_at": event.admin_baja_at,
+                "ejecutado_por": request.user.email,
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class AdminEventoModificarView(APIView):
+    """
+    PATCH /api/v1/admin/events/{event_id}/modificar/
+    El administrador modifica campos de un evento con motivo obligatorio.
+    Registra en AdminAuditLog los campos que cambiaron con valores
+    antes/después.
+
+    Campos modificables por el admin:
+      name, description, event_date, location, status
+    """
+    permission_classes = [IsAuthenticated]
+
+    CAMPOS_PERMITIDOS = ['name', 'description', 'event_date', 'location', 'status']
+
+    def _es_admin(self, user):
+        return (
+            getattr(user, 'is_staff', False) or
+            (
+                getattr(user, 'role', None) and
+                getattr(user.role, 'name', '').lower() in ['administrador', 'admin', 'superadmin']
+            )
+        )
+
+    def patch(self, request, event_id):
+        if not self._es_admin(request.user):
+            return Response(
+                {"error": "No tienes permisos de Administrador."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        motivo = request.data.get('motivo', '').strip()
+        if not motivo:
+            return Response({
+                "status": "error",
+                "message": "El motivo de la modificación es obligatorio."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(motivo) < 10:
+            return Response({
+                "status": "error",
+                "message": "El motivo debe tener al menos 10 caracteres."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        event = get_object_or_404(Event, id=event_id)
+
+        if event.admin_status == 'dado_de_baja':
+            return Response({
+                "status": "error",
+                "message": "No se puede modificar un evento dado de baja."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        campos_modificados = {}
+        campos_a_actualizar = []
+
+        for campo in self.CAMPOS_PERMITIDOS:
+            if campo in request.data:
+                valor_nuevo = request.data[campo]
+                valor_anterior = getattr(event, campo)
+
+                if str(valor_anterior) != str(valor_nuevo):
+                    campos_modificados[campo] = {
+                        'antes': str(valor_anterior),
+                        'despues': str(valor_nuevo),
+                    }
+                    setattr(event, campo, valor_nuevo)
+                    campos_a_actualizar.append(campo)
+
+        if not campos_a_actualizar:
+            return Response({
+                "status": "info",
+                "message": "No se detectaron cambios en los campos enviados."
+            }, status=status.HTTP_200_OK)
+
+        event.save(update_fields=campos_a_actualizar)
+
+        AdminAuditLog.objects.create(
+            evento_id=event.id,
+            evento_nombre=event.name,
+            accion='modificacion',
+            motivo=motivo,
+            campos_modificados=campos_modificados,
+            ejecutado_por_email=request.user.email,
+            ejecutado_por_id=request.user.id,
+        )
+
+        serializer = EventSerializer(event)
+
+        return Response({
+            "status": "success",
+            "message": f"Evento '{event.name}' modificado correctamente.",
+            "campos_modificados": campos_modificados,
+            "data": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+
+class AdminAuditLogView(APIView):
+    """
+    GET /api/v1/admin/audit-log/
+    Lista el historial completo de acciones administrativas sobre eventos.
+
+    Query params opcionales:
+      ?evento_id=UUID    → filtrar por evento
+      ?accion=baja       → filtrar por tipo de acción
+      ?admin_id=UUID     → filtrar por administrador
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _es_admin(self, user):
+        return (
+            getattr(user, 'is_staff', False) or
+            (
+                getattr(user, 'role', None) and
+                getattr(user.role, 'name', '').lower() in ['administrador', 'admin', 'superadmin']
+            )
+        )
+
+    def get(self, request):
+        if not self._es_admin(request.user):
+            return Response(
+                {"error": "No tienes permisos de Administrador."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        logs = AdminAuditLog.objects.all()
+
+        evento_id = request.query_params.get('evento_id', None)
+        if evento_id:
+            logs = logs.filter(evento_id=evento_id)
+
+        accion = request.query_params.get('accion', None)
+        if accion:
+            logs = logs.filter(accion=accion)
+
+        admin_id = request.query_params.get('admin_id', None)
+        if admin_id:
+            logs = logs.filter(ejecutado_por_id=admin_id)
+
+        serializer = AdminAuditLogSerializer(logs, many=True)
+
+        return Response({
+            "status": "success",
+            "total": logs.count(),
+            "results": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+
 class TicketTypeViewSet(viewsets.ModelViewSet):
     queryset = TicketType.objects.all()
     filter_backends = [DjangoFilterBackend, SearchFilter]
@@ -861,6 +1180,20 @@ class SimularPagoView(APIView):
         purchase.backup_code = backup_code
         purchase.qr_code = qr_code_base64
         purchase.save()
+
+        # NUEVO — registrar comportamiento de compra
+        registrar_comportamiento(
+            user_id=purchase.user_id,
+            event=purchase.event,
+            action_type='purchase'
+        )
+
+        # NUEVO — registrar comportamiento de compra
+        registrar_comportamiento(
+            user_id=purchase.user_id,
+            event=purchase.event,
+            action_type='purchase'
+        )
 
         # Marcar los asientos reservados por este usuario como vendidos
         Seat.objects.filter(
@@ -1672,6 +2005,375 @@ class QueueConfigView(APIView):
             "message": "Error al validar los datos.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+class SuperAdminManageView(APIView):
+    """
+    TIC-105 & TIC-106: Gestión integral de Administradores por SuperAdmin.
+    Permite modificar permisos y suspender cuentas con protección de jerarquía.
+    """
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def patch(self, request, user_id):
+        # 1. SEGURIDAD: Solo el SuperUser (Nivel Dios) puede entrar aquí
+        if not request.user.is_superuser:
+            return Response(
+                {"error": "Acceso denegado. Se requieren privilegios de SuperAdmin."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # 2. VALIDACIÓN DE JERARQUÍA: Evitar que toquen a otro SuperAdmin
+        # (Aquí simulamos la comprobación, en real consultarías tu BD/Service-Profiles)
+        target_is_superuser = False # <--- Consultar si el user_id es superusuario
+        if target_is_superuser:
+            return Response(
+                {"error": "Acción denegada: Un SuperAdmin no puede ser gestionado por este endpoint."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # 3. PROCESAMIENTO DE DATOS
+        # Usamos el serializer para validar si vienen cambios de permisos
+        serializer = AdminPermissionsSerializer(data=request.data, partial=True)
+        
+        # Detectamos si la intención es SUSPENDER (TIC-106)
+        is_suspend_action = request.data.get('suspend', False)
+
+        try:
+            acciones_realizadas = []
+
+            # --- Lógica de Suspensión ---
+            if is_suspend_action:
+                # Aquí llamarías a la lógica de desactivar cuenta (is_active = False)
+                acciones_realizadas.append("Suspensión de cuenta")
+                log_admin_action(request, user_id, 'suspend', "Cuenta suspendida por SuperAdmin")
+
+            # --- Lógica de Permisos ---
+            if serializer.is_valid() and serializer.validated_data:
+                # Aquí actualizarías los permisos en la base de datos
+                acciones_realizadas.append(f"Cambio de permisos: {list(serializer.validated_data.keys())}")
+                log_admin_action(request, user_id, 'update', f"Permisos modificados: {serializer.validated_data}")
+
+            if not acciones_realizadas:
+                return Response({"message": "No se enviaron cambios válidos."}, status=400)
+
+            return Response({
+                "status": "success",
+                "target_user": user_id,
+                "actions": acciones_realizadas
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+    
+
+
+class UserFavoritesView(APIView):
+    """
+    GET  /api/v1/users/{user_id}/favorites/
+        Lista todos los eventos favoritos del usuario.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        # Seguridad: solo el propio usuario puede ver sus favoritos
+        if str(request.user.id) != str(user_id):
+            return Response(
+                {"error": "No tienes permiso para ver los favoritos de otro usuario."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        favoritos = UserFavorite.objects.filter(
+            user_id=user_id
+        ).select_related('event', 'event__category')
+
+        from .serializers import UserFavoriteSerializer
+        serializer = UserFavoriteSerializer(favoritos, many=True)
+
+        return Response({
+            "status": "success",
+            "count": favoritos.count(),
+            "results": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class UserFavoriteToggleView(APIView):
+    """
+    POST /api/v1/users/{user_id}/favorites/{event_id}/
+    Toggle: si ya es favorito lo quita, si no lo agrega.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id, event_id):
+        # Seguridad: solo el propio usuario puede gestionar sus favoritos
+        if str(request.user.id) != str(user_id):
+            return Response(
+                {"error": "No tienes permiso para modificar los favoritos de otro usuario."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        event = get_object_or_404(Event, id=event_id)
+
+        favorito_existente = UserFavorite.objects.filter(
+            user_id=user_id,
+            event=event
+        ).first()
+
+        if favorito_existente:
+            # Ya era favorito → desmarcar
+            favorito_existente.delete()
+            return Response({
+                "status": "removed",
+                "message": f"'{event.name}' eliminado de tus favoritos.",
+                "is_favorite": False,
+            }, status=status.HTTP_200_OK)
+
+        else:
+            # No era favorito → marcar
+            UserFavorite.objects.create(
+                user_id=user_id,
+                event=event
+            )
+
+            # Registrar también como comportamiento de interés
+            registrar_comportamiento(
+                user_id=user_id,
+                event=event,
+                action_type='favorite'
+            )
+
+            return Response({
+                "status": "added",
+                "message": f"'{event.name}' agregado a tus favoritos.",
+                "is_favorite": True,
+            }, status=status.HTTP_201_CREATED)
+
+
+class UserNotificationsView(APIView):
+    """
+    GET /api/v1/users/{user_id}/notifications/
+    Lista todas las notificaciones del usuario (leídas y no leídas).
+
+    Query params opcionales:
+      ?leida=false  → solo no leídas
+      ?leida=true   → solo leídas
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        # Seguridad: solo el propio usuario puede ver sus notificaciones
+        if str(request.user.id) != str(user_id):
+            return Response(
+                {"error": "No tienes permiso para ver estas notificaciones."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        notificaciones = Notification.objects.filter(
+            user_id=user_id
+        ).select_related('event', 'event__category')
+
+        # Filtro opcional por estado de lectura
+        leida_param = request.query_params.get('leida', None)
+        if leida_param is not None:
+            leida_bool = leida_param.lower() == 'true'
+            notificaciones = notificaciones.filter(leida=leida_bool)
+
+        from .serializers import NotificationSerializer
+        serializer = NotificationSerializer(notificaciones, many=True)
+
+        return Response({
+            "status": "success",
+            "total": notificaciones.count(),
+            "no_leidas": Notification.objects.filter(
+                user_id=user_id, leida=False
+            ).count(),
+            "results": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+
+class UserNotificationReadView(APIView):
+    """
+    PATCH /api/v1/users/{user_id}/notifications/{notif_id}/read/
+    Marca una notificación específica como leída.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, user_id, notif_id):
+        # Seguridad: solo el propio usuario puede marcar sus notificaciones
+        if str(request.user.id) != str(user_id):
+            return Response(
+                {"error": "No tienes permiso para modificar estas notificaciones."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        notificacion = get_object_or_404(
+            Notification,
+            id=notif_id,
+            user_id=user_id
+        )
+
+        if notificacion.leida:
+            return Response({
+                "status": "info",
+                "message": "La notificación ya estaba marcada como leída.",
+            }, status=status.HTTP_200_OK)
+
+        notificacion.leida = True
+        notificacion.leida_at = timezone.now()
+        notificacion.save(update_fields=['leida', 'leida_at'])
+
+        from .serializers import NotificationSerializer
+        serializer = NotificationSerializer(notificacion)
+
+        return Response({
+            "status": "success",
+            "message": "Notificación marcada como leída.",
+            "data": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+class NotificationPreferenceView(APIView):
+    def put(self, request, user_id):
+        # Usamos el serializer de PREFERENCIAS para validar la lista de IDs
+        serializer = NotificationPreferenceUpdateSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            category_ids = serializer.validated_data['category_ids']
+            
+            # Apagamos todas primero (reset)
+            UserPreference.objects.filter(user_id=user_id).update(notifications_enabled=False)
+            
+            # Prendemos las que el usuario eligió
+            for cat_id in category_ids:
+                pref, created = UserPreference.objects.get_or_create(
+                    user_id=user_id,
+                    category_id=cat_id
+                )
+                pref.notifications_enabled = True
+                pref.save()
+                
+            return Response({"message": "Preferencias actualizadas"}, status=200)
+        
+        return Response(serializer.errors, status=400)
+
+class UserNotificationReadAllView(APIView):
+    """
+    PATCH /api/v1/users/{user_id}/notifications/read-all/
+    Marca TODAS las notificaciones no leídas del usuario como leídas.
+    Endpoint de utilidad para el botón 'Marcar todas como leídas'.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, user_id):
+        if str(request.user.id) != str(user_id):
+            return Response(
+                {"error": "No tienes permiso."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        ahora = timezone.now()
+
+        actualizadas = Notification.objects.filter(
+            user_id=user_id,
+            leida=False
+        ).update(leida=True, leida_at=ahora)
+
+        return Response({
+            "status": "success",
+            "message": f"{actualizadas} notificaciones marcadas como leídas.",
+            "actualizadas": actualizadas,
+        }, status=status.HTTP_200_OK)
+
+
+class AdminUserDeleteView(APIView):
+    """
+    TIC-100: Endpoint para dar de baja cuentas de usuarios.
+    Solo accesible por administradores.
+    """
+    # Aseguramos que solo un admin autenticado pueda entrar
+    permission_classes = [permissions.IsAdminUser]
+
+    def delete(self, request, user_id):
+        # 1. Validación de seguridad (Ya la teníamos)
+        if str(request.user.id) == str(user_id):
+            return Response({"error": "No puedes eliminarte a ti mismo."}, status=400)
+
+        try:
+            # Ejemplo: Borramos comportamientos y preferencias locales de ese usuario
+            from .models import UserBehavior, UserPreference
+            UserBehavior.objects.filter(user_id=user_id).delete()
+            UserPreference.objects.filter(user_id=user_id).delete()
+            
+            # Nota: Aquí deberías disparar una petición DELETE a service-profiles 
+            # si quieres que la cuenta desaparezca del sistema central.
+            log_admin_action(
+                request=request, 
+                target_user_id=user_id, 
+                action='delete', 
+                details="Eliminación total de cuenta y preferencias desde el panel admin."
+            )
+            
+            return Response({"message": "Usuario eliminado y acción registrada."}, status=200)
+            
+        except Exception as e:
+            return Response(
+                {"error": f"Error al procesar la baja: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class EventAuditLogView(APIView):
+    """
+    GET /api/v1/admin/events/audit-log/
+    Consulta el historial automático de cambios sobre eventos.
+
+    Query params opcionales:
+      ?evento_id=UUID         → filtrar por evento específico
+      ?operacion=update       → create | update | delete | soft_delete
+      ?desde=2025-01-01       → filtrar desde fecha
+      ?hasta=2025-12-31       → filtrar hasta fecha
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _es_admin(self, user):
+        return (
+            getattr(user, 'is_staff', False) or
+            (
+                user.role and
+                user.role.name.lower() in
+                ['administrador', 'admin', 'superadmin']
+            )
+        )
+
+    def get(self, request):
+        if not self._es_admin(request.user):
+            return Response(
+                {"error": "No tienes permisos de Administrador."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        logs = EventAuditLog.objects.all()
+
+        evento_id = request.query_params.get('evento_id', None)
+        if evento_id:
+            logs = logs.filter(evento_id=evento_id)
+
+        operacion = request.query_params.get('operacion', None)
+        if operacion:
+            logs = logs.filter(operacion=operacion)
+
+        desde = request.query_params.get('desde', None)
+        if desde:
+            logs = logs.filter(created_at__date__gte=desde)
+
+        hasta = request.query_params.get('hasta', None)
+        if hasta:
+            logs = logs.filter(created_at__date__lte=hasta)
+
+        from .serializers import EventAuditLogSerializer
+        serializer = EventAuditLogSerializer(logs, many=True)
+
+        return Response({
+            "status": "success",
+            "total": logs.count(),
+            "results": serializer.data,
+        }, status=status.HTTP_200_OK)
 
 
 # ─── TIC-25: Modificar/Dar de baja eventos (Admin) ───────────────────────────

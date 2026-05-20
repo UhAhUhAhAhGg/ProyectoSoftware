@@ -1,11 +1,17 @@
+from rest_framework.views import APIView
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from .models import User, Role, Permission
 from django.core.cache import cache
-from .models import User, AccountDeletionLog
-from .models import User, Role, Permission, UserProfile
+from django.db import transaction
+from django.core.mail import send_mail
+from .models import User, Role, Permission, UserProfile, AccountDeletionLog, AdminAuditLog
+<<<<<<< HEAD
+from .decorators import superadmin_required, log_superadmin_action
+=======
+from .permissions import IsSuperadmin
+>>>>>>> US23
 from .serializers import (
     UserSerializer,
     UserCreateSerializer,
@@ -21,8 +27,6 @@ import jwt
 import datetime
 import requests
 from django.conf import settings
-from django.db import transaction
-from django.core.mail import send_mail
 from rest_framework_simplejwt.tokens import RefreshToken
 
 
@@ -523,6 +527,205 @@ class UserViewSet(viewsets.ModelViewSet):
         user.save()
         return Response({'success': 'User deactivated'})
 
+    # ─── TIC-384: Gestión de usuarios desde panel Admin ──────────────────────
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='admin-list')
+    def admin_users(self, request):
+        """
+        TIC-384: GET /users/admin-list/
+        Lista paginada de todos los usuarios con filtros opcionales.
+        Solo accesible por admins o superadmins.
+
+        Query params:
+          - role: nombre del rol (ej: 'Comprador', 'Promotor', 'Administrador')
+          - account_status: 'active' | 'suspended' | 'banned'
+          - search: texto libre que busca en email
+          - page: número de página (default 1)
+          - page_size: resultados por página (default 20)
+        """
+        admin = request.user
+        if not admin.is_staff and not (admin.role and admin.role.name.lower() in ['administrador', 'admin', 'superadmin']):
+            return Response(
+                {"status": "error", "message": "Permisos insuficientes."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        qs = User.objects.select_related('role').order_by('-created_at')
+
+        # Filtros opcionales
+        role_name = request.query_params.get('role')
+        account_status = request.query_params.get('account_status')
+        search = request.query_params.get('search')
+
+        if role_name:
+            qs = qs.filter(role__name__iexact=role_name)
+        if account_status:
+            qs = qs.filter(account_status=account_status)
+        if search:
+            qs = qs.filter(email__icontains=search)
+
+        # Paginación simple
+        try:
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 20))
+        except ValueError:
+            page, page_size = 1, 20
+
+        total = qs.count()
+        start = (page - 1) * page_size
+        end = start + page_size
+        usuarios = qs[start:end]
+
+        data = []
+        for u in usuarios:
+            data.append({
+                "id": str(u.id),
+                "email": u.email,
+                "role": u.role.name if u.role else None,
+                "account_status": u.account_status,
+                "suspended_reason": u.suspended_reason,
+                "is_active": u.is_active,
+                "created_at": u.created_at.isoformat(),
+            })
+
+        return Response({
+            "status": "success",
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
+            "results": data,
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='suspend')
+    def suspend_user(self, request, pk=None):
+        """
+        TIC-384: PATCH /users/{id}/suspend/
+        Suspende la cuenta de un usuario y registra en AdminAuditLog.
+        Body: { "reason": "Motivo de la suspensión" }
+        """
+        admin = request.user
+        if not admin.is_staff and not (admin.role and admin.role.name.lower() in ['administrador', 'admin', 'superadmin']):
+            return Response({"status": "error", "message": "Permisos insuficientes."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            target = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({"status": "error", "message": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        reason = request.data.get('reason', '')
+        previous_status = target.account_status
+
+        target.account_status = 'suspended'
+        target.suspended_reason = reason
+        target.save(update_fields=['account_status', 'suspended_reason'])
+
+        AdminAuditLog.objects.create(
+            admin_id=admin.id,
+            admin_email=admin.email,
+            target_user_id=target.id,
+            target_user_email=target.email,
+            action='suspend',
+            reason=reason,
+            previous_status=previous_status,
+            new_status='suspended',
+        )
+
+        return Response({
+            "status": "success",
+            "message": f"Cuenta de {target.email} suspendida correctamente.",
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='reactivate')
+    def reactivate_user(self, request, pk=None):
+        """
+        TIC-384: PATCH /users/{id}/reactivate/
+        Reactiva la cuenta de un usuario suspendido y registra en AdminAuditLog.
+        """
+        admin = request.user
+        if not admin.is_staff and not (admin.role and admin.role.name.lower() in ['administrador', 'admin', 'superadmin']):
+            return Response({"status": "error", "message": "Permisos insuficientes."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            target = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({"status": "error", "message": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        previous_status = target.account_status
+        target.account_status = 'active'
+        target.suspended_reason = None
+        target.save(update_fields=['account_status', 'suspended_reason'])
+
+        AdminAuditLog.objects.create(
+            admin_id=admin.id,
+            admin_email=admin.email,
+            target_user_id=target.id,
+            target_user_email=target.email,
+            action='reactivate',
+            previous_status=previous_status,
+            new_status='active',
+        )
+
+        return Response({
+            "status": "success",
+            "message": f"Cuenta de {target.email} reactivada correctamente.",
+        }, status=status.HTTP_200_OK)
+
+    # ─── TIC-393/TIC-400: Gestión de SuperAdmins ────────────────────────────────
+
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='grant-superadmin')
+    @superadmin_required
+    @log_superadmin_action(action='grant_superadmin', category='admin_mgmt')
+    def grant_superadmin(self, request, pk=None):
+        """
+        TIC-393/TIC-400: PATCH /users/{id}/grant-superadmin/
+        Otorga privilegios de SuperAdmin a un administrador existente.
+        Solo accesible por SuperAdmins.
+        """
+        try:
+            target = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({"status": "error", "message": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not (target.role and target.role.name.lower() in ['administrador', 'admin']):
+            return Response(
+                {"status": "error", "message": "Solo se puede otorgar SuperAdmin a usuarios con rol Administrador."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target.is_superadmin = True
+        target.is_staff = True
+        target.save(update_fields=['is_superadmin', 'is_staff'])
+
+        return Response({
+            "status": "success",
+            "message": f"{target.email} ahora tiene privilegios de SuperAdmin.",
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='revoke-superadmin')
+    @superadmin_required
+    @log_superadmin_action(action='revoke_superadmin', category='admin_mgmt')
+    def revoke_superadmin(self, request, pk=None):
+        """
+        TIC-393/TIC-400: PATCH /users/{id}/revoke-superadmin/
+        Revoca los privilegios de SuperAdmin de un administrador.
+        Solo accesible por SuperAdmins.
+        """
+        try:
+            target = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({"status": "error", "message": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        target.is_superadmin = False
+        target.is_staff = False
+        target.save(update_fields=['is_superadmin', 'is_staff'])
+
+        return Response({
+            "status": "success",
+            "message": f"Privilegios de SuperAdmin revocados para {target.email}.",
+        }, status=status.HTTP_200_OK)
+
+
 class RoleViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Role.objects.all()
     serializer_class = RoleSerializer
@@ -533,3 +736,418 @@ class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Permission.objects.all()
     serializer_class = PermissionSerializer
     permission_classes = [IsAuthenticated]
+
+
+# --- ENDPOINTS DE ADMINISTRACIÓN ---
+class AdminUserManagementView(APIView):
+    """
+    POST /api/admin/users/
+    El administrador crea una cuenta de Promotor o Comprador.
+    Incluye creación de UserProfile local y perfil remoto
+    en service-profiles según el rol.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _es_admin(self, user):
+        return (
+            getattr(user, 'is_staff', False) or
+            (user.role and user.role.name.lower() in ['administrador', 'admin'])
+        )
+
+    def post(self, request):
+        if not self._es_admin(request.user):
+            return Response(
+                {"error": "No tienes permisos de Administrador."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        from .serializers import AdminCreateUserSerializer
+        serializer = AdminCreateUserSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": "Error en los datos enviados.",
+                "details": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+
+        # Verificar email único
+        if User.objects.filter(email=data['email']).exists():
+            return Response({
+                "status": "error",
+                "message": "El correo ya está registrado en el sistema."
+            }, status=status.HTTP_409_CONFLICT)
+
+        # Obtener el rol
+        try:
+            rol = Role.objects.get(name=data['role_name'])
+        except Role.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": f"El rol '{data['role_name']}' no existe en la base de datos."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            with transaction.atomic():
+                # 1. Crear el User
+                user = User(
+                    email=data['email'],
+                    role=rol,
+                    is_active=True  # Admin crea directamente activo
+                )
+                user.set_password(data['password'])
+                user.save()
+
+                # 2. Actualizar UserProfile local (el signal ya lo creó automáticamente)
+                profile, _ = UserProfile.objects.get_or_create(
+                    user=user,
+                    defaults={
+                        'first_name': '',
+                        'last_name': '',
+                        'phone': '',
+                        'date_of_birth': data['date_of_birth'],
+                    }
+                )
+                profile.first_name = data['first_name']
+                profile.last_name = data['last_name']
+                profile.phone = data['phone']
+                profile.date_of_birth = data['date_of_birth']
+                profile.save()
+
+                # 3. Token interno para llamar a service-profiles
+                internal_payload = {
+                    'user_id': str(user.id),
+                    'email': user.email,
+                    'role': data['role_name'],
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+                }
+                internal_token = jwt.encode(
+                    internal_payload,
+                    settings.SECRET_KEY,
+                    algorithm='HS256'
+                )
+
+                profiles_url = getattr(
+                    settings, 'PROFILES_SERVICE_URL', 'http://localhost:8001'
+                )
+
+                # 4. Crear perfil remoto según el rol
+                profiles_url = getattr(
+                    settings, 'PROFILES_SERVICE_URL', 'http://service-profiles:8000'
+                )
+
+                try:
+                    if data['role_name'] == 'Promotor':
+                        response = requests.post(
+                            f"{profiles_url}/api/profiles/promotor-profiles/",
+                            json={
+                                "user_id": str(user.id),
+                                "company_name": data['company_name'],
+                                "comercial_nit": data['comercial_nit'],
+                                "bank_account": data['bank_account'],
+                            },
+                            headers={"Authorization": f"Bearer {internal_token}"},
+                            timeout=5
+                        )
+                    else:
+                        # Comprador
+                        response = requests.post(
+                            f"{profiles_url}/api/profiles/buyer-profiles/",
+                            json={"user_id": str(user.id)},
+                            headers={"Authorization": f"Bearer {internal_token}"},
+                            timeout=5
+                        )
+
+                    if response.status_code not in (200, 201):
+                        raise Exception(
+                            f"Error al crear perfil remoto: {response.text}"
+                        )
+                except (requests.ConnectionError, requests.Timeout, Exception) as e:
+                    # Si el servicio de perfiles no está disponible, el usuario se crea igualmente
+                    # pero se genera un warning en los logs
+                    print(f"WARNING: No se pudo crear perfil remoto para {user.email}: {str(e)}")
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": "Error al crear el usuario.",
+                "detalle": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({
+            "status": "success",
+            "message": f"Cuenta de {data['role_name']} creada correctamente.",
+            "data": {
+                "id": str(user.id),
+                "email": user.email,
+                "role": data['role_name'],
+                "is_active": user.is_active,
+            }
+        }, status=status.HTTP_201_CREATED)
+
+
+class SuperadminAdminListCreateView(APIView):
+    """
+    GET  /api/v1/superadmin/admins/
+        Lista todas las cuentas de Administrador con estado y permisos.
+
+    POST /api/v1/superadmin/admins/
+        Crea una nueva cuenta de Administrador directamente
+        (sin necesidad de invitación ni aprobación).
+    """
+    permission_classes = [IsAuthenticated, IsSuperadmin]
+
+    def get(self, request):
+        admins = User.objects.filter(
+            role__name__in=['Administrador', 'Admin']
+        ).select_related('role', 'profile').order_by('-created_at')
+
+        estado = request.query_params.get('estado', None)
+        if estado == 'activo':
+            admins = admins.filter(is_active=True)
+        elif estado == 'suspendido':
+            admins = admins.filter(is_active=False)
+        elif estado == 'pendiente':
+            admins = admins.filter(is_active=False)
+
+        from .serializers import AdminDetailSerializer
+        serializer = AdminDetailSerializer(admins, many=True)
+
+        return Response({
+            "status": "success",
+            "total": admins.count(),
+            "activos": admins.filter(is_active=True).count(),
+            "suspendidos": admins.filter(is_active=False).count(),
+            "results": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        email = request.data.get('email', '').strip()
+        password = request.data.get('password', '')
+        first_name = request.data.get('first_name', '').strip()
+        last_name = request.data.get('last_name', '').strip()
+        phone = request.data.get('phone', '').strip()
+        date_of_birth = request.data.get('date_of_birth', None)
+        employee_code = request.data.get('employee_code', '').strip()
+        department = request.data.get('department', '').strip()
+
+        errores = {}
+        if not email:
+            errores['email'] = 'El correo es obligatorio.'
+        if not password:
+            errores['password'] = 'La contraseña es obligatoria.'
+        if not first_name:
+            errores['first_name'] = 'El nombre es obligatorio.'
+        if not last_name:
+            errores['last_name'] = 'El apellido es obligatorio.'
+        if not phone:
+            errores['phone'] = 'El teléfono es obligatorio.'
+        if not date_of_birth:
+            errores['date_of_birth'] = 'La fecha de nacimiento es obligatoria.'
+        if not employee_code:
+            errores['employee_code'] = 'El código de empleado es obligatorio.'
+        if not department:
+            errores['department'] = 'El departamento es obligatorio.'
+
+        if errores:
+            return Response({
+                "status": "error",
+                "message": "Faltan campos obligatorios.",
+                "details": errores
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        import re
+        if len(password) < 8:
+            return Response({
+                "status": "error",
+                "message": "La contraseña debe tener al menos 8 caracteres."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        if not re.search(r'[A-Z]', password):
+            return Response({
+                "status": "error",
+                "message": "La contraseña debe contener al menos una mayúscula."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        if not re.search(r'\d', password):
+            return Response({
+                "status": "error",
+                "message": "La contraseña debe contener al menos un número."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if User.objects.filter(email=email).exists():
+            return Response({
+                "status": "error",
+                "message": "El correo ya está registrado en el sistema."
+            }, status=status.HTTP_409_CONFLICT)
+
+        try:
+            rol_admin = Role.objects.get(name='Administrador')
+        except Role.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "El rol 'Administrador' no existe en la base de datos."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            with transaction.atomic():
+                user = User(
+                    email=email,
+                    role=rol_admin,
+                    is_active=True
+                )
+                user.set_password(password)
+                user.save()
+
+                UserProfile.objects.create(
+                    user=user,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone=phone,
+                    date_of_birth=date_of_birth,
+                )
+
+                internal_payload = {
+                    'user_id': str(user.id),
+                    'email': user.email,
+                    'role': 'Administrador',
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+                }
+                internal_token = jwt.encode(
+                    internal_payload,
+                    settings.SECRET_KEY,
+                    algorithm='HS256'
+                )
+
+                profiles_url = getattr(
+                    settings, 'PROFILES_SERVICE_URL', 'http://service-profiles:8000'
+                )
+                response = requests.post(
+                    f"{profiles_url}/api/profiles/admin-profiles/",
+                    json={
+                        "user_id": str(user.id),
+                        "employee_code": employee_code,
+                        "department": department,
+                    },
+                    headers={"Authorization": f"Bearer {internal_token}"},
+                    timeout=5
+                )
+
+                if response.status_code not in (200, 201):
+                    raise Exception(
+                        f"Error al crear AdminProfile remoto: {response.text}"
+                    )
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": "Error al crear el administrador.",
+                "detalle": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({
+            "status": "success",
+            "message": "Cuenta de Administrador creada correctamente por Superadmin.",
+            "data": {
+                "id": str(user.id),
+                "email": user.email,
+                "role": "Administrador",
+                "is_active": True,
+                "employee_code": employee_code,
+                "department": department,
+            }
+        }, status=status.HTTP_201_CREATED)
+
+
+class AdminSuspendUserView(APIView):
+    """
+    PATCH /api/admin/users/{id}/suspend/
+    Suspende una cuenta de Promotor o Comprador.
+    El motivo es obligatorio para cumplir auditoría.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _es_admin(self, user):
+        return (
+            getattr(user, 'is_staff', False) or
+            (user.role and user.role.name.lower() in ['administrador', 'admin'])
+        )
+
+    def patch(self, request, pk):
+        if not self._es_admin(request.user):
+            return Response(
+                {"error": "No tienes permisos de Administrador."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Motivo obligatorio
+        motivo = request.data.get('motivo', '').strip()
+        if not motivo:
+            return Response({
+                "status": "error",
+                "message": "El motivo de suspensión es obligatorio."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(motivo) < 10:
+            return Response({
+                "status": "error",
+                "message": "El motivo debe tener al menos 10 caracteres."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Obtener el usuario a suspender
+        try:
+            usuario_objetivo = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Usuario no encontrado."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # El admin no puede suspenderse a sí mismo
+        if str(usuario_objetivo.id) == str(request.user.id):
+            return Response({
+                "status": "error",
+                "message": "No puedes suspender tu propia cuenta."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Solo se puede suspender Promotores y Compradores
+        roles_suspendibles = ['promotor', 'comprador', 'buyer']
+        if not usuario_objetivo.role or \
+           usuario_objetivo.role.name.lower() not in roles_suspendibles:
+            return Response({
+                "status": "error",
+                "message": "Solo se pueden suspender cuentas de Promotor o Comprador."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verificar si ya está suspendido
+        if not usuario_objetivo.is_active:
+            return Response({
+                "status": "error",
+                "message": "La cuenta ya está suspendida."
+            }, status=status.HTTP_409_CONFLICT)
+
+        # Suspender y registrar auditoría
+        from .models import SuspensionLog
+        with transaction.atomic():
+            usuario_objetivo.is_active = False
+            usuario_objetivo.save(update_fields=['is_active'])
+
+            SuspensionLog.objects.create(
+                user_email=usuario_objetivo.email,
+                user_role=usuario_objetivo.role.name if usuario_objetivo.role else 'Sin rol',
+                motivo=motivo,
+                suspendido_por_email=request.user.email,
+            )
+
+        return Response({
+            "status": "success",
+            "message": f"Cuenta de {usuario_objetivo.email} suspendida correctamente.",
+            "data": {
+                "user_id": str(usuario_objetivo.id),
+                "email": usuario_objetivo.email,
+                "role": usuario_objetivo.role.name if usuario_objetivo.role else None,
+                "is_active": False,
+                "motivo": motivo,
+                "suspendido_por": request.user.email,
+            }
+        }, status=status.HTTP_200_OK)
