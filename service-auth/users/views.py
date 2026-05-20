@@ -8,6 +8,7 @@ from django.db import transaction
 from django.core.mail import send_mail
 from .models import User, Role, Permission, UserProfile, AccountDeletionLog, AdminAuditLog
 from .decorators import superadmin_required, log_superadmin_action
+from .permissions import IsSuperadmin
 from .serializers import (
     UserSerializer,
     UserCreateSerializer,
@@ -23,8 +24,6 @@ import jwt
 import datetime
 import requests
 from django.conf import settings
-from django.db import transaction
-from django.core.mail import send_mail
 from rest_framework_simplejwt.tokens import RefreshToken
 
 
@@ -882,6 +881,177 @@ class AdminUserManagementView(APIView):
                 "email": user.email,
                 "role": data['role_name'],
                 "is_active": user.is_active,
+            }
+        }, status=status.HTTP_201_CREATED)
+
+
+class SuperadminAdminListCreateView(APIView):
+    """
+    GET  /api/v1/superadmin/admins/
+        Lista todas las cuentas de Administrador con estado y permisos.
+
+    POST /api/v1/superadmin/admins/
+        Crea una nueva cuenta de Administrador directamente
+        (sin necesidad de invitación ni aprobación).
+    """
+    permission_classes = [IsAuthenticated, IsSuperadmin]
+
+    def get(self, request):
+        admins = User.objects.filter(
+            role__name__in=['Administrador', 'Admin']
+        ).select_related('role', 'profile').order_by('-created_at')
+
+        estado = request.query_params.get('estado', None)
+        if estado == 'activo':
+            admins = admins.filter(is_active=True)
+        elif estado == 'suspendido':
+            admins = admins.filter(is_active=False)
+        elif estado == 'pendiente':
+            admins = admins.filter(is_active=False)
+
+        from .serializers import AdminDetailSerializer
+        serializer = AdminDetailSerializer(admins, many=True)
+
+        return Response({
+            "status": "success",
+            "total": admins.count(),
+            "activos": admins.filter(is_active=True).count(),
+            "suspendidos": admins.filter(is_active=False).count(),
+            "results": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        email = request.data.get('email', '').strip()
+        password = request.data.get('password', '')
+        first_name = request.data.get('first_name', '').strip()
+        last_name = request.data.get('last_name', '').strip()
+        phone = request.data.get('phone', '').strip()
+        date_of_birth = request.data.get('date_of_birth', None)
+        employee_code = request.data.get('employee_code', '').strip()
+        department = request.data.get('department', '').strip()
+
+        errores = {}
+        if not email:
+            errores['email'] = 'El correo es obligatorio.'
+        if not password:
+            errores['password'] = 'La contraseña es obligatoria.'
+        if not first_name:
+            errores['first_name'] = 'El nombre es obligatorio.'
+        if not last_name:
+            errores['last_name'] = 'El apellido es obligatorio.'
+        if not phone:
+            errores['phone'] = 'El teléfono es obligatorio.'
+        if not date_of_birth:
+            errores['date_of_birth'] = 'La fecha de nacimiento es obligatoria.'
+        if not employee_code:
+            errores['employee_code'] = 'El código de empleado es obligatorio.'
+        if not department:
+            errores['department'] = 'El departamento es obligatorio.'
+
+        if errores:
+            return Response({
+                "status": "error",
+                "message": "Faltan campos obligatorios.",
+                "details": errores
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        import re
+        if len(password) < 8:
+            return Response({
+                "status": "error",
+                "message": "La contraseña debe tener al menos 8 caracteres."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        if not re.search(r'[A-Z]', password):
+            return Response({
+                "status": "error",
+                "message": "La contraseña debe contener al menos una mayúscula."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        if not re.search(r'\d', password):
+            return Response({
+                "status": "error",
+                "message": "La contraseña debe contener al menos un número."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if User.objects.filter(email=email).exists():
+            return Response({
+                "status": "error",
+                "message": "El correo ya está registrado en el sistema."
+            }, status=status.HTTP_409_CONFLICT)
+
+        try:
+            rol_admin = Role.objects.get(name='Administrador')
+        except Role.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "El rol 'Administrador' no existe en la base de datos."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            with transaction.atomic():
+                user = User(
+                    email=email,
+                    role=rol_admin,
+                    is_active=True
+                )
+                user.set_password(password)
+                user.save()
+
+                UserProfile.objects.create(
+                    user=user,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone=phone,
+                    date_of_birth=date_of_birth,
+                )
+
+                internal_payload = {
+                    'user_id': str(user.id),
+                    'email': user.email,
+                    'role': 'Administrador',
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+                }
+                internal_token = jwt.encode(
+                    internal_payload,
+                    settings.SECRET_KEY,
+                    algorithm='HS256'
+                )
+
+                profiles_url = getattr(
+                    settings, 'PROFILES_SERVICE_URL', 'http://service-profiles:8000'
+                )
+                response = requests.post(
+                    f"{profiles_url}/api/profiles/admin-profiles/",
+                    json={
+                        "user_id": str(user.id),
+                        "employee_code": employee_code,
+                        "department": department,
+                    },
+                    headers={"Authorization": f"Bearer {internal_token}"},
+                    timeout=5
+                )
+
+                if response.status_code not in (200, 201):
+                    raise Exception(
+                        f"Error al crear AdminProfile remoto: {response.text}"
+                    )
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": "Error al crear el administrador.",
+                "detalle": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({
+            "status": "success",
+            "message": "Cuenta de Administrador creada correctamente por Superadmin.",
+            "data": {
+                "id": str(user.id),
+                "email": user.email,
+                "role": "Administrador",
+                "is_active": True,
+                "employee_code": employee_code,
+                "department": department,
             }
         }, status=status.HTTP_201_CREATED)
 

@@ -140,6 +140,20 @@ class EventViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
+    def retrieve(self, request, *args, **kwargs):
+        """GET /events/{id}/ — registra la visualización como comportamiento"""
+        instance = self.get_object()
+
+        # Registrar automáticamente la interacción 'view'
+        registrar_comportamiento(
+            user_id=request.user.id,
+            event=instance,
+            action_type='view'
+        )
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
     def update(self, request, *args, **kwargs):
         """Editar un evento validando permisos y estado (PUT/PATCH)"""
         partial = kwargs.pop('partial', False)
@@ -312,6 +326,10 @@ class EventViewSet(viewsets.ModelViewSet):
         event = self.get_object()
         event.status = 'published'
         event.save()
+        
+        # NUEVO — disparar notificaciones de match en < 5 minutos
+        generar_notificaciones_match(event)
+        
         
         # NUEVO — disparar notificaciones de match en < 5 minutos
         generar_notificaciones_match(event)
@@ -880,6 +898,13 @@ class SimularPagoView(APIView):
         purchase.backup_code = backup_code
         purchase.qr_code = qr_code_base64
         purchase.save()
+
+        # NUEVO — registrar comportamiento de compra
+        registrar_comportamiento(
+            user_id=purchase.user_id,
+            event=purchase.event,
+            action_type='purchase'
+        )
 
         # NUEVO — registrar comportamiento de compra
         registrar_comportamiento(
@@ -2240,4 +2265,42 @@ class NotificationPreferenceView(APIView):
         return Response({
             "status": "success",
             "message": f"{actualizadas} preferencias actualizadas.",
+        }, status=status.HTTP_200_OK)
+
+
+class AdminUserCleanupView(APIView):
+    """
+    US23: Limpia datos locales de un usuario eliminado (comportamientos, preferencias, favoritos).
+    Llamado desde service-auth cuando se da de baja una cuenta para que los datos
+    de recomendaciones en service-events queden consistentes.
+
+    Solo accesible por administradores (is_staff=True).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, user_id):
+        if not request.user.is_staff:
+            return Response(
+                {"error": "Permisos insuficientes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if str(request.user.id) == str(user_id):
+            return Response(
+                {"error": "No puedes eliminar tu propia cuenta."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        deleted_counts = {
+            'behaviors': UserBehavior.objects.filter(user_id=user_id).delete()[0],
+            'preferences': UserPreference.objects.filter(user_id=user_id).delete()[0],
+            'favorites': UserFavorite.objects.filter(user_id=user_id).delete()[0],
+            'notifications': Notification.objects.filter(user_id=user_id).delete()[0],
+            'notification_preferences': NotificationPreference.objects.filter(user_id=user_id).delete()[0],
+        }
+
+        return Response({
+            "status": "success",
+            "message": "Datos locales del usuario eliminados.",
+            "deleted": deleted_counts,
         }, status=status.HTTP_200_OK)
