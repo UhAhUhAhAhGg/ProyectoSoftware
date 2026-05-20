@@ -28,9 +28,16 @@ function ExplorarEventos() {
   const [categorias, setCategorias] = useState([]);
   const [cargando, setCargando] = useState(true);
 
+  // Leer query param ?categoria=<id> al cargar la pagina (deep link desde dashboard)
+  const initialCategoria = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const params = new URLSearchParams(window.location.search);
+    return params.get('categoria') || '';
+  }, []);
+
   // Filtros
   const [busqueda, setBusqueda] = useState('');
-  const [categoriaFiltro, setCategoriaFiltro] = useState(''); // id de categoría o ''
+  const [categoriaFiltro, setCategoriaFiltro] = useState(initialCategoria);
   const [orden, setOrden] = useState('fecha_asc'); // fecha_asc | fecha_desc | precio_asc | precio_desc
   const [mostrarSoloFav, setMostrarSoloFav] = useState(false);
 

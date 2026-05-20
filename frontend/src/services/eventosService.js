@@ -431,4 +431,32 @@ export const eventosService = {
     }
     return data.data;
   },
+
+  /**
+   * Obtiene el historial de compras del usuario autenticado.
+   * Backend: GET /api/v1/purchases/history/
+   */
+  getMisCompras: async () => {
+    try {
+      const res = await apiFetch(`${EVENTS_URL}/api/v1/purchases/history/`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      // Backend devuelve directo el array o {results}
+      const lista = Array.isArray(data) ? data : (data.results || []);
+      // Map a formato consistente
+      return lista.map((p) => ({
+        id: p.id,
+        evento_nombre: p.event?.name || p.event_name || 'Evento',
+        evento_id: p.event?.id || p.event_id,
+        status: p.status,
+        quantity: p.quantity,
+        total_price: parseFloat(p.total_price || 0),
+        created_at: p.created_at,
+        backup_code: p.backup_code,
+      }));
+    } catch (err) {
+      console.warn('No se pudo cargar historial de compras:', err?.message);
+      return [];
+    }
+  },
 };

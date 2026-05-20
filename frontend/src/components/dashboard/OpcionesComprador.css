@@ -347,3 +347,234 @@ body.dark-mode .accion-rapida.secundaria {
 .btn-explorar:hover {
   background-color: #8c6a3a;
 }
+
+/* ─── Categorias header con badge ──────────────────────────────────────── */
+.categorias-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.categorias-prefs-hint {
+  font-size: 0.78rem;
+  color: #b8884a;
+  font-weight: 600;
+  font-style: italic;
+}
+
+.categoria-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  text-decoration: none;
+  color: #374151;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.categoria-card:hover {
+  border-color: #d4a256;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(212, 162, 86, 0.15);
+}
+
+.categoria-card.categoria-fav {
+  background: linear-gradient(135deg, #fef9ed 0%, #fbe9c8 100%);
+  border-color: #d4a256;
+}
+
+.categoria-icon {
+  font-size: 1.2rem;
+}
+
+.categoria-star {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-size: 0.9rem;
+}
+
+.categoria-skeleton {
+  height: 44px;
+  background: linear-gradient(90deg, #f3f4f6 0%, #e5e7eb 50%, #f3f4f6 100%);
+  background-size: 200% 100%;
+  animation: skel-shimmer 1.4s infinite;
+  border: none;
+}
+
+@keyframes skel-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.categorias-empty {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* ─── Eventos destacados con data real ─────────────────────────────────── */
+.evento-mini-card {
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  gap: 14px;
+  padding: 14px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  transition: all 0.15s ease;
+}
+
+.evento-mini-card:hover {
+  border-color: #d4a256;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(212, 162, 86, 0.15);
+}
+
+.evento-mini-imagen-img {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.evento-mini-imagen {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, #b8884a, #d4a256);
+  color: white;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.evento-mini-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.evento-mini-info h4 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  color: #1f2937;
+}
+
+.evento-mini-info p {
+  margin: 0 0 2px;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.evento-mini-cat {
+  color: #b8884a !important;
+  font-weight: 600;
+}
+
+.evento-mini-precio {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #b8884a;
+}
+
+.evento-mini-skeleton {
+  height: 92px;
+  background: linear-gradient(90deg, #f3f4f6 0%, #e5e7eb 50%, #f3f4f6 100%);
+  background-size: 200% 100%;
+  animation: skel-shimmer 1.4s infinite;
+  border: none;
+}
+
+.evento-mini-empty {
+  padding: 30px 20px;
+  text-align: center;
+  background: #f9fafb;
+  border-radius: 10px;
+  color: #6b7280;
+}
+
+.evento-mini-empty a {
+  color: #b8884a;
+  font-weight: 600;
+}
+
+/* ─── Historial real ───────────────────────────────────────────────────── */
+.historial-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.historial-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.historial-item:hover {
+  border-color: #d4a256;
+}
+
+.historial-item-info h5 {
+  margin: 0 0 4px;
+  color: #1f2937;
+  font-size: 0.95rem;
+}
+
+.historial-item-info p {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+
+.historial-status {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.historial-status-active { background: #d1fae5; color: #065f46; }
+.historial-status-pending { background: #fef3c7; color: #92400e; }
+.historial-status-expired { background: #fee2e2; color: #991b1b; }
+.historial-status-cancelled { background: #f3f4f6; color: #6b7280; }
+
+.historial-precio {
+  font-weight: 700;
+  color: #b8884a;
+  font-size: 1.05rem;
+}
+
+.historial-ver-todo {
+  text-align: center;
+  padding: 10px;
+  color: #b8884a;
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.historial-ver-todo:hover {
+  text-decoration: underline;
+}

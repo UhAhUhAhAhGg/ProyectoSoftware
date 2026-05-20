@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
+import { useNotifications } from '../context/NotificationContext';
 import OpcionesComprador from '../components/dashboard/OpcionesComprador';
 import OpcionesPromotor from '../components/dashboard/OpcionesPromotor';
 import './Dashboard.css';
@@ -12,7 +13,17 @@ function Dashboard() {
   const { darkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const [sidebarAbierto, setSidebarAbierto] = useState(false);
-  const [notificaciones, setNotificaciones] = useState([]);
+
+  // US-22: notificaciones reales del backend (no mock)
+  const {
+    notificaciones,
+    conteoNoLeidas,
+    marcarComoLeida,
+    marcarTodasComoLeidas,
+    cargarNotificaciones,
+  } = useNotifications();
+
+  const [notifOpen, setNotifOpen] = useState(false);
 
   // Redirigir si no está autenticado o si es admin
   useEffect(() => {
@@ -23,23 +34,28 @@ function Dashboard() {
     }
   }, [isAuthenticated, isAdministrador, navigate]);
 
+  // TIC-435: polling para actualizar campanita en tiempo real
   useEffect(() => {
-  const interval = setInterval(() => {
+    const interval = setInterval(() => {
+      cargarNotificaciones?.();
+    }, 30000); // 30s
+    return () => clearInterval(interval);
+  }, [cargarNotificaciones]);
 
-    // Simulación de actualización automática del badge
-    setNotificaciones((prev) => [...prev]);
+  // TIC-437: marcar como leída al abrir y al click
+  const handleNotifClick = async (notif) => {
+    if (!notif.leida) {
+      await marcarComoLeida?.(notif.id);
+    }
+  };
 
-  }, 10000); // actualiza cada 10 segundos
+  const handleAbrirNotifs = () => {
+    setNotifOpen((v) => !v);
+  };
 
-  return () => clearInterval(interval);
-
-}, []);
-
-
-
-  // Marcar notificaciones como leídas
-  const marcarComoLeidas = () => {
-    setNotificaciones(notificaciones.map(n => ({ ...n, leida: true })));
+  const handleMarcarTodas = async (e) => {
+    e?.stopPropagation();
+    await marcarTodasComoLeidas?.();
   };
 
   // Mostrar loading mientras se verifica autenticación
@@ -80,52 +96,76 @@ function Dashboard() {
             {darkMode ? '☀️' : '🌙'}
           </button>
 
-          {/* Notificaciones */}
-          <div className="notificaciones-dropdown">
-            <button className="btn-notificaciones" onClick={marcarComoLeidas}>
+          {/* US-22: Notificaciones (TIC-378 campanita, TIC-379 dropdown, TIC-435 badge en tiempo real) */}
+          <div className={`notificaciones-dropdown ${notifOpen ? 'open' : ''}`}>
+            <button
+              className="btn-notificaciones"
+              onClick={handleAbrirNotifs}
+              aria-label="Notificaciones"
+            >
               🔔
-              {notificaciones.filter(n => !n.leida).length > 0 && (
-                <span className="notificaciones-badge">
-                  {notificaciones.filter(n => !n.leida).length}
-                </span>
+              {conteoNoLeidas > 0 && (
+                <span className="notificaciones-badge">{conteoNoLeidas}</span>
               )}
             </button>
 
-            <div className="notificaciones-menu">
-              {notificaciones && notificaciones.length > 0 ? (
-                notificaciones.map((n) => (
-                  <div
-                    key={n.id}
-                    className={`notificacion-item ${!n.leida ? 'no-leida' : ''}`}
-                  >
-                    <div>
-                      <strong>
-                        {n.nombreEvento || n.mensaje || n.title}
-                      </strong>
-
-                      {n.fecha && (
-                        <p style={{ margin: '4px 0' }}>
-                          📅 {new Date(n.fecha).toLocaleDateString()}
-                        </p>
-                      )}
-
-                      {n.enlace && (
-                        <Link
-                          to={n.enlace}
-                          className="btn-ver-evento-match"
-                        >
-                          Ver evento
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="notificacion-item">
-                  No hay notificaciones
+            {notifOpen && (
+              <div className="notificaciones-menu">
+                <div className="notificaciones-menu-header">
+                  <strong>Notificaciones</strong>
+                  {conteoNoLeidas > 0 && (
+                    <button
+                      type="button"
+                      className="btn-marcar-todas"
+                      onClick={handleMarcarTodas}
+                    >
+                      Marcar todas como leídas
+                    </button>
+                  )}
                 </div>
-              )}
-            </div>
+                {notificaciones && notificaciones.length > 0 ? (
+                  <div className="notificaciones-lista">
+                    {notificaciones.slice(0, 8).map((n) => (
+                      <div
+                        key={n.id}
+                        className={`notificacion-item ${!n.leida ? 'no-leida' : ''}`}
+                        onClick={() => handleNotifClick(n)}
+                      >
+                        <div className="notif-content">
+                          <strong>{n.titulo || n.mensaje || 'Nuevo evento'}</strong>
+                          {n.mensaje && n.titulo && (
+                            <p className="notif-mensaje">{n.mensaje}</p>
+                          )}
+                          <div className="notif-meta">
+                            <span className="notif-fecha">
+                              📅 {n.created_at
+                                ? new Date(n.created_at).toLocaleDateString('es-ES')
+                                : ''}
+                            </span>
+                            {n.event && (
+                              <Link
+                                to={`/dashboard/evento/${n.event}`}
+                                className="btn-ver-evento-match"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                Ver evento →
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                        {!n.leida && <span className="notif-dot" title="No leída" />}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="notificacion-item-vacia">
+                    <span>🔕</span>
+                    <p>No tienes notificaciones</p>
+                    <small>Te avisaremos cuando se publiquen eventos de tus categorías favoritas</small>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <Link
