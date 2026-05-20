@@ -687,7 +687,20 @@ class UserViewSet(viewsets.ModelViewSet):
         except User.DoesNotExist:
             return Response({"status": "error", "message": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
 
-        reason = request.data.get('reason', '')
+        # TIC-440: no permitir auto-suspension
+        if str(target.id) == str(admin.id):
+            return Response(
+                {"status": "error", "message": "No puedes suspender tu propia cuenta."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = request.data.get('reason', '').strip()
+        if not reason:
+            return Response(
+                {"status": "error", "message": "El motivo de la suspension es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         previous_status = target.account_status
 
         target.account_status = 'suspended'

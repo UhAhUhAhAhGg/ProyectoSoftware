@@ -30,10 +30,13 @@ export const NotificationProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   // Cargar preferencias + categorias al montar
-  // Importante: tambien cargamos TODAS las categorias del backend para tener
-  // los UUIDs disponibles en categoriasIds, asi cualquier toggle puede
-  // sincronizar con el backend (sin esperar a que el usuario las vea en el perfil)
+  // IMPORTANTE: solo cargar si el usuario esta logueado (hay token).
+  // Si no, los 401 del backend disparan clearSession → redirect → loop infinito.
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const token = localStorage.getItem('token');
+    if (!token) return; // No logueado → no cargar nada
+
     const cargar = async () => {
       try {
         setLoading(true);
@@ -68,11 +71,16 @@ export const NotificationProvider = ({ children }) => {
     cargar();
   }, []);
 
-  // Cargar notificaciones
+  // Cargar notificaciones (solo si hay sesion)
   const cargarNotificaciones = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setNotificaciones([]);
+      return;
+    }
     try {
       const data = await notificationService.getNotificaciones();
-      // El servicio puede devolver array directo o { results: [...] }
       const lista = Array.isArray(data) ? data : (data?.results || []);
       setNotificaciones(lista);
     } catch (err) {

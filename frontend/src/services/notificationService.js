@@ -110,6 +110,8 @@ export const notificationService = {
       categorias: {},
       categoriasIds: {},
     };
+    // Guard: si no hay sesion, no llamar al backend (evita 401 → loop redirect)
+    if (typeof window !== 'undefined' && !localStorage.getItem('token')) return defaults;
     if (!userId) return defaults;
 
     try {

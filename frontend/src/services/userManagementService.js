@@ -48,17 +48,21 @@ export const userManagementService = {
    * @returns {Promise<Object>}
    */
   suspenderUsuario: async (userId, razon) => {
+    // Backend espera PATCH con {reason} (no POST con {razon})
     try {
       const res = await apiFetch(
         `${AUTH_URL}/api/v1/users/${userId}/suspend/`,
         {
-          method: 'POST',
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ razon }),
+          body: JSON.stringify({ reason: razon }),
         }
       );
-      if (!res.ok) throw new Error('Error al suspender usuario');
-      return await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || 'Error al suspender usuario');
+      }
+      return data;
     } catch (error) {
       console.error('Error en suspenderUsuario:', error);
       throw error;
@@ -75,7 +79,7 @@ export const userManagementService = {
       const res = await apiFetch(
         `${AUTH_URL}/api/v1/users/${userId}/reactivate/`,
         {
-          method: 'POST',
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
         }
       );
