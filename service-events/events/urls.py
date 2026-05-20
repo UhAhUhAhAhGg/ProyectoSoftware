@@ -28,6 +28,13 @@ from .views import (
     SuperAdminManageView,
     # US23: Limpieza datos locales tras baja de cuenta
     AdminUserCleanupView,
+    AdminUserDeleteView,         # TIC-387 (Anghelo): DELETE /admin/users/{id}/
+    # US24: Vistas administrativas paralelas de Ariana
+    AdminEventoBajaView,         # PATCH /admin/events/{id}/baja/
+    AdminEventoModificarView,    # PATCH /admin/events/{id}/modificar/
+    AdminAuditLogView,           # GET /admin/audit-log-v2/
+    # US26: Vista detalle audit por evento (Ariana)
+    EventAuditLogView,           # GET /admin/events/{id}/audit-log-v2/
 )
 
 app_name = 'events'
@@ -76,6 +83,16 @@ urlpatterns = [
 
     # US23: Limpieza local tras baja de cuenta (llamado por service-auth)
     path('admin/users/<uuid:user_id>/cleanup/', AdminUserCleanupView.as_view(), name='admin-user-cleanup'),
+    # US23 TIC-387 (Anghelo): DELETE /admin/users/{id}/ con autoeliminacion bloqueada
+    path('admin/users/<uuid:user_id>/', AdminUserDeleteView.as_view(), name='admin-user-delete'),
+
+    # US24 Ariana: vistas administrativas paralelas con motivo obligatorio
+    path('admin/events/<uuid:event_id>/baja/', AdminEventoBajaView.as_view(), name='admin-evento-baja'),
+    path('admin/events/<uuid:event_id>/modificar/', AdminEventoModificarView.as_view(), name='admin-evento-modificar'),
+    path('admin/audit-log-v2/', AdminAuditLogView.as_view(), name='admin-audit-log-v2'),
+
+    # US26 Ariana: vista detalle por evento
+    path('admin/events/<uuid:event_id>/audit-log-v2/', EventAuditLogView.as_view(), name='admin-event-audit-log-v2'),
 
     # TIC-26: Auditoría de eventos
     path('admin/audit-log/', AdminAuditLogListView.as_view(), name='admin-audit-log'),
