@@ -2,7 +2,20 @@
 # pyright: reportOptionalMemberAccess=false
 # pyright: reportArgumentType=false
 # pyright: reportUndefinedVariable=false
-from datetime import timedelta
+from rest_framework import viewsets, status
+from django.db import transaction
+from rest_framework.decorators import action
+from django.db import transaction
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from django.shortcuts import get_object_or_404
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
+from django.db import transaction, IntegrityError
+from django.utils import timezone
+import qrcode
+import io
 import base64
 import io
 import math
@@ -24,9 +37,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Event
+from .models import Event, EventAuditLog
 from .serializers import EventSerializer
-from .permissions import IsAdministrador, IsPromotor, IsComprador
+from .permissions import IsAdministrador, IsPromotor, IsComprador, IsAdminWithAudit
 from .services import TicketGenerationService, send_ticket_email
 from .models import (
     Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat,
@@ -2388,3 +2401,290 @@ class AdminUserCleanupView(APIView):
             "message": "Datos locales del usuario eliminados.",
             "deleted": deleted_counts,
         }, status=status.HTTP_200_OK)
+
+
+# ─── TIC-25: Modificar/Dar de baja eventos (Admin) ───────────────────────────
+
+class AdminEventEditView(APIView):
+    """
+    TIC-406: PATCH /admin/events/{id}/
+    Permite a un administrador modificar cualquier campo de un evento
+    (nombre, fecha, capacidad, descripción, etc.) y registra la intervención.
+
+    Solo accesible por usuarios con rol Administrador o is_staff=True.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, event_id):
+        from .models import Event
+
+        user = request.user
+        if not (user.is_staff or (hasattr(user, 'role') and user.role and
+                user.role.get('name', '') in ['Administrador', 'admin'] if isinstance(user.role, dict)
+                else user.is_staff)):
+            # Verificación simplificada: cualquier usuario autenticado con is_staff
+            if not user.is_staff:
+                return Response(
+                    {"status": "error", "message": "Permisos insuficientes."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        try:
+            event = Event.objects.get(id=event_id)
+        except Event.DoesNotExist:
+            return Response(
+                {"status": "error", "message": "Evento no encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Campos permitidos para edición por admin
+        ALLOWED_FIELDS = [
+            'name', 'description', 'event_date', 'event_time',
+            'location', 'capacity', 'status', 'category',
+        ]
+
+        updated = {}
+        for field in ALLOWED_FIELDS:
+            if field in request.data:
+                setattr(event, field, request.data[field])
+                updated[field] = request.data[field]
+
+        if not updated:
+            return Response(
+                {"status": "error", "message": "No se enviaron campos para actualizar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = request.data.get('admin_reason', 'Modificación administrativa')
+        event.admin_status = 'modified'
+        event.admin_reason = reason
+        event.save()
+
+        return Response({
+            "status": "success",
+            "message": f"Evento '{event.name}' modificado correctamente.",
+            "updated_fields": list(updated.keys()),
+            "admin_reason": reason,
+        }, status=status.HTTP_200_OK)
+
+
+class AdminEventDeactivateView(APIView):
+    """
+    TIC-407: PATCH /admin/events/{id}/deactivate/
+    Da de baja un evento: cambia su status a 'cancelled' y registra
+    admin_status='deactivated' con el motivo obligatorio.
+
+    Solo accesible por usuarios con is_staff=True.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, event_id):
+        from .models import Event
+        from django.utils import timezone as tz
+
+        user = request.user
+        if not user.is_staff:
+            return Response(
+                {"status": "error", "message": "Permisos insuficientes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            event = Event.objects.get(id=event_id)
+        except Event.DoesNotExist:
+            return Response(
+                {"status": "error", "message": "Evento no encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if event.admin_status == 'deactivated':
+            return Response(
+                {"status": "error", "message": "El evento ya está dado de baja."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = request.data.get('reason', '')
+        if not reason:
+            return Response(
+                {"status": "error", "message": "El motivo de baja es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        old_status = event.status
+        event.status = 'cancelled'
+        event.admin_status = 'deactivated'
+        event.admin_reason = reason
+        event.cancelled_at = tz.now()
+        event.cancelled_by = user.id
+        event.cancellation_reason = reason
+        event.save(update_fields=[
+            'status', 'admin_status', 'admin_reason',
+            'cancelled_at', 'cancelled_by', 'cancellation_reason',
+        ])
+
+        # TIC-415: Registrar en EventAuditLog
+        try:
+            from .models import EventAuditLog
+            EventAuditLog.objects.create(
+                event=event,
+                event_name=event.name,
+                admin_id=user.id,
+                admin_email=getattr(user, 'email', str(user.id)),
+                action='deactivate',
+                reason=reason,
+                old_status=old_status,
+                new_status='cancelled',
+            )
+        except Exception:
+            pass  # El audit log nunca rompe la respuesta principal
+
+        return Response({
+            "status": "success",
+            "message": f"Evento '{event.name}' dado de baja correctamente.",
+            "event_id": str(event.id),
+            "admin_reason": reason,
+        }, status=status.HTTP_200_OK)
+
+
+# ─── TIC-26: Auditoría de eventos ─────────────────────────────────────────────
+
+class AdminAuditLogListView(APIView):
+    """
+    TIC-421: GET /admin/audit-log/
+    Retorna el historial de intervenciones administrativas sobre eventos.
+    Soporta filtros y paginación.
+
+    Query params:
+      - event_id: UUID del evento
+      - admin_id: UUID del administrador
+      - action: 'edit' | 'deactivate' | 'reactivate'
+      - date_from: fecha ISO (ej: 2026-01-01)
+      - date_to: fecha ISO (ej: 2026-12-31)
+      - page: número de página (default 1)
+      - page_size: resultados por página (default 20)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .models import EventAuditLog
+
+        user = request.user
+        if not user.is_staff:
+            return Response(
+                {"status": "error", "message": "Permisos insuficientes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        qs = EventAuditLog.objects.select_related('event').order_by('-created_at')
+
+        # Filtros
+        event_id = request.query_params.get('event_id')
+        admin_id = request.query_params.get('admin_id')
+        action = request.query_params.get('action')
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+
+        if event_id:
+            qs = qs.filter(event_id=event_id)
+        if admin_id:
+            qs = qs.filter(admin_id=admin_id)
+        if action:
+            qs = qs.filter(action=action)
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        # Paginación
+        try:
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 20))
+        except ValueError:
+            page, page_size = 1, 20
+
+        total = qs.count()
+        start = (page - 1) * page_size
+        registros = qs[start:start + page_size]
+
+        data = []
+        for log in registros:
+            data.append({
+                "id": str(log.id),
+                "event_id": str(log.event_id),
+                "event_name": log.event_name,
+                "admin_id": str(log.admin_id),
+                "admin_email": log.admin_email,
+                "action": log.action,
+                "reason": log.reason,
+                "changed_fields": log.changed_fields,
+                "old_status": log.old_status,
+                "new_status": log.new_status,
+                "created_at": log.created_at.isoformat(),
+            })
+
+        return Response({
+            "status": "success",
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
+            "results": data,
+        }, status=status.HTTP_200_OK)
+
+
+class EventAuditLogListView(generics.ListAPIView):
+    """
+    TIC-420: GET /admin/events/{event_id}/audit-log/
+    Historial completo de cambios de un evento específico, paginado y ordenado
+    por fecha descendente. Protegido por permiso audit_view (TIC-422).
+    """
+    permission_classes = [IsAuthenticated, IsAdminWithAudit]
+
+    def get(self, request, event_id):
+        from .serializers import EventAuditLogSerializer
+        logs = EventAuditLog.objects.filter(event_id=event_id).order_by('-created_at')
+        serializer = EventAuditLogSerializer(logs, many=True)
+        return Response({
+            "status": "success",
+            "event_id": str(event_id),
+            "total": logs.count(),
+            "results": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+
+class ExportAuditLogCSVView(APIView):
+    """
+    TIC-423: GET /admin/audit-log/export/
+    Genera y retorna un CSV con el historial completo de auditoría para uso externo.
+    Protegido por permiso audit_view (TIC-422).
+    """
+    permission_classes = [IsAuthenticated, IsAdminWithAudit]
+
+    def get(self, request):
+        import csv
+        from django.http import HttpResponse
+
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="audit_log_export.csv"'
+
+        queryset = EventAuditLog.objects.select_related('event').order_by('-created_at')
+
+        writer = csv.writer(response)
+        writer.writerow([
+            'ID Log', 'Fecha', 'Evento', 'Admin Email',
+            'Acción', 'Razón', 'Estado Anterior', 'Estado Nuevo',
+        ])
+
+        for log in queryset:
+            writer.writerow([
+                log.id,
+                log.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                log.event_name,
+                log.admin_email,
+                log.get_action_display() if hasattr(log, 'get_action_display') else log.action,
+                log.reason or '',
+                log.old_status or 'N/A',
+                log.new_status or 'N/A',
+            ])
+
+        return response

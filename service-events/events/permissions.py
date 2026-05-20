@@ -25,3 +25,31 @@ class IsPromotor(CheckRolePermission):
 
 class IsComprador(CheckRolePermission):
     allowed_roles = ['Comprador']
+class CanViewAuditLogs(CheckRolePermission):
+    """
+    TIC-121: Valida que el Administrador tenga el permiso 'audit_view'
+    dentro del payload de su token JWT.
+    """
+    message = "Acceso denegado: No tienes el permiso 'audit_view' asignado."
+
+    def has_permission(self, request, view):
+        # 1. Primero validamos que sea Administrador usando tu lógica existente
+        if not super().has_permission(request, view):
+            # Si no es Administrador (según el payload), rebota
+            return False
+
+        # 2. Extraer el payload del token
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        
+        # 3. Buscamos el permiso específico en el payload
+        # Normalmente los permisos vienen en una lista llamada 'permissions' o 'claims'
+        user_permissions = payload.get('permissions', [])
+        
+        # Permitimos si es SuperAdmin o si tiene el permiso específico
+        is_superuser = payload.get('is_superuser', False)
+        
+        return is_superuser or 'audit_view' in user_permissions
+
+# Definimos el alias para usarlo fácilmente
+class IsAdminWithAudit(CanViewAuditLogs):
+    allowed_roles = ['Administrador']

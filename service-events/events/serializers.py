@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Event, TicketType, UserFavorite, Notification
+from .models import Category, Event, TicketType, UserFavorite, Notification, EventAuditLog
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -272,3 +272,27 @@ class NotificationPreferenceUpdateSerializer(serializers.Serializer):
         required=True,
         help_text="Lista de IDs de categorías para activar notificaciones.",
     )
+
+
+class EventAuditLogSerializer(serializers.ModelSerializer):
+    """
+    TIC-420/423: Serializer del historial de auditoría de eventos.
+    """
+    event_id = serializers.UUIDField(source='event.id', read_only=True)
+
+    class Meta:
+        model = EventAuditLog
+        fields = [
+            'id',
+            'event_id',
+            'event_name',
+            'admin_id',
+            'admin_email',
+            'action',
+            'reason',
+            'changed_fields',
+            'old_status',
+            'new_status',
+            'created_at',
+        ]
+        read_only_fields = fields

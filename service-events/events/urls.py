@@ -12,6 +12,8 @@ from .views import (
     AdminEventEditView,      # TIC-406: editar evento por admin
     AdminEventDeactivateView, # TIC-407: dar de baja evento por admin
     AdminAuditLogListView,   # TIC-421: historial de auditoria de eventos
+    EventAuditLogListView,   # TIC-420: audit log de un evento especifico
+    ExportAuditLogCSVView,   # TIC-423: exportar audit log a CSV
     # US21: Favoritos y Recomendaciones
     UserFavoritesView,
     UserFavoriteToggleView,
@@ -77,6 +79,8 @@ urlpatterns = [
 
     # TIC-26: Auditoría de eventos
     path('admin/audit-log/', AdminAuditLogListView.as_view(), name='admin-audit-log'),
+    path('admin/audit-log/export/', ExportAuditLogCSVView.as_view(), name='admin-audit-log-export'),
+    path('admin/events/<uuid:event_id>/audit-log/', EventAuditLogListView.as_view(), name='admin-event-audit-log'),
 
     # US21: Favoritos
     path('users/<uuid:user_id>/favorites/', UserFavoritesView.as_view(), name='user-favorites'),
