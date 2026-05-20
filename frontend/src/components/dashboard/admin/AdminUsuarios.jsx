@@ -57,6 +57,72 @@ function AdminUsuarios({ module }) {
     baja: 0,
   });
 
+  // --- TIC-438: Modal para crear nuevo Promotor/Comprador ---
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createForm, setCreateForm] = useState({
+    email: '',
+    password: '',
+    first_name: '',
+    last_name: '',
+    phone: '',
+    date_of_birth: '',
+    role_name: module === 'promotores' ? 'Promotor' : 'Comprador',
+    // Campos extra para Promotor (service-profiles los requiere)
+    company_name: '',
+    comercial_nit: '',
+    bank_account: '',
+  });
+
+  const resetCreateForm = () => {
+    setCreateForm({
+      email: '',
+      password: '',
+      first_name: '',
+      last_name: '',
+      phone: '',
+      date_of_birth: '',
+      role_name: module === 'promotores' ? 'Promotor' : 'Comprador',
+      company_name: '',
+      comercial_nit: '',
+      bank_account: '',
+    });
+    setCreateError('');
+  };
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    setCreateError('');
+    if (!createForm.email || !createForm.password || !createForm.first_name) {
+      setCreateError('Email, password y nombre son obligatorios.');
+      return;
+    }
+    setCreating(true);
+    try {
+      const payload = { ...createForm };
+      // Solo enviar campos de Promotor si aplica
+      if (payload.role_name !== 'Promotor') {
+        delete payload.company_name;
+        delete payload.comercial_nit;
+        delete payload.bank_account;
+      }
+      await userManagementService.crearUsuario(payload);
+      showMessage(`✅ ${payload.role_name} ${payload.email} creado correctamente`, 'success');
+      setActionHistory((prev) => [
+        { action: 'Creación', user: payload.email, date: new Date().toLocaleString() },
+        ...prev,
+      ]);
+      setCreateOpen(false);
+      resetCreateForm();
+      cargarUsuarios();
+    } catch (err) {
+      setCreateError(err.message || 'Error al crear usuario');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   // Cargar datos cuando estamos en ese módulo
   useEffect(() => {
     if (module === 'administradores') {
@@ -465,6 +531,16 @@ const cambiarPagina = (numeroPagina) => {
             >
               {loadingUsuarios ? '⟳ Cargando...' : '🔄 Actualizar'}
             </button>
+            {/* TIC-438: Crear nuevo Promotor/Comprador */}
+            {(module === 'promotores' || module === 'compradores' || module === 'usuarios') && (
+              <button
+                className="admin-filter-btn admin-create-btn"
+                onClick={() => { resetCreateForm(); setCreateOpen(true); }}
+                style={{ background: '#d4a256', color: '#1a1a1a', fontWeight: 700, marginLeft: 8 }}
+              >
+                ➕ Crear {module === 'promotores' ? 'Promotor' : module === 'compradores' ? 'Comprador' : 'Usuario'}
+              </button>
+            )}
           </div>
 
           {/* Tabla de usuarios */}
@@ -632,6 +708,130 @@ const cambiarPagina = (numeroPagina) => {
         onCancel={() => setModalOpen(false)}
         loading={procesando}
       />
+
+      {/* TIC-438: Modal para crear nuevo Promotor/Comprador */}
+      {createOpen && (
+        <div className="modal-overlay" onClick={() => setCreateOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+            <div className="modal-header">
+              <h3>➕ Crear nueva cuenta ({createForm.role_name})</h3>
+              <button className="modal-close" onClick={() => setCreateOpen(false)}>×</button>
+            </div>
+            <form onSubmit={handleCreateUser}>
+              <div className="modal-body">
+                {createError && <div className="alert alert-error" style={{ marginBottom: 12 }}>{createError}</div>}
+
+                <label>Rol</label>
+                <select
+                  value={createForm.role_name}
+                  onChange={(e) => setCreateForm({ ...createForm, role_name: e.target.value })}
+                  disabled={module === 'promotores' || module === 'compradores'}
+                >
+                  <option value="Comprador">Comprador</option>
+                  <option value="Promotor">Promotor</option>
+                </select>
+
+                <label>Email *</label>
+                <input
+                  type="email"
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                  required
+                />
+
+                <label>Contraseña *</label>
+                <input
+                  type="password"
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                  required
+                  minLength={6}
+                />
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label>Nombre *</label>
+                    <input
+                      type="text"
+                      value={createForm.first_name}
+                      onChange={(e) => setCreateForm({ ...createForm, first_name: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label>Apellido</label>
+                    <input
+                      type="text"
+                      value={createForm.last_name}
+                      onChange={(e) => setCreateForm({ ...createForm, last_name: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label>Teléfono</label>
+                    <input
+                      type="text"
+                      value={createForm.phone}
+                      onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label>Fecha de nacimiento</label>
+                    <input
+                      type="date"
+                      value={createForm.date_of_birth}
+                      onChange={(e) => setCreateForm({ ...createForm, date_of_birth: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                {createForm.role_name === 'Promotor' && (
+                  <>
+                    <hr style={{ margin: '14px 0', border: 'none', borderTop: '1px solid #262c3a' }} />
+                    <p style={{ fontSize: '0.85rem', color: '#9aa3b2', marginBottom: 8 }}>
+                      Datos comerciales (requeridos para Promotor)
+                    </p>
+                    <label>Razón social</label>
+                    <input
+                      type="text"
+                      value={createForm.company_name}
+                      onChange={(e) => setCreateForm({ ...createForm, company_name: e.target.value })}
+                    />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div>
+                        <label>NIT comercial</label>
+                        <input
+                          type="text"
+                          value={createForm.comercial_nit}
+                          onChange={(e) => setCreateForm({ ...createForm, comercial_nit: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label>Cuenta bancaria</label>
+                        <input
+                          type="text"
+                          value={createForm.bank_account}
+                          onChange={(e) => setCreateForm({ ...createForm, bank_account: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)} disabled={creating}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={creating}>
+                  {creating ? 'Creando...' : `Crear ${createForm.role_name}`}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -719,6 +719,87 @@ class UserViewSet(viewsets.ModelViewSet):
             "message": f"Cuenta de {target.email} reactivada correctamente.",
         }, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='ban')
+    def ban_user(self, request, pk=None):
+        """
+        TIC-441: PATCH /users/{id}/ban/
+        Da de BAJA PERMANENTE la cuenta de un Comprador/Promotor (diferente
+        de 'suspend' que es temporal). El usuario pierde acceso inmediato
+        (is_active=False) y la cuenta queda con account_status='banned'.
+
+        Body: { "reason": "motivo obligatorio de la baja" }
+
+        Validaciones:
+        - Solo Admin/SuperAdmin puede ejecutar
+        - No se puede auto-eliminar (TIC-440)
+        - No se puede dar de baja a otros Admins/SuperAdmins desde aqui
+          (eso se hace via /superadmin/admins/suspend/)
+        - Motivo obligatorio
+        """
+        admin = request.user
+        if not admin.is_staff and not (admin.role and admin.role.name.lower() in ['administrador', 'admin', 'superadmin']):
+            return Response(
+                {"status": "error", "message": "Permisos insuficientes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            target = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response(
+                {"status": "error", "message": "Usuario no encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # TIC-440: no permitir auto-baja
+        if str(target.id) == str(admin.id):
+            return Response(
+                {"status": "error", "message": "No puedes dar de baja tu propia cuenta."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Bloquear baja de Admins/SuperAdmins via este endpoint
+        if target.is_superadmin or (target.role and target.role.name.lower() in ['administrador', 'admin']):
+            return Response(
+                {"status": "error", "message": "Para dar de baja a un Administrador usa el panel SuperAdmin."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        reason = (request.data.get('reason') or '').strip()
+        if not reason:
+            return Response(
+                {"status": "error", "message": "El motivo de la baja es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        previous_status = target.account_status
+        target.account_status = 'banned'
+        target.suspended_reason = reason
+        target.is_active = False
+        target.save(update_fields=['account_status', 'suspended_reason', 'is_active'])
+
+        AdminAuditLog.objects.create(
+            admin_id=admin.id,
+            admin_email=admin.email,
+            target_user_id=target.id,
+            target_user_email=target.email,
+            action='ban',
+            reason=reason,
+            previous_status=previous_status,
+            new_status='banned',
+        )
+
+        return Response({
+            "status": "success",
+            "message": f"Cuenta de {target.email} dada de baja permanentemente.",
+            "data": {
+                "user_id": str(target.id),
+                "email": target.email,
+                "account_status": target.account_status,
+                "reason": reason,
+            },
+        }, status=status.HTTP_200_OK)
+
     # ─── TIC-393/TIC-400: Gestión de SuperAdmins ────────────────────────────────
 
     @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='grant-superadmin')

@@ -94,19 +94,46 @@ export const userManagementService = {
    * @returns {Promise<Object>}
    */
   darDeBajaUsuario: async (userId, razon) => {
+    // TIC-441: baja permanente (PATCH /users/{id}/ban/)
     try {
       const res = await apiFetch(
-        `${AUTH_URL}/api/v1/users/${userId}/delete-account/`,
+        `${AUTH_URL}/api/v1/users/${userId}/ban/`,
         {
-          method: 'DELETE',
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ razon, admin_initiated: true }),
+          body: JSON.stringify({ reason: razon }),
         }
       );
-      if (!res.ok) throw new Error('Error al dar de baja usuario');
-      return await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || 'Error al dar de baja usuario');
+      }
+      return data;
     } catch (error) {
       console.error('Error en darDeBajaUsuario:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * TIC-438: Crear cuenta de Promotor o Comprador desde panel admin.
+   * @param {Object} data - { email, password, first_name, last_name, phone, date_of_birth, role_name, company_name?, comercial_nit?, bank_account? }
+   * @returns {Promise<Object>}
+   */
+  crearUsuario: async (data) => {
+    try {
+      const res = await apiFetch(`${AUTH_URL}/api/v1/admin/users/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.message || body.error || 'Error al crear usuario');
+      }
+      return body;
+    } catch (error) {
+      console.error('Error en crearUsuario:', error);
       throw error;
     }
   },
