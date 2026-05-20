@@ -1,12 +1,27 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    CategoryViewSet, EventViewSet, TicketTypeViewSet,
-    PurchaseView, SimularPagoView, PurchaseStatusView,
-    SeatConfigurationView, ValidateTicketView, WaitlistView,
-    LogoutView, PurchaseHistoryView, PurchaseDetailView,
-    PurchaseDownloadPDFView, PurchaseCancelView,
-    SeatListView, SeatReserveView, SeatBulkReserveView,
+    AdminAuditLogView,
+    AdminEventoBajaView,
+    AdminEventoModificarView,
+    CategoryViewSet,
+    EventViewSet,
+    SuperAdminManageView,
+    TicketTypeViewSet,
+    PurchaseView,
+    SimularPagoView,
+    PurchaseStatusView,
+    SeatConfigurationView,
+    ValidateTicketView,
+    WaitlistView,
+    LogoutView,
+    PurchaseHistoryView,
+    PurchaseDetailView,
+    PurchaseDownloadPDFView,
+    PurchaseCancelView,
+    SeatListView,
+    SeatReserveView,
+    SeatBulkReserveView,
     SeatReleaseExpiredView,  # US20: barrendero
     QueueConfigView,         # US14: configuracion de cola por promotor
     UserFavoritesView,       # NUEVO: listar favoritos
@@ -51,11 +66,26 @@ urlpatterns = [
     path('seats/release-expired/', SeatReleaseExpiredView.as_view(), name='seat-release-expired'),
     # US14: Configuración de cola virtual por promotor (TIC-350, TIC-351, TIC-352)
     path('queue-config/<uuid:event_id>/', QueueConfigView.as_view(), name='queue-config'),
-<<<<<<< HEAD
-    #US 24 PARA EL SUPER ADMIN
+    # US 24 PARA EL SUPER ADMIN
     path('superadmin/admins/<uuid:user_id>/permissions/', SuperAdminManageView.as_view(), name='admin-permissions'),
     path('superadmin/admins/<uuid:user_id>/suspend/', SuperAdminManageView.as_view(), name='admin-suspend'),
-=======
+
+    # Gestión administrativa de eventos
+    path(
+        'admin/events/<uuid:event_id>/baja/',
+        AdminEventoBajaView.as_view(),
+        name='admin-evento-baja'
+    ),
+    path(
+        'admin/events/<uuid:event_id>/modificar/',
+        AdminEventoModificarView.as_view(),
+        name='admin-evento-modificar'
+    ),
+    path(
+        'admin/audit-log/',
+        AdminAuditLogView.as_view(),
+        name='admin-audit-log'
+    ),
 
     # NUEVO: Favoritos
     path('users/<uuid:user_id>/favorites/', UserFavoritesView.as_view(), name='user-favorites'),
@@ -77,5 +107,4 @@ urlpatterns = [
         UserNotificationReadView.as_view(),
         name='user-notification-read'
     ),
->>>>>>> US23
 ]

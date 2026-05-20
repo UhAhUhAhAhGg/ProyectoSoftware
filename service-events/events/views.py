@@ -2,48 +2,56 @@
 # pyright: reportOptionalMemberAccess=false
 # pyright: reportArgumentType=false
 # pyright: reportUndefinedVariable=false
-from rest_framework import viewsets, status
-from django.db import transaction
-from rest_framework.decorators import action
-from django.db import transaction
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
-from django.shortcuts import get_object_or_404
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
-from django.db import transaction, IntegrityError
-from django.utils import timezone
-import qrcode
-import io
+from datetime import timedelta
 import base64
-from django.db import transaction
-from rest_framework.permissions import AllowAny
-import uuid
-from io import BytesIO
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework import status
-from .models import TicketType, PaymentOrder # Asegúrate de importar tus modelos
+import io
 import math
+import qrcode
 import secrets
 import uuid
+from io import BytesIO
+
 import requests as http_requests
 from django.conf import settings as django_settings
+from django.db import transaction, IntegrityError
 from django.db.models import Max
-from datetime import timedelta
-from .permissions import IsAdministrador, IsPromotor, IsComprador
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import permissions, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from .models import (
+    AdminAuditLog,
+    Category,
+    Event,
+    PaymentOrder,
+    TicketType,
+    Purchase,
+    Waitlist,
+    BlacklistedToken,
+    Seat,
+    UserBehavior,
+    registrar_comportamiento,
+    UserFavorite,
+    Notification,
+    generar_notificaciones_match,
+)
+from .permissions import IsAdministrador, IsComprador, IsPromotor
 from .services import TicketGenerationService, send_ticket_email
-from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat, UserBehavior, registrar_comportamiento, UserFavorite, Notification, generar_notificaciones_match
-from .models import Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat, UserBehavior, registrar_comportamiento, UserFavorite, Notification, generar_notificaciones_match
 from .serializers import (
+    AdminAuditLogSerializer,
     CategorySerializer,
-    EventSerializer,
     EventCreateSerializer,
+    EventSerializer,
     EventUpdateSerializer,
-    TicketTypeSerializer,
-    TicketTypeCreateSerializer,
     QueueConfigSerializer,
+    TicketTypeCreateSerializer,
+    TicketTypeSerializer,
 )
 
 
@@ -97,9 +105,41 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class EventViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
+        queryset = Event.objects.all().select_related('category').prefetch_related('ticket_types')
+
         if self.action == 'list':
-            return Event.objects.filter(status='published')
-        return Event.objects.all()
+            queryset = queryset.exclude(admin_status='dado_de_baja')
+
+            incluir_bajas = self.request.query_params.get('incluir_bajas', 'false')
+            es_admin = (
+                self.request.user.is_authenticated and
+                (
+                    getattr(self.request.user, 'is_staff', False) or
+                    (
+                        getattr(self.request.user, 'role', None) and
+                        getattr(self.request.user.role, 'name', '').lower() in ['administrador', 'admin', 'superadmin']
+                    )
+                )
+            )
+
+            if incluir_bajas.lower() == 'true' and es_admin:
+                queryset = Event.objects.all().select_related('category').prefetch_related('ticket_types')
+            else:
+                queryset = queryset.filter(status='published')
+
+        status_param = self.request.query_params.get('status', None)
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        category_param = self.request.query_params.get('category', None)
+        if category_param:
+            queryset = queryset.filter(category__name__icontains=category_param)
+
+        location_param = self.request.query_params.get('location', None)
+        if location_param:
+            queryset = queryset.filter(location__icontains=location_param)
+
+        return queryset
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'category', 'event_date']
@@ -558,7 +598,241 @@ class EventViewSet(viewsets.ModelViewSet):
 
         # Si el banco manda 'RECHAZADO' u otro estado
         return Response({"error": "Transacción no exitosa"}, status=status.HTTP_400_BAD_REQUEST)
-    
+
+
+class AdminEventoBajaView(APIView):
+    """
+    PATCH /api/v1/admin/events/{event_id}/baja/
+    Da de baja un evento con motivo obligatorio.
+    Registra la acción en AdminAuditLog automáticamente.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _es_admin(self, user):
+        return (
+            getattr(user, 'is_staff', False) or
+            (
+                getattr(user, 'role', None) and
+                getattr(user.role, 'name', '').lower() in ['administrador', 'admin', 'superadmin']
+            )
+        )
+
+    def patch(self, request, event_id):
+        if not self._es_admin(request.user):
+            return Response(
+                {"error": "No tienes permisos de Administrador."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        motivo = request.data.get('motivo', '').strip()
+        if not motivo:
+            return Response({
+                "status": "error",
+                "message": "El motivo de baja es obligatorio."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(motivo) < 10:
+            return Response({
+                "status": "error",
+                "message": "El motivo debe tener al menos 10 caracteres."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        event = get_object_or_404(Event, id=event_id)
+
+        if event.admin_status == 'dado_de_baja':
+            return Response({
+                "status": "error",
+                "message": "El evento ya está dado de baja."
+            }, status=status.HTTP_409_CONFLICT)
+
+        estado_anterior = event.admin_status
+
+        event.admin_status = 'dado_de_baja'
+        event.admin_baja_motivo = motivo
+        event.admin_baja_at = timezone.now()
+        event.admin_baja_por = request.user.email
+        event.save(update_fields=[
+            'admin_status',
+            'admin_baja_motivo',
+            'admin_baja_at',
+            'admin_baja_por',
+        ])
+
+        AdminAuditLog.objects.create(
+            evento_id=event.id,
+            evento_nombre=event.name,
+            accion='baja',
+            motivo=motivo,
+            campos_modificados={
+                'admin_status': {
+                    'antes': estado_anterior,
+                    'despues': 'dado_de_baja',
+                }
+            },
+            ejecutado_por_email=request.user.email,
+            ejecutado_por_id=request.user.id,
+        )
+
+        return Response({
+            "status": "success",
+            "message": f"Evento '{event.name}' dado de baja correctamente.",
+            "data": {
+                "evento_id": str(event.id),
+                "evento_nombre": event.name,
+                "admin_status": event.admin_status,
+                "motivo": motivo,
+                "baja_at": event.admin_baja_at,
+                "ejecutado_por": request.user.email,
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class AdminEventoModificarView(APIView):
+    """
+    PATCH /api/v1/admin/events/{event_id}/modificar/
+    El administrador modifica campos de un evento con motivo obligatorio.
+    Registra en AdminAuditLog los campos que cambiaron con valores
+    antes/después.
+
+    Campos modificables por el admin:
+      name, description, event_date, location, status
+    """
+    permission_classes = [IsAuthenticated]
+
+    CAMPOS_PERMITIDOS = ['name', 'description', 'event_date', 'location', 'status']
+
+    def _es_admin(self, user):
+        return (
+            getattr(user, 'is_staff', False) or
+            (
+                getattr(user, 'role', None) and
+                getattr(user.role, 'name', '').lower() in ['administrador', 'admin', 'superadmin']
+            )
+        )
+
+    def patch(self, request, event_id):
+        if not self._es_admin(request.user):
+            return Response(
+                {"error": "No tienes permisos de Administrador."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        motivo = request.data.get('motivo', '').strip()
+        if not motivo:
+            return Response({
+                "status": "error",
+                "message": "El motivo de la modificación es obligatorio."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(motivo) < 10:
+            return Response({
+                "status": "error",
+                "message": "El motivo debe tener al menos 10 caracteres."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        event = get_object_or_404(Event, id=event_id)
+
+        if event.admin_status == 'dado_de_baja':
+            return Response({
+                "status": "error",
+                "message": "No se puede modificar un evento dado de baja."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        campos_modificados = {}
+        campos_a_actualizar = []
+
+        for campo in self.CAMPOS_PERMITIDOS:
+            if campo in request.data:
+                valor_nuevo = request.data[campo]
+                valor_anterior = getattr(event, campo)
+
+                if str(valor_anterior) != str(valor_nuevo):
+                    campos_modificados[campo] = {
+                        'antes': str(valor_anterior),
+                        'despues': str(valor_nuevo),
+                    }
+                    setattr(event, campo, valor_nuevo)
+                    campos_a_actualizar.append(campo)
+
+        if not campos_a_actualizar:
+            return Response({
+                "status": "info",
+                "message": "No se detectaron cambios en los campos enviados."
+            }, status=status.HTTP_200_OK)
+
+        event.save(update_fields=campos_a_actualizar)
+
+        AdminAuditLog.objects.create(
+            evento_id=event.id,
+            evento_nombre=event.name,
+            accion='modificacion',
+            motivo=motivo,
+            campos_modificados=campos_modificados,
+            ejecutado_por_email=request.user.email,
+            ejecutado_por_id=request.user.id,
+        )
+
+        serializer = EventSerializer(event)
+
+        return Response({
+            "status": "success",
+            "message": f"Evento '{event.name}' modificado correctamente.",
+            "campos_modificados": campos_modificados,
+            "data": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+
+class AdminAuditLogView(APIView):
+    """
+    GET /api/v1/admin/audit-log/
+    Lista el historial completo de acciones administrativas sobre eventos.
+
+    Query params opcionales:
+      ?evento_id=UUID    → filtrar por evento
+      ?accion=baja       → filtrar por tipo de acción
+      ?admin_id=UUID     → filtrar por administrador
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _es_admin(self, user):
+        return (
+            getattr(user, 'is_staff', False) or
+            (
+                getattr(user, 'role', None) and
+                getattr(user.role, 'name', '').lower() in ['administrador', 'admin', 'superadmin']
+            )
+        )
+
+    def get(self, request):
+        if not self._es_admin(request.user):
+            return Response(
+                {"error": "No tienes permisos de Administrador."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        logs = AdminAuditLog.objects.all()
+
+        evento_id = request.query_params.get('evento_id', None)
+        if evento_id:
+            logs = logs.filter(evento_id=evento_id)
+
+        accion = request.query_params.get('accion', None)
+        if accion:
+            logs = logs.filter(accion=accion)
+
+        admin_id = request.query_params.get('admin_id', None)
+        if admin_id:
+            logs = logs.filter(ejecutado_por_id=admin_id)
+
+        serializer = AdminAuditLogSerializer(logs, many=True)
+
+        return Response({
+            "status": "success",
+            "total": logs.count(),
+            "results": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+
 class TicketTypeViewSet(viewsets.ModelViewSet):
     queryset = TicketType.objects.all()
     filter_backends = [DjangoFilterBackend, SearchFilter]
@@ -1717,7 +1991,6 @@ class QueueConfigView(APIView):
             "message": "Error al validar los datos.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
-<<<<<<< HEAD
 class SuperAdminManageView(APIView):
     """
     TIC-105 & TIC-106: Gestión integral de Administradores por SuperAdmin.
@@ -1776,7 +2049,6 @@ class SuperAdminManageView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=500)
     
-=======
 
 
 class UserFavoritesView(APIView):
@@ -2030,4 +2302,3 @@ class AdminUserDeleteView(APIView):
                 {"error": f"Error al procesar la baja: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
->>>>>>> US23

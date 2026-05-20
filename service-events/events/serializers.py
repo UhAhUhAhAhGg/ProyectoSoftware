@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Event, TicketType, UserFavorite, Notification
+from .models import AdminAuditLog, Category, Event, TicketType, UserFavorite, Notification
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -50,13 +50,14 @@ class EventSerializer(serializers.ModelSerializer):
             'capacity',
             'image',
             'status',
+            'admin_status',
             'created_at',
             'category',
             'category_name',
             'tickets',
             'disponibilidad'
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'created_at', 'admin_status']
 
     def get_disponibilidad(self, obj):
         # Si el evento no está publicado, no debe mostrarse como disponible
@@ -271,3 +272,20 @@ class NotificationPreferenceUpdateSerializer(serializers.Serializer):
         required=True,
         help_text="Lista de IDs de categorías para activar notificaciones."
     )
+
+
+class AdminAuditLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AdminAuditLog
+        fields = [
+            'id',
+            'evento_id',
+            'evento_nombre',
+            'accion',
+            'motivo',
+            'campos_modificados',
+            'ejecutado_por_email',
+            'ejecutado_por_id',
+            'created_at',
+        ]
+        read_only_fields = fields

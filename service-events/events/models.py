@@ -66,6 +66,34 @@ class Event(models.Model):
     # Timeout de pago en minutos
     payment_timeout_minutes = models.IntegerField(default=15)
 
+    # NUEVO — estado administrativo independiente del estado del promotor
+    ADMIN_STATUS_CHOICES = [
+        ('visible', 'Visible'),
+        ('dado_de_baja', 'Dado de baja'),
+    ]
+
+    admin_status = models.CharField(
+        max_length=20,
+        choices=ADMIN_STATUS_CHOICES,
+        default='visible',
+        db_index=True,
+    )
+    admin_baja_motivo = models.TextField(
+        null=True,
+        blank=True,
+        help_text='Motivo de baja registrado por el administrador.'
+    )
+    admin_baja_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Fecha y hora en que el administrador dio de baja el evento.'
+    )
+    admin_baja_por = models.EmailField(
+        null=True,
+        blank=True,
+        help_text='Email del administrador que ejecutó la baja.'
+    )
+
     class Meta:
         verbose_name = 'Event'
         verbose_name_plural = 'Events'
@@ -679,12 +707,50 @@ class UserFavorite(models.Model):
         verbose_name_plural = 'User Favorites'
         unique_together = ('user_id', 'event')
         ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['user_id']),
-        ]
 
     def __str__(self):
         return f"{self.user_id} → {self.event.name}"
+
+
+class AdminAuditLog(models.Model):
+    """
+    Registra cada acción ejecutada por un Administrador sobre un evento.
+    No usa ForeignKey al Event para preservar el log incluso si
+    el evento es eliminado físicamente en el futuro.
+    """
+    ACCION_CHOICES = [
+        ('modificacion', 'Modificación de evento'),
+        ('baja',         'Baja de evento'),
+        ('reactivacion', 'Reactivación de evento'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    evento_id = models.UUIDField(db_index=True)
+    evento_nombre = models.CharField(max_length=255)
+    accion = models.CharField(max_length=20, choices=ACCION_CHOICES)
+    motivo = models.TextField()
+    campos_modificados = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='Dict con los campos que cambiaron: {campo: {antes, despues}}'
+    )
+    ejecutado_por_email = models.EmailField()
+    ejecutado_por_id = models.UUIDField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'admin_audit_log'
+        verbose_name = 'Admin Audit Log'
+        verbose_name_plural = 'Admin Audit Logs'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['evento_id']),
+            models.Index(fields=['ejecutado_por_id']),
+            models.Index(fields=['accion']),
+        ]
+
+    def __str__(self):
+        return f"{self.accion} — {self.evento_nombre} — {self.ejecutado_por_email}"
 
 
 # ─── Helper para registrar comportamiento ─────────────────────────────────────
