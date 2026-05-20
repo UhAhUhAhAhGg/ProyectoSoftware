@@ -12,6 +12,16 @@ from .views import (
     AdminEventEditView,      # TIC-406: editar evento por admin
     AdminEventDeactivateView, # TIC-407: dar de baja evento por admin
     AdminAuditLogListView,   # TIC-421: historial de auditoria de eventos
+    # US21: Favoritos y Recomendaciones
+    UserFavoritesView,
+    UserFavoriteToggleView,
+    UserRecommendationsAPIView,
+    UserRecommendationsListView,
+    # US22: Notificaciones
+    UserNotificationsView,
+    UserNotificationReadView,
+    UserNotificationReadAllView,
+    NotificationPreferenceView,
 )
 
 app_name = 'events'
@@ -56,4 +66,18 @@ urlpatterns = [
 
     # TIC-26: Auditoría de eventos
     path('admin/audit-log/', AdminAuditLogListView.as_view(), name='admin-audit-log'),
-]
+
+    # US21: Favoritos
+    path('users/<uuid:user_id>/favorites/', UserFavoritesView.as_view(), name='user-favorites'),
+    path('users/<uuid:user_id>/favorites/<uuid:event_id>/', UserFavoriteToggleView.as_view(), name='user-favorite-toggle'),
+
+    # US21: Recomendaciones
+    path('my-recommendations/', UserRecommendationsAPIView.as_view(), name='user-specific-recommendations'),
+    path('users/<uuid:user_id>/recommendations/', UserRecommendationsListView.as_view(), name='user-recommendations-list'),
+
+    # US22: Notificaciones
+    path('users/<uuid:user_id>/notifications/', UserNotificationsView.as_view(), name='user-notifications'),
+    path('users/<uuid:user_id>/notifications/read-all/', UserNotificationReadAllView.as_view(), name='user-notifications-read-all'),
+    path('users/<uuid:user_id>/notifications/<uuid:notif_id>/read/', UserNotificationReadView.as_view(), name='user-notification-read'),
+    path('users/<uuid:user_id>/notification-preferences/', NotificationPreferenceView.as_view(), name='set-notification-preferences'),
+]

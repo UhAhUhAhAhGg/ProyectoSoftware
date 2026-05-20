@@ -8,31 +8,36 @@ from events.models import Category
 
 print('=== Seed de Categorías de Eventos ===')
 
-categorias_to_create = [
-    {'name': 'Música', 'description': 'Música y Conciertos'},
-    {'name': 'Teatro', 'description': 'Teatro y Artes Escénicas'},
-    {'name': 'Deportes', 'description': 'Deportes y Actividades Físicas'},
-    {'name': 'Conferencias', 'description': 'Conferencias y Seminarios'},
-    {'name': 'Festivales', 'description': 'Festivales de diversos temas'},
-    {'name': 'Familia', 'description': 'Eventos para la Familia y Niños'},
-    {'name': 'Arte', 'description': 'Arte y Exposiciones'},
-    {'name': 'Otros', 'description': 'Otros tipos de eventos'},
+CATEGORIAS_BASE = [
+    {"name": "Música",      "description": "Conciertos, festivales y eventos musicales de todo género."},
+    {"name": "Deportes",    "description": "Partidos, torneos y competencias deportivas."},
+    {"name": "Teatro",      "description": "Obras de teatro, musicales y artes escénicas."},
+    {"name": "Cine",        "description": "Proyecciones, festivales de cine y premieres."},
+    {"name": "Arte",        "description": "Exposiciones, galerías y muestras artísticas."},
+    {"name": "Tecnología",  "description": "Conferencias, hackathons y eventos tech."},
+    {"name": "Gastronomía", "description": "Ferias de comida, catas y eventos culinarios."},
+    {"name": "Familia",     "description": "Eventos para niños y toda la familia."},
+    {"name": "Educación",   "description": "Talleres, seminarios y cursos presenciales."},
+    {"name": "Negocios",    "description": "Networking, conferencias empresariales y expos."},
 ]
 
-for c in categorias_to_create:
-    categoria, created = Category.objects.get_or_create(
-        name=c['name'],
-        defaults={'description': c['description'], 'is_active': True}
+creadas = 0
+existentes = 0
+
+for cat in CATEGORIAS_BASE:
+    obj, created = Category.objects.get_or_create(
+        name=cat["name"],
+        defaults={
+            "description": cat["description"],
+            "is_active": True,
+        }
     )
     if created:
-        print(f"  CREADO: {categoria.name}")
+        creadas += 1
+        print(f"  ✅ Creada: {cat['name']}")
     else:
-        # Actualizamos la descripción si es necesario
-        if categoria.description != c['description']:
-            categoria.description = c['description']
-            categoria.save()
-            print(f"  ACTUALIZADO: {categoria.name}")
-        else:
-            print(f"  OK (ya existe): {categoria.name}")
+        existentes += 1
+        print(f"  ⚠️  Ya existe: {cat['name']}")
 
-print(f"\nTotal categorías en BD: {Category.objects.count()}")
+print(f"\nResumen: {creadas} creadas, {existentes} ya existían.")
+print(f"Total categorías en BD: {Category.objects.count()}")

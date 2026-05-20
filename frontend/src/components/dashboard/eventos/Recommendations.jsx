@@ -15,9 +15,12 @@ function Recommendations() {
   const [filterType, setFilterType] = useState('all'); // all, favorites, popular
 
   useEffect(() => {
-    loadRecommendations();
-    loadFavorites();
-  }, []);
+  loadRecommendations();
+}, [favorites]);
+
+useEffect(() => {
+  loadFavorites();
+}, []);
 
   const loadRecommendations = async () => {
     setLoading(true);

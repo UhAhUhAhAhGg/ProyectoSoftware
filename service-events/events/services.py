@@ -524,6 +524,7 @@ class MatchingService:
             )
             return 0
 
+        titulo = f"Nuevo evento: {event.name}"
         mensaje = (
             f"¡Nuevo evento de {event.category.name}! "
             f"'{event.name}' el {event.event_date.strftime('%d/%m/%Y')} "
@@ -536,7 +537,8 @@ class MatchingService:
             _, fue_creada = Notification.objects.get_or_create(
                 user_id=user_id,
                 event=event,
-                defaults={'message': mensaje},
+                tipo='new_event_match',
+                defaults={'titulo': titulo, 'mensaje': mensaje},
             )
             if fue_creada:
                 creadas += 1
@@ -559,7 +561,7 @@ class MatchingService:
         """
         qs = Notification.objects.filter(user_id=user_id).select_related('event')
         if solo_no_leidas:
-            qs = qs.filter(read=False)
+            qs = qs.filter(leida=False)
         return qs.order_by('-created_at')
 
     @classmethod
@@ -573,9 +575,10 @@ class MatchingService:
         """
         try:
             notif = Notification.objects.get(id=notification_id, user_id=user_id)
-            if not notif.read:
-                notif.read = True
-                notif.save(update_fields=['read'])
+            if not notif.leida:
+                notif.leida = True
+                notif.leida_at = timezone.now()
+                notif.save(update_fields=['leida', 'leida_at'])
             return notif
         except Notification.DoesNotExist:
             matching_logger.warning(
