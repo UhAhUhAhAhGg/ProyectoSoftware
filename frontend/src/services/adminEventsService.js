@@ -108,11 +108,21 @@ export const adminEventsService = {
   },
 
   /**
-   * Da de baja un evento por razones legales/términos de uso
+   * Da de baja un evento por razones administrativas.
+   * TIC-407: PATCH /admin/events/{id}/deactivate/ con motivo obligatorio.
    */
   takedownEvent: async (eventId, reason) => {
     try {
-      return await this.updateEventStatus(eventId, 'suspended', reason);
+      const res = await apiFetch(`${EVENTS_URL}/api/v1/admin/events/${eventId}/deactivate/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason || '' }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || err.detail || 'Error al dar de baja el evento');
+      }
+      return await res.json();
     } catch (error) {
       console.error('Error en takedownEvent:', error);
       throw error;
@@ -120,11 +130,24 @@ export const adminEventsService = {
   },
 
   /**
-   * Reactiva un evento que fue dado de baja
+   * Reactiva un evento que fue dado de baja (vuelve a 'published').
+   * Usa el endpoint admin de edicion (TIC-406) cambiando solo el campo status.
    */
   reactivateEvent: async (eventId) => {
     try {
-      return await this.updateEventStatus(eventId, 'published');
+      const res = await apiFetch(`${EVENTS_URL}/api/v1/admin/events/${eventId}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'published',
+          admin_reason: 'Reactivación administrativa',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || err.detail || 'Error al reactivar el evento');
+      }
+      return await res.json();
     } catch (error) {
       console.error('Error en reactivateEvent:', error);
       throw error;
@@ -132,12 +155,13 @@ export const adminEventsService = {
   },
 
   /**
-   * Edita los datos de un evento (como admin)
+   * Edita los datos de un evento como admin.
+   * TIC-406: PATCH /admin/events/{id}/ con motivo opcional.
    */
   editEvent: async (eventId, eventData) => {
     try {
       const body = {};
-      
+
       // Solo incluir campos proporcionados
       if (eventData.name !== undefined) body.name = eventData.name;
       if (eventData.description !== undefined) body.description = eventData.description;
@@ -147,17 +171,18 @@ export const adminEventsService = {
       if (eventData.capacity !== undefined) body.capacity = parseInt(eventData.capacity);
       if (eventData.category !== undefined) body.category = eventData.category;
       if (eventData.status !== undefined) body.status = eventData.status;
-      if (eventData.admin_note !== undefined) body.admin_note = eventData.admin_note;
+      // El endpoint admin acepta admin_reason; el frontend puede mandar admin_note
+      body.admin_reason = eventData.admin_reason || eventData.admin_note || 'Modificación administrativa';
 
-      const res = await apiFetch(`${EVENTS_URL}/api/v1/events/${eventId}/`, {
+      const res = await apiFetch(`${EVENTS_URL}/api/v1/admin/events/${eventId}/`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || err.message || 'Error al editar evento');
+        throw new Error(err.message || err.detail || 'Error al editar evento');
       }
 
       return await res.json();

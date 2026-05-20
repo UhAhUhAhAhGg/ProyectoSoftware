@@ -2168,15 +2168,21 @@ class AdminEventEditView(APIView):
         from .models import Event
 
         user = request.user
-        if not (user.is_staff or (hasattr(user, 'role') and user.role and
-                user.role.get('name', '') in ['Administrador', 'admin'] if isinstance(user.role, dict)
-                else user.is_staff)):
-            # Verificación simplificada: cualquier usuario autenticado con is_staff
-            if not user.is_staff:
-                return Response(
-                    {"status": "error", "message": "Permisos insuficientes."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+        # Admin = is_staff, is_superadmin, o rol Administrador/admin/superadmin.
+        # user.role aqui es _SimpleRole (wrapper construido desde claims JWT).
+        role_name = ''
+        if hasattr(user, 'role') and user.role:
+            role_name = (user.role.name if hasattr(user.role, 'name') else str(user.role)).lower()
+        es_admin = (
+            getattr(user, 'is_staff', False)
+            or getattr(user, 'is_superadmin', False)
+            or role_name in ['administrador', 'admin', 'superadmin']
+        )
+        if not es_admin:
+            return Response(
+                {"status": "error", "message": "Permisos insuficientes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         try:
             event = Event.objects.get(id=event_id)
@@ -2258,7 +2264,16 @@ class AdminEventDeactivateView(APIView):
         from django.utils import timezone as tz
 
         user = request.user
-        if not user.is_staff:
+        # Aceptar is_staff, is_superadmin o rol Administrador
+        role_name = ''
+        if hasattr(user, 'role') and user.role:
+            role_name = (user.role.name if hasattr(user.role, 'name') else str(user.role)).lower()
+        es_admin = (
+            getattr(user, 'is_staff', False)
+            or getattr(user, 'is_superadmin', False)
+            or role_name in ['administrador', 'admin', 'superadmin']
+        )
+        if not es_admin:
             return Response(
                 {"status": "error", "message": "Permisos insuficientes."},
                 status=status.HTTP_403_FORBIDDEN,
