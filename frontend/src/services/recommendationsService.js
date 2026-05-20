@@ -1,4 +1,5 @@
 import api from './api';
+import { mapEvento } from './eventosService';
 
 const EVENTS_URL = process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002';
 
@@ -111,16 +112,20 @@ export const recommendationsService = {
    */
   getRecommendedEvents: async () => {
     try {
-      const response = await api.get(
-        `${EVENTS_URL}/api/v1/events/recommendations/`
-      );
-      return response.data.results || response.data;
-    } catch (error) {
-      // Si no existe endpoint, retornar eventos populares como fallback
-      if (error.response?.status === 404) {
-        return await recommendationsService.getPopularEvents();
+      // Intentar el endpoint personalizado del usuario logueado (TIC-362)
+      const userId = JSON.parse(localStorage.getItem('user') || '{}')?.id;
+      if (userId) {
+        const response = await api.get(
+          `${EVENTS_URL}/api/v1/users/${userId}/recommendations/`
+        );
+        const raw = response.data.results || response.data;
+        return Array.isArray(raw) ? raw.map(mapEvento) : [];
       }
-      throw error;
+      // Sin usuario logueado → fallback a populares
+      return await recommendationsService.getPopularEvents();
+    } catch (error) {
+      // Cualquier error (404, 401, etc) → fallback a populares
+      return await recommendationsService.getPopularEvents();
     }
   },
 
@@ -132,7 +137,8 @@ export const recommendationsService = {
       const response = await api.get(
         `${EVENTS_URL}/api/v1/events/?status=published&ordering=-created_at`
       );
-      return (response.data.results || response.data).slice(0, 10);
+      const raw = (response.data.results || response.data).slice(0, 10);
+      return Array.isArray(raw) ? raw.map(mapEvento) : [];
     } catch (error) {
       throw error;
     }
@@ -146,7 +152,8 @@ export const recommendationsService = {
       const response = await api.get(
         `${EVENTS_URL}/api/v1/events/?status=published&category=${categoryId}`
       );
-      return response.data.results || response.data;
+      const raw = response.data.results || response.data;
+      return Array.isArray(raw) ? raw.map(mapEvento) : [];
     } catch (error) {
       throw error;
     }

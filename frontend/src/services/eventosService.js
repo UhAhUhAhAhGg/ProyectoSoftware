@@ -31,7 +31,7 @@ const mapTipoEntrada = (t) => ({
   asientosPorFila: t.seats_per_row ?? null,
 });
 
-const mapEvento = (e) => {
+export const mapEvento = (e) => {
   // Delega en mapTipoEntrada para que tipoZona, esVIP, filas, asientosPorFila
   // estén disponibles en getEventosDisponibles y getEventosByPromotor también.
   const tiposEntrada = (e.tickets ?? []).map(mapTipoEntrada);

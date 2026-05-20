@@ -4,23 +4,30 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import AdminTable from '../components/dashboard/admin/AdminTable';
+import AdminUsuarios from '../components/dashboard/admin/AdminUsuarios';
 import './SuperAdminDashboard.css';
 
 function SuperAdminDashboard() {
   const { user, isAuthenticated, logout } = useAuth();
   const router = useRouter();
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    if (typeof window === 'undefined') return true;
-    return window.innerWidth > 768;
-  });
+  // Hydration-safe: arrancamos en true (igual server/client) y ajustamos en useEffect
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSection, setActiveSection] = useState('administradores');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    if (typeof window !== 'undefined') {
+      setSidebarOpen(window.innerWidth > 768);
+    }
+  }, []);
 
   // Redirigir si no es SuperAdmin
+  // TIC-393: usar campo is_superadmin (boolean) en lugar de role string
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace('/admin/login');
-    } else if (user?.role !== 'SuperAdmin') {
-      // Si no es SuperAdmin, redirigir al panel admin regular
+    } else if (!user?.is_superadmin && user?.role !== 'SuperAdmin') {
       router.replace('/admin/dashboard');
     }
   }, [isAuthenticated, user, router]);
@@ -77,7 +84,7 @@ function SuperAdminDashboard() {
   return (
     <div className="superadmin-dashboard">
       {/* Overlay para móvil */}
-      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
+      {sidebarOpen && mounted && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
 
       {/* Sidebar */}
       <aside className={`superadmin-sidebar ${sidebarOpen ? 'open' : ''}`}>
@@ -182,17 +189,32 @@ function SuperAdminDashboard() {
 
           {/* Section: Gestión de Administradores */}
           {activeSection === 'administradores' && (
-            <div className="section-container">
-              <div className="section-header">
-                <div>
-                  <h2>Gestión de Administradores</h2>
-                  <p className="section-description">
-                    Administra las cuentas de administrador, sus permisos y estado del sistema
-                  </p>
+            <>
+              <div className="section-container" style={{ marginBottom: 20 }}>
+                <div className="section-header">
+                  <div>
+                    <h2>👥 Administradores Activos</h2>
+                    <p className="section-description">
+                      Gestiona los permisos, suspende o reactiva administradores
+                    </p>
+                  </div>
                 </div>
+                <AdminTable />
               </div>
-              <AdminTable />
-            </div>
+
+              <div className="section-container">
+                <div className="section-header">
+                  <div>
+                    <h2>✉️ Invitar / Solicitudes / Historial</h2>
+                    <p className="section-description">
+                      Genera enlaces de invitación, aprueba solicitudes pendientes y revisa
+                      el historial de acciones administrativas
+                    </p>
+                  </div>
+                </div>
+                <AdminUsuarios module="administradores" />
+              </div>
+            </>
           )}
 
           {/* Section: Solicitudes Pendientes */}
