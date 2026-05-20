@@ -14,7 +14,21 @@ function Dashboard() {
   const [sidebarAbierto, setSidebarAbierto] = useState(false);
   const [notificaciones, setNotificaciones] = useState([
     { id: 1, mensaje: '¡Bienvenido a tu panel!', leida: false },
-    { id: 2, mensaje: 'Completa tu perfil para mejores recomendaciones', leida: false }
+    { id: 2, mensaje: 'Completa tu perfil para mejores recomendaciones', leida: false },
+      {
+    id: 1,
+    nombreEvento: 'Rock Fest 2026',
+    fecha: '2026-05-10',
+    enlace: '/dashboard/evento/1',
+    leida: false
+  },
+  {
+    id: 2,
+    nombreEvento: 'Jazz Night',
+    fecha: '2026-05-18',
+    enlace: '/dashboard/evento/2',
+    leida: false
+  }
   ]);
 
   // Redirigir si no está autenticado o si es admin (debe ir a /admin/dashboard)
@@ -26,6 +40,18 @@ function Dashboard() {
       window.location.href = '/admin/dashboard';
     }
   }, [isAuthenticated, isAdministrador, navigate]);
+
+  useEffect(() => {
+  const interval = setInterval(() => {
+
+    // Simulación de actualización automática del badge
+    setNotificaciones((prev) => [...prev]);
+
+  }, 10000); // actualiza cada 10 segundos
+
+  return () => clearInterval(interval);
+
+}, []);
 
 
 
@@ -81,7 +107,17 @@ function Dashboard() {
               {notificaciones.length > 0 ? (
                 notificaciones.map(n => (
                   <div key={n.id} className={`notificacion-item ${!n.leida ? 'no-leida' : ''}`}>
-                    {n.mensaje}
+                    <div>
+  <strong>{n.nombreEvento}</strong>
+
+  <p style={{ margin: '4px 0' }}>
+    📅 {new Date(n.fecha).toLocaleDateString()}
+  </p>
+
+  <Link to={n.enlace} className="btn-ver-evento-match">
+    Ver evento
+  </Link>
+</div>
                   </div>
                 ))
               ) : (

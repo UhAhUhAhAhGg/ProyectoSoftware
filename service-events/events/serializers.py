@@ -260,3 +260,14 @@ class NotificationSerializer(serializers.ModelSerializer):
             'event_fecha',
         ]
         read_only_fields = ['id', 'created_at', 'leida_at']
+
+
+class NotificationPreferenceUpdateSerializer(serializers.Serializer):
+    """
+    TIC-377: Serializer para PUT /users/{id}/notification-preferences/
+    """
+    category_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=True,
+        help_text="Lista de IDs de categorías para activar notificaciones.",
+    )
