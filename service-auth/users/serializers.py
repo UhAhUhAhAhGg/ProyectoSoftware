@@ -121,6 +121,8 @@ class LoginSerializer(serializers.Serializer):
         refresh = RefreshToken.for_user(user)
         refresh['email'] = user.email
         refresh['role'] = user.role.name if user.role else None
+        refresh['is_staff'] = bool(getattr(user, 'is_staff', False))
+        refresh['is_superadmin'] = bool(getattr(user, 'is_superadmin', False))
 
         return {
             'id': str(user.id),
@@ -245,6 +247,8 @@ class AdminLoginSerializer(serializers.Serializer):
         refresh = RefreshToken.for_user(user)
         refresh['email'] = user.email
         refresh['role'] = user.role.name if user.role else None
+        refresh['is_staff'] = bool(getattr(user, 'is_staff', False))
+        refresh['is_superadmin'] = bool(getattr(user, 'is_superadmin', False))
 
         return {
             'id': str(user.id),
@@ -308,9 +312,10 @@ class AdminCreateUserSerializer(serializers.ModelSerializer):
         write_only=True
     )
     first_name = serializers.CharField(max_length=100)
-    last_name = serializers.CharField(max_length=100)
-    phone = serializers.CharField(max_length=50)
-    date_of_birth = serializers.DateField()
+    # Campos opcionales (el admin puede crear cuenta basica y el usuario completa luego)
+    last_name = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+    phone = serializers.CharField(max_length=50, required=False, allow_blank=True, default='')
+    date_of_birth = serializers.DateField(required=False, allow_null=True, default=None)
 
     # Campos exclusivos para Promotor
     company_name = serializers.CharField(

@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { adminService } from '../../../services/adminService';
+import { useAuth } from '../../../context/AuthContext';
 import './AdminTable.css';
 
 function AdminTable() {
+  const { user } = useAuth();
   const [administrators, setAdministrators] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -133,11 +135,17 @@ function AdminTable() {
       await cargarAdministradores();
       setModalOpen(false);
     } catch (error) {
-      showMessage('❌ Error al actualizar permisos');
+      const msg = error?.message || error?.response?.data?.message || 'Error al actualizar permisos';
+      showMessage(`❌ ${msg}`);
     }
   };
 
   const handleToggleStatus = async (admin) => {
+    // TIC-440: bloquear auto-suspension desde el frontend (UX claro)
+    if (admin.is_active && user?.id && String(admin.id) === String(user.id)) {
+      showMessage('⚠️ No puedes suspender tu propia cuenta.');
+      return;
+    }
     try {
       if (admin.is_active) {
         await adminService.deactivateAdmin(admin.id, 'Desactivado por SuperAdmin');
@@ -148,7 +156,9 @@ function AdminTable() {
       await cargarAdministradores();
       setModalOpen(false);
     } catch (error) {
-      showMessage('❌ Error al cambiar estado');
+      // Mostrar el mensaje real del backend (ej. 'No puedes suspender tu propia cuenta')
+      const msg = error?.message || error?.response?.data?.message || 'Error al cambiar estado';
+      showMessage(`❌ ${msg}`);
     }
   };
 

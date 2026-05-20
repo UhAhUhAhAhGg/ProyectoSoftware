@@ -48,17 +48,21 @@ export const userManagementService = {
    * @returns {Promise<Object>}
    */
   suspenderUsuario: async (userId, razon) => {
+    // Backend espera PATCH con {reason} (no POST con {razon})
     try {
       const res = await apiFetch(
         `${AUTH_URL}/api/v1/users/${userId}/suspend/`,
         {
-          method: 'POST',
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ razon }),
+          body: JSON.stringify({ reason: razon }),
         }
       );
-      if (!res.ok) throw new Error('Error al suspender usuario');
-      return await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || 'Error al suspender usuario');
+      }
+      return data;
     } catch (error) {
       console.error('Error en suspenderUsuario:', error);
       throw error;
@@ -75,7 +79,7 @@ export const userManagementService = {
       const res = await apiFetch(
         `${AUTH_URL}/api/v1/users/${userId}/reactivate/`,
         {
-          method: 'POST',
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
         }
       );
@@ -94,19 +98,59 @@ export const userManagementService = {
    * @returns {Promise<Object>}
    */
   darDeBajaUsuario: async (userId, razon) => {
+    // TIC-441: baja permanente (PATCH /users/{id}/ban/)
     try {
       const res = await apiFetch(
-        `${AUTH_URL}/api/v1/users/${userId}/delete-account/`,
+        `${AUTH_URL}/api/v1/users/${userId}/ban/`,
         {
-          method: 'DELETE',
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ razon, admin_initiated: true }),
+          body: JSON.stringify({ reason: razon }),
         }
       );
-      if (!res.ok) throw new Error('Error al dar de baja usuario');
-      return await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || 'Error al dar de baja usuario');
+      }
+      return data;
     } catch (error) {
       console.error('Error en darDeBajaUsuario:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * TIC-438: Crear cuenta de Promotor o Comprador desde panel admin.
+   * @param {Object} data - { email, password, first_name, last_name, phone, date_of_birth, role_name, company_name?, comercial_nit?, bank_account? }
+   * @returns {Promise<Object>}
+   */
+  crearUsuario: async (data) => {
+    try {
+      const res = await apiFetch(`${AUTH_URL}/api/v1/admin/users/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Extraer mensaje especifico del backend
+        let msg = body.message || body.error || '';
+        // El backend devuelve { status, message, details: {campo: ['error1', 'error2']} }
+        if (body.details && typeof body.details === 'object') {
+          const detallesList = [];
+          for (const [campo, errs] of Object.entries(body.details)) {
+            const errsArr = Array.isArray(errs) ? errs : [errs];
+            detallesList.push(`${campo}: ${errsArr.join(', ')}`);
+          }
+          if (detallesList.length > 0) {
+            msg = (msg ? msg + ' — ' : '') + detallesList.join(' | ');
+          }
+        }
+        throw new Error(msg || 'Error al crear usuario');
+      }
+      return body;
+    } catch (error) {
+      console.error('Error en crearUsuario:', error);
       throw error;
     }
   },

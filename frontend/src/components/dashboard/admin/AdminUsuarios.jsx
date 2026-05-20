@@ -57,6 +57,99 @@ function AdminUsuarios({ module }) {
     baja: 0,
   });
 
+  // --- TIC-438: Modal para crear nuevo Promotor/Comprador ---
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [showCreateConfirm, setShowCreateConfirm] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    email: '',
+    password: '',
+    password_confirm: '',
+    first_name: '',
+    last_name: '',
+    phone: '',
+    date_of_birth: '',
+    role_name: module === 'promotores' ? 'Promotor' : 'Comprador',
+    // Campos extra para Promotor (service-profiles los requiere)
+    company_name: '',
+    comercial_nit: '',
+    bank_account: '',
+  });
+
+  const resetCreateForm = () => {
+    setCreateForm({
+      email: '',
+      password: '',
+      password_confirm: '',
+      first_name: '',
+      last_name: '',
+      phone: '',
+      date_of_birth: '',
+      role_name: module === 'promotores' ? 'Promotor' : 'Comprador',
+      company_name: '',
+      comercial_nit: '',
+      bank_account: '',
+    });
+    setCreateError('');
+    setShowCreatePassword(false);
+    setShowCreateConfirm(false);
+  };
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    setCreateError('');
+    if (!createForm.email || !createForm.password || !createForm.first_name) {
+      setCreateError('Email, contraseña y nombre son obligatorios.');
+      return;
+    }
+    // Validar contraseña (8+ chars, 1 mayúscula, 1 número) antes de enviar
+    if (createForm.password.length < 8) {
+      setCreateError('La contraseña debe tener al menos 8 caracteres.');
+      return;
+    }
+    if (!/[A-Z]/.test(createForm.password)) {
+      setCreateError('La contraseña debe contener al menos una mayúscula.');
+      return;
+    }
+    if (!/\d/.test(createForm.password)) {
+      setCreateError('La contraseña debe contener al menos un número.');
+      return;
+    }
+    if (createForm.password !== createForm.password_confirm) {
+      setCreateError('Las contraseñas no coinciden.');
+      return;
+    }
+    setCreating(true);
+    try {
+      const payload = { ...createForm };
+      // No enviar el campo de confirmacion
+      delete payload.password_confirm;
+      // Solo enviar campos de Promotor si aplica
+      if (payload.role_name !== 'Promotor') {
+        delete payload.company_name;
+        delete payload.comercial_nit;
+        delete payload.bank_account;
+      }
+      // Si fecha esta vacia, no la mandamos (el backend la hace opcional)
+      if (!payload.date_of_birth) delete payload.date_of_birth;
+      await userManagementService.crearUsuario(payload);
+      showMessage(`✅ ${payload.role_name} ${payload.email} creado correctamente`, 'success');
+      setActionHistory((prev) => [
+        { action: 'Creación', user: payload.email, date: new Date().toLocaleString() },
+        ...prev,
+      ]);
+      setCreateOpen(false);
+      resetCreateForm();
+      cargarUsuarios();
+    } catch (err) {
+      setCreateError(err.message || 'Error al crear usuario');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   // Cargar datos cuando estamos en ese módulo
   useEffect(() => {
     if (module === 'administradores') {
@@ -102,10 +195,17 @@ function AdminUsuarios({ module }) {
   };
 
   const calcularEstadisticas = (usuarios) => {
+    // Backend usa account_status: 'active'|'suspended'|'banned'
     const total = usuarios.length;
-    const activos = usuarios.filter(u => u.status === 'active' || u.is_active).length;
-    const suspendidos = usuarios.filter(u => u.status === 'suspended').length;
-    const baja = usuarios.filter(u => u.status === 'deleted').length;
+    const activos = usuarios.filter((u) => {
+      const st = u.account_status || u.status;
+      return st === 'active' || (!st && u.is_active);
+    }).length;
+    const suspendidos = usuarios.filter((u) => (u.account_status || u.status) === 'suspended').length;
+    const baja = usuarios.filter((u) => {
+      const st = u.account_status || u.status;
+      return st === 'banned' || st === 'deleted';
+    }).length;
 
     setStats({ total, activos, suspendidos, baja });
   };
@@ -236,13 +336,14 @@ function AdminUsuarios({ module }) {
     setTimeout(() => setActionMessage(''), 4000);
   };
 
-  // Filtrar usuarios
-  const usuariosFiltrados = usuarios.filter(u => {
+  // Filtrar usuarios (backend usa account_status)
+  const usuariosFiltrados = usuarios.filter((u) => {
+    const st = u.account_status || u.status;
     const cumpleFiltroEstado =
       filtroEstado === 'todos' ||
-      (filtroEstado === 'activos' && (u.status === 'active' || u.is_active)) ||
-      (filtroEstado === 'suspendidos' && u.status === 'suspended') ||
-      (filtroEstado === 'baja' && u.status === 'deleted');
+      (filtroEstado === 'activos' && (st === 'active' || (!st && u.is_active))) ||
+      (filtroEstado === 'suspendidos' && st === 'suspended') ||
+      (filtroEstado === 'baja' && (st === 'banned' || st === 'deleted'));
 
     const cumplebúsqueda =
       u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -269,8 +370,10 @@ const cambiarPagina = (numeroPagina) => {
   setPaginaActual(numeroPagina);
 };
   const obtenerEstado = (usuario) => {
-    if (usuario.status === 'suspended') return 'suspendido';
-    if (usuario.status === 'deleted') return 'baja';
+    // Backend devuelve 'account_status': 'active' | 'suspended' | 'banned'
+    const st = usuario.account_status || usuario.status;
+    if (st === 'suspended') return 'suspendido';
+    if (st === 'banned' || st === 'deleted') return 'baja';
     return usuario.is_active !== false ? 'activo' : 'inactivo';
   };
 
@@ -465,6 +568,16 @@ const cambiarPagina = (numeroPagina) => {
             >
               {loadingUsuarios ? '⟳ Cargando...' : '🔄 Actualizar'}
             </button>
+            {/* TIC-438: Crear nuevo Promotor/Comprador */}
+            {(module === 'promotores' || module === 'compradores' || module === 'usuarios') && (
+              <button
+                className="admin-filter-btn admin-create-btn"
+                onClick={() => { resetCreateForm(); setCreateOpen(true); }}
+                style={{ background: '#d4a256', color: '#1a1a1a', fontWeight: 700, marginLeft: 8 }}
+              >
+                ➕ Crear {module === 'promotores' ? 'Promotor' : module === 'compradores' ? 'Comprador' : 'Usuario'}
+              </button>
+            )}
           </div>
 
           {/* Tabla de usuarios */}
@@ -632,6 +745,188 @@ const cambiarPagina = (numeroPagina) => {
         onCancel={() => setModalOpen(false)}
         loading={procesando}
       />
+
+      {/* TIC-438: Modal para crear nuevo Promotor/Comprador */}
+      {createOpen && (
+        <div className="create-user-overlay" onClick={() => setCreateOpen(false)}>
+          <div className="create-user-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="create-user-header">
+              <h3>
+                <span className="create-user-icon">{createForm.role_name === 'Promotor' ? '📢' : '🛍️'}</span>
+                Crear nueva cuenta ({createForm.role_name})
+              </h3>
+              <button className="create-user-close" onClick={() => setCreateOpen(false)} aria-label="Cerrar">×</button>
+            </div>
+            <form onSubmit={handleCreateUser}>
+              <div className="create-user-body">
+                {createError && (
+                  <div className="create-user-error">
+                    <span>⚠️</span> {createError}
+                  </div>
+                )}
+
+                <div className="create-user-section">
+                  <h4>Datos de acceso</h4>
+                  <div className="create-user-grid">
+                    <div className="create-user-field">
+                      <label>Rol</label>
+                      <select
+                        value={createForm.role_name}
+                        onChange={(e) => setCreateForm({ ...createForm, role_name: e.target.value })}
+                        disabled={module === 'promotores' || module === 'compradores'}
+                      >
+                        <option value="Comprador">Comprador</option>
+                        <option value="Promotor">Promotor</option>
+                      </select>
+                    </div>
+                    <div className="create-user-field create-user-field-full">
+                      <label>Email <span className="req">*</span></label>
+                      <input
+                        type="email"
+                        placeholder="correo@ejemplo.com"
+                        value={createForm.email}
+                        onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="create-user-field create-user-field-full">
+                      <label>Contraseña <span className="req">*</span></label>
+                      <div className="create-user-password-wrap">
+                        <input
+                          type={showCreatePassword ? 'text' : 'password'}
+                          placeholder="Mín. 8 caracteres, 1 mayúscula, 1 número"
+                          value={createForm.password}
+                          onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                          required
+                          minLength={8}
+                        />
+                        <button
+                          type="button"
+                          className="create-user-eye"
+                          onClick={() => setShowCreatePassword((v) => !v)}
+                          aria-label={showCreatePassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        >
+                          {showCreatePassword ? '🙈' : '👁️'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="create-user-field create-user-field-full">
+                      <label>Confirmar contraseña <span className="req">*</span></label>
+                      <div className="create-user-password-wrap">
+                        <input
+                          type={showCreateConfirm ? 'text' : 'password'}
+                          placeholder="Repite la contraseña"
+                          value={createForm.password_confirm}
+                          onChange={(e) => setCreateForm({ ...createForm, password_confirm: e.target.value })}
+                          required
+                        />
+                        <button
+                          type="button"
+                          className="create-user-eye"
+                          onClick={() => setShowCreateConfirm((v) => !v)}
+                          aria-label={showCreateConfirm ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        >
+                          {showCreateConfirm ? '🙈' : '👁️'}
+                        </button>
+                      </div>
+                      {createForm.password_confirm && createForm.password !== createForm.password_confirm && (
+                        <small style={{ color: '#fca5a5', fontSize: '0.78rem', marginTop: 2 }}>
+                          Las contraseñas no coinciden
+                        </small>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="create-user-section">
+                  <h4>Datos personales</h4>
+                  <div className="create-user-grid">
+                    <div className="create-user-field">
+                      <label>Nombre <span className="req">*</span></label>
+                      <input
+                        type="text"
+                        placeholder="Nombre"
+                        value={createForm.first_name}
+                        onChange={(e) => setCreateForm({ ...createForm, first_name: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="create-user-field">
+                      <label>Apellido</label>
+                      <input
+                        type="text"
+                        placeholder="Apellido"
+                        value={createForm.last_name}
+                        onChange={(e) => setCreateForm({ ...createForm, last_name: e.target.value })}
+                      />
+                    </div>
+                    <div className="create-user-field">
+                      <label>Teléfono</label>
+                      <input
+                        type="text"
+                        placeholder="Ej. 76543210"
+                        value={createForm.phone}
+                        onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                      />
+                    </div>
+                    <div className="create-user-field">
+                      <label>Fecha de nacimiento</label>
+                      <input
+                        type="date"
+                        value={createForm.date_of_birth}
+                        onChange={(e) => setCreateForm({ ...createForm, date_of_birth: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {createForm.role_name === 'Promotor' && (
+                  <div className="create-user-section">
+                    <h4>Datos comerciales <span className="section-hint">(requeridos para Promotor)</span></h4>
+                    <div className="create-user-grid">
+                      <div className="create-user-field create-user-field-full">
+                        <label>Razón social</label>
+                        <input
+                          type="text"
+                          placeholder="Nombre de la empresa"
+                          value={createForm.company_name}
+                          onChange={(e) => setCreateForm({ ...createForm, company_name: e.target.value })}
+                        />
+                      </div>
+                      <div className="create-user-field">
+                        <label>NIT comercial</label>
+                        <input
+                          type="text"
+                          placeholder="NIT"
+                          value={createForm.comercial_nit}
+                          onChange={(e) => setCreateForm({ ...createForm, comercial_nit: e.target.value })}
+                        />
+                      </div>
+                      <div className="create-user-field">
+                        <label>Cuenta bancaria</label>
+                        <input
+                          type="text"
+                          placeholder="Número de cuenta"
+                          value={createForm.bank_account}
+                          onChange={(e) => setCreateForm({ ...createForm, bank_account: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="create-user-footer">
+                <button type="button" className="create-user-btn create-user-btn-secondary" onClick={() => setCreateOpen(false)} disabled={creating}>
+                  Cancelar
+                </button>
+                <button type="submit" className="create-user-btn create-user-btn-primary" disabled={creating}>
+                  {creating ? '⏳ Creando...' : `➕ Crear ${createForm.role_name}`}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

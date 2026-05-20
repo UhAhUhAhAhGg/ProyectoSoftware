@@ -137,26 +137,89 @@ body.dark-mode .header-right .dashboard-theme-toggle:hover { background: #333; }
   position: absolute;
   top: 100%;
   right: 0;
-  width: 300px;
+  width: 360px;
+  max-height: 480px;
   background: white;
   border-radius: 10px;
-  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
-  display: none;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
   z-index: 1000;
   margin-top: 10px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-.notificaciones-dropdown:hover .notificaciones-menu {
+.notificaciones-menu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  flex-shrink: 0;
+}
+
+.notificaciones-menu-header strong {
+  font-size: 0.95rem;
+  color: #1f2937;
+}
+
+.btn-marcar-todas {
+  background: transparent;
+  border: none;
+  color: #b8884a;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.btn-marcar-todas:hover {
+  background: #f5ede0;
+}
+
+.notificaciones-lista {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.notificacion-item-vacia {
+  text-align: center;
+  padding: 30px 20px;
+  color: #6b7280;
+}
+
+.notificacion-item-vacia span {
+  font-size: 2rem;
   display: block;
+  margin-bottom: 8px;
+}
+
+.notificacion-item-vacia p {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.notificacion-item-vacia small {
+  font-size: 0.78rem;
+  color: #9ca3af;
 }
 
 .notificacion-item {
-  padding: 12px 15px;
-  border-bottom: 1px solid var(--color-beige);
-  font-size: 14px;
-  color: var(--color-verde-gris);
-  transition: background-color 0.3s ease;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.88rem;
+  color: #374151;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.notificacion-item:hover {
+  background: #fef9f0;
 }
 
 .notificacion-item:last-child {
@@ -168,8 +231,55 @@ body.dark-mode .header-right .dashboard-theme-toggle:hover { background: #333; }
 }
 
 .notificacion-item.no-leida {
-  background-color: rgba(173, 129, 73, 0.1);
+  background-color: rgba(173, 129, 73, 0.08);
   font-weight: 500;
+}
+
+.notif-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-content strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #1f2937;
+}
+
+.notif-mensaje {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  color: #4b5563;
+  line-height: 1.4;
+}
+
+.notif-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.btn-ver-evento-match {
+  background: linear-gradient(135deg, #b8884a, #d4a256);
+  color: #1a1a1a;
+  text-decoration: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.notif-dot {
+  width: 8px;
+  height: 8px;
+  background: #d4a256;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 6px;
 }
 
 /* ===== USER BADGE ===== */

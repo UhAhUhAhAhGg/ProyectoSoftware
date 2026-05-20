@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import AdminTable from '../components/dashboard/admin/AdminTable';
 import AdminUsuarios from '../components/dashboard/admin/AdminUsuarios';
+import AdminAuditoria from '../components/dashboard/admin/AdminAuditoria';
+import SuperAdminSolicitudes from '../components/dashboard/admin/SuperAdminSolicitudes';
+import SuperAdminCrearAdmin from '../components/dashboard/admin/SuperAdminCrearAdmin';
 import './SuperAdminDashboard.css';
 
 function SuperAdminDashboard() {
@@ -14,6 +17,8 @@ function SuperAdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSection, setActiveSection] = useState('administradores');
   const [mounted, setMounted] = useState(false);
+  // Signal para forzar recarga de la AdminTable tras crear un nuevo admin
+  const [adminsRefreshKey, setAdminsRefreshKey] = useState(0);
 
   useEffect(() => {
     setMounted(true);
@@ -199,20 +204,19 @@ function SuperAdminDashboard() {
                     </p>
                   </div>
                 </div>
-                <AdminTable />
+                <AdminTable key={adminsRefreshKey} />
               </div>
 
               <div className="section-container">
                 <div className="section-header">
                   <div>
-                    <h2>✉️ Invitar / Solicitudes / Historial</h2>
+                    <h2>➕ Crear nuevo Administrador</h2>
                     <p className="section-description">
-                      Genera enlaces de invitación, aprueba solicitudes pendientes y revisa
-                      el historial de acciones administrativas
+                      Registra directamente una cuenta de Administrador y asigna sus permisos iniciales.
                     </p>
                   </div>
                 </div>
-                <AdminUsuarios module="administradores" />
+                <SuperAdminCrearAdmin onCreated={() => setAdminsRefreshKey((k) => k + 1)} />
               </div>
             </>
           )}
@@ -226,9 +230,7 @@ function SuperAdminDashboard() {
                   Revisa y aprueba/rechaza las solicitudes para ser administrador
                 </p>
               </div>
-              <div className="coming-soon">
-                <p>📋 Próxima funcionalidad en desarrollo</p>
-              </div>
+              <SuperAdminSolicitudes />
             </div>
           )}
 
@@ -241,9 +243,7 @@ function SuperAdminDashboard() {
                   Registro detallado de todas las acciones realizadas en el sistema
                 </p>
               </div>
-              <div className="coming-soon">
-                <p>📊 Próxima funcionalidad en desarrollo</p>
-              </div>
+              <AdminAuditoria />
             </div>
           )}
 

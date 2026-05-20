@@ -15,6 +15,15 @@ from rest_framework_simplejwt.exceptions import InvalidToken
 from django.contrib.auth.models import AnonymousUser
 
 
+class _SimpleRole:
+    """Wrapper liviano para que user.role.name funcione (compat Django-style)."""
+    def __init__(self, name):
+        self.name = name or ''
+
+    def __str__(self):
+        return self.name
+
+
 class JWTUser:
     """
     Lightweight user object built from JWT token claims.
@@ -29,9 +38,14 @@ class JWTUser:
         self.id = payload.get('user_id') or payload.get('sub')
         self.pk = self.id
         self.email = payload.get('email', '')
-        self.role = payload.get('role', '')
+        # role del JWT es string ('Administrador', 'Comprador', etc.).
+        # Lo envolvemos en _SimpleRole para que el codigo user.role.name no rompa.
+        role_name = payload.get('role', '')
+        self.role = _SimpleRole(role_name) if role_name else None
         self.is_staff = payload.get('is_staff', False)
         self.is_superuser = payload.get('is_superuser', False)
+        # Custom claim del service-auth — necesario para checks de SuperAdmin
+        self.is_superadmin = payload.get('is_superadmin', False)
 
     def __str__(self):
         return self.email or str(self.id)

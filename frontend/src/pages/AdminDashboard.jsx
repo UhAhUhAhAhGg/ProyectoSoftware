@@ -21,14 +21,28 @@ function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSection, setActiveSection] = useState('home');
   const [usuariosMenuOpen, setUsuariosMenuOpen] = useState(true);
+  const [collapsed, setCollapsed] = useState(false); // Sidebar colapsado (solo iconos) en desktop
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     if (typeof window !== 'undefined') {
       setSidebarOpen(window.innerWidth > 768);
+      // Recordar preferencia del usuario entre sesiones
+      const saved = localStorage.getItem('adminSidebarCollapsed');
+      if (saved === 'true') setCollapsed(true);
     }
   }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('adminSidebarCollapsed', String(next));
+      }
+      return next;
+    });
+  };
 
   // Protección de ruta
   useEffect(() => {
@@ -73,13 +87,16 @@ function AdminDashboard() {
   };
 
   return (
-    <div className="admin-dashboard">
+    <div className={`admin-dashboard ${collapsed ? 'sidebar-collapsed' : ''}`}>
       {sidebarOpen && mounted && (
         <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>
       )}
 
       {/* Sidebar */}
-      <aside className={`admin-sidebar ${sidebarOpen ? 'open' : ''}`}>
+      <aside
+        className={`admin-sidebar ${sidebarOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}
+        suppressHydrationWarning
+      >
         <div className="sidebar-header">
           {/* Logo clickeable → home */}
           <button
@@ -89,16 +106,28 @@ function AdminDashboard() {
             title="Ir al panel principal"
           >
             <span className="logo-icon">🎫</span>
-            <h2>TicketGo</h2>
-            <span className="admin-badge">Admin</span>
+            {!collapsed && <h2>TicketGo</h2>}
+            {!collapsed && <span className="admin-badge">Admin</span>}
           </button>
-          <button
-            className="sidebar-close"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Cerrar menú"
-          >
-            ×
-          </button>
+          <div className="sidebar-header-actions">
+            {/* Boton colapsar (solo desktop) */}
+            <button
+              className="sidebar-collapse-btn"
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+              title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+            >
+              {collapsed ? '»' : '«'}
+            </button>
+            {/* Boton cerrar (solo mobile) */}
+            <button
+              className="sidebar-close"
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Cerrar menú"
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         <div className="admin-profile">

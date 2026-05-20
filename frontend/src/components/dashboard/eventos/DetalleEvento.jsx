@@ -263,13 +263,23 @@ function DetalleEvento() {
         )}
 
         <div className="detalle-contenido">
-          <h2>{evento.nombre}</h2>
+          <div className="detalle-titulo-row">
+            <h2>{evento.nombre}</h2>
+            {evento.categoriaNombre && (
+              <span className="detalle-categoria-badge">
+                🏷️ {evento.categoriaNombre}
+              </span>
+            )}
+          </div>
           <p className="descripcion">{evento.descripcion}</p>
 
           <div className="info-grid">
             <p><strong>Fecha:</strong> {new Date(evento.fecha).toLocaleDateString('es-ES')}</p>
             <p><strong>Hora:</strong> {evento.hora}</p>
             <p><strong>Lugar:</strong> {evento.ubicacion}</p>
+            {evento.categoriaNombre && (
+              <p><strong>Categoría:</strong> {evento.categoriaNombre}</p>
+            )}
           </div>
 
           <VenueLayoutPreview

@@ -65,8 +65,9 @@ function AdminAuditoria() {
         ordering
       });
 
+      // Backend devuelve { status, total, page, page_size, total_pages, results }
       setLogs(resp.results || resp || []);
-      setTotal(resp.count || (resp.results ? resp.results.length : logs.length));
+      setTotal(resp.total ?? resp.count ?? (resp.results ? resp.results.length : 0));
     } catch (err) {
       console.error('Error cargando logs de auditoría', err);
       setError('No se pudieron cargar los registros. Intente nuevamente.');
@@ -89,8 +90,23 @@ function AdminAuditoria() {
   return (
     <div className="admin-audit-container">
       <div className="audit-header">
-        <h2>Historial de Auditoría</h2>
-        <p className="muted">Registro automático de cambios realizados sobre eventos</p>
+        <div>
+          <h2>Historial de Auditoría</h2>
+          <p className="muted">Registro automático de cambios sobre eventos y cuentas de usuario</p>
+        </div>
+        <button
+          type="button"
+          className="btn-export-csv"
+          onClick={async () => {
+            try {
+              await adminAuditService.exportToCsv();
+            } catch (err) {
+              alert('No se pudo exportar el CSV: ' + (err.message || ''));
+            }
+          }}
+        >
+          📥 Exportar CSV
+        </button>
       </div>
 
       <div className="audit-filters">
@@ -106,9 +122,12 @@ function AdminAuditoria() {
           <label>Tipo de acción</label>
           <select value={actionType} onChange={e => { setPage(1); setActionType(e.target.value); }}>
             <option value="">Todos</option>
-            {actionTypes.map(t => (
-              <option key={t} value={t}>{t}</option>
-            ))}
+            {actionTypes.map((t) => {
+              // soporta tanto strings como {value, label}
+              const value = typeof t === 'string' ? t : t.value;
+              const label = typeof t === 'string' ? t : t.label;
+              return <option key={value} value={value}>{label}</option>;
+            })}
           </select>
         </div>
 
@@ -124,7 +143,7 @@ function AdminAuditoria() {
 
         <div className="filter-row search-row">
           <label>Buscar</label>
-          <input placeholder="Evento, detalles..." value={searchTerm} onChange={e => { setPage(1); setSearchTerm(e.target.value); }} />
+          <input placeholder="Evento, usuario, detalles..." value={searchTerm} onChange={e => { setPage(1); setSearchTerm(e.target.value); }} />
         </div>
 
         <div className="filter-row page-size-row">
@@ -148,25 +167,59 @@ function AdminAuditoria() {
             <thead>
               <tr>
                 <th onClick={() => handleSort('timestamp')} className="sortable">Fecha {sortConfig.key === 'timestamp' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</th>
+                <th>Tipo</th>
                 <th onClick={() => handleSort('admin')} className="sortable">Administrador {sortConfig.key === 'admin' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</th>
                 <th onClick={() => handleSort('action_type')} className="sortable">Acción {sortConfig.key === 'action_type' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</th>
-                <th>Evento</th>
+                <th>Objetivo</th>
                 <th>Detalles</th>
               </tr>
             </thead>
             <tbody>
               {logs.length === 0 && (
-                <tr><td colSpan={5} className="no-results">No se encontraron registros</td></tr>
+                <tr><td colSpan={6} className="no-results">No se encontraron registros</td></tr>
               )}
-              {logs.map((log) => (
-                <tr key={log.id} className={log.action_type === 'suspended' ? 'row-muted' : ''}>
-                  <td>{new Date(log.timestamp).toLocaleString()}</td>
-                  <td>{log.admin_name || (log.admin && (log.admin.name || log.admin.email)) || 'Sistema'}</td>
-                  <td>{log.action_type}</td>
-                  <td>{log.event_title || (log.event && log.event.name) || '-'}</td>
-                  <td><div className="details-cell">{log.detail || log.changes || JSON.stringify(log.meta || {})}</div></td>
-                </tr>
-              ))}
+              {logs.map((log) => {
+                // Log normalizado por adminAuditService.getAuditLogs:
+                //   { id, kind, kind_label, created_at, admin_email,
+                //     action, action_label, target, reason,
+                //     changed_fields?, old_status?, new_status?, previous_status? }
+                let detalles = '-';
+                if (log.changed_fields && Object.keys(log.changed_fields).length > 0) {
+                  detalles = Object.entries(log.changed_fields)
+                    .map(([campo, vals]) => `${campo}: "${vals.antes ?? '-'}" → "${vals.despues ?? '-'}"`)
+                    .join(' | ');
+                } else if (log.previous_status || log.new_status) {
+                  const prev = log.previous_status || log.old_status || '-';
+                  const next = log.new_status || '-';
+                  const motivo = log.reason ? ` — ${log.reason}` : '';
+                  detalles = `${prev} → ${next}${motivo}`;
+                } else if (log.old_status || log.new_status) {
+                  const prev = log.old_status || '-';
+                  const next = log.new_status || '-';
+                  detalles = `${prev} → ${next}`;
+                } else if (log.reason) {
+                  detalles = log.reason;
+                }
+
+                return (
+                  <tr key={`${log.kind || 'x'}-${log.id}`}>
+                    <td>{new Date(log.created_at).toLocaleString()}</td>
+                    <td>
+                      <span className={`kind-pill kind-${log.kind || 'event'}`}>
+                        {log.kind_label || (log.kind === 'user' ? '👤 Usuario' : '📅 Evento')}
+                      </span>
+                    </td>
+                    <td>{log.admin_email || 'Sistema'}</td>
+                    <td>
+                      <span className={`action-pill action-${log.action}`}>
+                        {log.action_label || log.action}
+                      </span>
+                    </td>
+                    <td>{log.target || '-'}</td>
+                    <td><div className="details-cell">{detalles}</div></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

@@ -45,6 +45,12 @@ export default function EventCard({
           alt={evento.nombre}
           className="card-image"
         />
+        {/* Badge de categoria (todos los variants si esta definida) */}
+        {(evento.categoriaNombre || evento.category_name) && (
+          <div className="card-category-badge" title={evento.categoriaNombre || evento.category_name}>
+            🏷️ {evento.categoriaNombre || evento.category_name}
+          </div>
+        )}
         {/* Badge de favorito solo para ciertos variantes */}
         {(variant === 'comprador' || variant === 'recomendaciones') && (
           <div className="card-favorite-badge">
