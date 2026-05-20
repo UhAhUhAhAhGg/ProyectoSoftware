@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Event, TicketType, UserFavorite, Notification, EventAuditLog
+from .models import Category, Event, TicketType
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -50,14 +50,13 @@ class EventSerializer(serializers.ModelSerializer):
             'capacity',
             'image',
             'status',
-            'admin_status',
             'created_at',
             'category',
             'category_name',
             'tickets',
             'disponibilidad'
         ]
-        read_only_fields = ['id', 'created_at', 'admin_status']
+        read_only_fields = ['id', 'created_at']
 
     def get_disponibilidad(self, obj):
         # Si el evento no está publicado, no debe mostrarse como disponible
@@ -224,75 +223,9 @@ class QueueConfigSerializer(serializers.ModelSerializer):
             )
         return value
 
-
-class UserFavoriteSerializer(serializers.ModelSerializer):
-    event_detail = EventSerializer(source='event', read_only=True)
-
-    class Meta:
-        model = UserFavorite
-        fields = ['id', 'event', 'event_detail', 'created_at']
-        read_only_fields = ['id', 'created_at']
-
-
-class NotificationSerializer(serializers.ModelSerializer):
-    event_nombre = serializers.CharField(
-        source='event.name',
-        read_only=True,
-        default=None
-    )
-    event_fecha = serializers.DateField(
-        source='event.event_date',
-        read_only=True,
-        default=None
-    )
-
-    class Meta:
-        model = Notification
-        fields = [
-            'id',
-            'tipo',
-            'titulo',
-            'mensaje',
-            'leida',
-            'created_at',
-            'leida_at',
-            'event',
-            'event_nombre',
-            'event_fecha',
-        ]
-        read_only_fields = ['id', 'created_at', 'leida_at']
-
-
-class NotificationPreferenceUpdateSerializer(serializers.Serializer):
-    """
-    TIC-377: Serializer para PUT /users/{id}/notification-preferences/
-    """
-    category_ids = serializers.ListField(
-        child=serializers.UUIDField(),
-        required=True,
-        help_text="Lista de IDs de categorías para activar notificaciones.",
-    )
-
-
-class EventAuditLogSerializer(serializers.ModelSerializer):
-    """
-    TIC-420/423: Serializer del historial de auditoría de eventos.
-    """
-    event_id = serializers.UUIDField(source='event.id', read_only=True)
-
-    class Meta:
-        model = EventAuditLog
-        fields = [
-            'id',
-            'event_id',
-            'event_name',
-            'admin_id',
-            'admin_email',
-            'action',
-            'reason',
-            'changed_fields',
-            'old_status',
-            'new_status',
-            'created_at',
-        ]
-        read_only_fields = fields
+class AdminPermissionsSerializer(serializers.Serializer):
+    # Definimos los permisos que un SuperAdmin puede tocar
+    can_edit_events = serializers.BooleanField(required=False)
+    can_manage_users = serializers.BooleanField(required=False)
+    can_view_audit_logs = serializers.BooleanField(required=False)
+    is_staff = serializers.BooleanField(required=False) # Para quitar acceso al admin
