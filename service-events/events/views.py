@@ -25,6 +25,7 @@ import uuid
 from io import BytesIO
 
 import requests as http_requests
+from datetime import timedelta
 from django.conf import settings as django_settings
 from django.db import transaction, IntegrityError
 from django.db.models import Max
