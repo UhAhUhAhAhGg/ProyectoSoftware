@@ -22,6 +22,10 @@ from .views import (
     UserNotificationReadView,
     UserNotificationReadAllView,
     NotificationPreferenceView,
+    # US24: SuperAdmin (gestion remota)
+    SuperAdminManageView,
+    # US23: Limpieza datos locales tras baja de cuenta
+    AdminUserCleanupView,
 )
 
 app_name = 'events'
@@ -60,9 +64,16 @@ urlpatterns = [
     # US14: Configuración de cola virtual por promotor (TIC-350, TIC-351, TIC-352)
     path('queue-config/<uuid:event_id>/', QueueConfigView.as_view(), name='queue-config'),
 
+    # US24: Gestión SuperAdmin (TIC-398/399 - proxy a service-auth)
+    path('superadmin/admins/<uuid:user_id>/permissions/', SuperAdminManageView.as_view(), name='admin-permissions'),
+    path('superadmin/admins/<uuid:user_id>/suspend/', SuperAdminManageView.as_view(), name='admin-suspend'),
+
     # TIC-25: Gestión administrativa de eventos
     path('admin/events/<uuid:event_id>/', AdminEventEditView.as_view(), name='admin-event-edit'),
     path('admin/events/<uuid:event_id>/deactivate/', AdminEventDeactivateView.as_view(), name='admin-event-deactivate'),
+
+    # US23: Limpieza local tras baja de cuenta (llamado por service-auth)
+    path('admin/users/<uuid:user_id>/cleanup/', AdminUserCleanupView.as_view(), name='admin-user-cleanup'),
 
     # TIC-26: Auditoría de eventos
     path('admin/audit-log/', AdminAuditLogListView.as_view(), name='admin-audit-log'),

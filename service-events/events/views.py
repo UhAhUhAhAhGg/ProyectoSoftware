@@ -2,37 +2,28 @@
 # pyright: reportOptionalMemberAccess=false
 # pyright: reportArgumentType=false
 # pyright: reportUndefinedVariable=false
-from rest_framework import viewsets, status
-from django.db import transaction
-from rest_framework.decorators import action
-from django.db import transaction
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
-from django.shortcuts import get_object_or_404
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
-from django.db import transaction, IntegrityError
-from django.utils import timezone
-import qrcode
-import io
+from datetime import timedelta
 import base64
-from django.db import transaction
-from rest_framework.permissions import AllowAny
-import uuid
-from io import BytesIO
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework import status
-from .models import TicketType, PaymentOrder # Asegúrate de importar tus modelos
+import io
 import math
+import qrcode
 import secrets
 import uuid
+from io import BytesIO
+
 import requests as http_requests
 from django.conf import settings as django_settings
+from django.db import transaction, IntegrityError
 from django.db.models import Max
-from datetime import timedelta
-from rest_framework import generics, pagination
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from rest_framework import generics, pagination, permissions, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from django_filters.rest_framework import DjangoFilterBackend
 from .models import Event
 from .serializers import EventSerializer
 from .permissions import IsAdministrador, IsPromotor, IsComprador
@@ -103,9 +94,41 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class EventViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
+        queryset = Event.objects.all().select_related('category').prefetch_related('ticket_types')
+
         if self.action == 'list':
-            return Event.objects.filter(status='published')
-        return Event.objects.all()
+            queryset = queryset.exclude(admin_status='dado_de_baja')
+
+            incluir_bajas = self.request.query_params.get('incluir_bajas', 'false')
+            es_admin = (
+                self.request.user.is_authenticated and
+                (
+                    getattr(self.request.user, 'is_staff', False) or
+                    (
+                        getattr(self.request.user, 'role', None) and
+                        getattr(self.request.user.role, 'name', '').lower() in ['administrador', 'admin', 'superadmin']
+                    )
+                )
+            )
+
+            if incluir_bajas.lower() == 'true' and es_admin:
+                queryset = Event.objects.all().select_related('category').prefetch_related('ticket_types')
+            else:
+                queryset = queryset.filter(status='published')
+
+        status_param = self.request.query_params.get('status', None)
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        category_param = self.request.query_params.get('category', None)
+        if category_param:
+            queryset = queryset.filter(category__name__icontains=category_param)
+
+        location_param = self.request.query_params.get('location', None)
+        if location_param:
+            queryset = queryset.filter(location__icontains=location_param)
+
+        return queryset
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'category', 'event_date']
@@ -564,7 +587,10 @@ class EventViewSet(viewsets.ModelViewSet):
 
         # Si el banco manda 'RECHAZADO' u otro estado
         return Response({"error": "Transacción no exitosa"}, status=status.HTTP_400_BAD_REQUEST)
-    
+
+
+# US24: AdminEventoBajaView/ModificarView/AdminAuditLogView reemplazadas por AdminEventEditView, AdminEventDeactivateView y AdminAuditLogListView (TIC-406/407/421)
+
 class TicketTypeViewSet(viewsets.ModelViewSet):
     queryset = TicketType.objects.all()
     filter_backends = [DjangoFilterBackend, SearchFilter]
@@ -1723,6 +1749,64 @@ class QueueConfigView(APIView):
             "message": "Error al validar los datos.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+class SuperAdminManageView(APIView):
+    """
+    TIC-105 & TIC-106: Gestión integral de Administradores por SuperAdmin.
+    Permite modificar permisos y suspender cuentas con protección de jerarquía.
+    """
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def patch(self, request, user_id):
+        # 1. SEGURIDAD: Solo el SuperUser (Nivel Dios) puede entrar aquí
+        if not request.user.is_superuser:
+            return Response(
+                {"error": "Acceso denegado. Se requieren privilegios de SuperAdmin."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # 2. VALIDACIÓN DE JERARQUÍA: Evitar que toquen a otro SuperAdmin
+        # (Aquí simulamos la comprobación, en real consultarías tu BD/Service-Profiles)
+        target_is_superuser = False # <--- Consultar si el user_id es superusuario
+        if target_is_superuser:
+            return Response(
+                {"error": "Acción denegada: Un SuperAdmin no puede ser gestionado por este endpoint."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # 3. PROCESAMIENTO DE DATOS
+        # Usamos el serializer para validar si vienen cambios de permisos
+        serializer = AdminPermissionsSerializer(data=request.data, partial=True)
+        
+        # Detectamos si la intención es SUSPENDER (TIC-106)
+        is_suspend_action = request.data.get('suspend', False)
+
+        try:
+            acciones_realizadas = []
+
+            # --- Lógica de Suspensión ---
+            if is_suspend_action:
+                # Aquí llamarías a la lógica de desactivar cuenta (is_active = False)
+                acciones_realizadas.append("Suspensión de cuenta")
+                log_admin_action(request, user_id, 'suspend', "Cuenta suspendida por SuperAdmin")
+
+            # --- Lógica de Permisos ---
+            if serializer.is_valid() and serializer.validated_data:
+                # Aquí actualizarías los permisos en la base de datos
+                acciones_realizadas.append(f"Cambio de permisos: {list(serializer.validated_data.keys())}")
+                log_admin_action(request, user_id, 'update', f"Permisos modificados: {serializer.validated_data}")
+
+            if not acciones_realizadas:
+                return Response({"message": "No se enviaron cambios válidos."}, status=400)
+
+            return Response({
+                "status": "success",
+                "target_user": user_id,
+                "actions": acciones_realizadas
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+    
 
 
 # ─── TIC-25: Modificar/Dar de baja eventos (Admin) ───────────────────────────

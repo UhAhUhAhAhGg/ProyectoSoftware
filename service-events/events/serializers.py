@@ -50,13 +50,14 @@ class EventSerializer(serializers.ModelSerializer):
             'capacity',
             'image',
             'status',
+            'admin_status',
             'created_at',
             'category',
             'category_name',
             'tickets',
             'disponibilidad'
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'created_at', 'admin_status']
 
     def get_disponibilidad(self, obj):
         # Si el evento no está publicado, no debe mostrarse como disponible
