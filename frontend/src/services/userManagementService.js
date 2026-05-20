@@ -129,7 +129,20 @@ export const userManagementService = {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(body.message || body.error || 'Error al crear usuario');
+        // Extraer mensaje especifico del backend
+        let msg = body.message || body.error || '';
+        // El backend devuelve { status, message, details: {campo: ['error1', 'error2']} }
+        if (body.details && typeof body.details === 'object') {
+          const detallesList = [];
+          for (const [campo, errs] of Object.entries(body.details)) {
+            const errsArr = Array.isArray(errs) ? errs : [errs];
+            detallesList.push(`${campo}: ${errsArr.join(', ')}`);
+          }
+          if (detallesList.length > 0) {
+            msg = (msg ? msg + ' — ' : '') + detallesList.join(' | ');
+          }
+        }
+        throw new Error(msg || 'Error al crear usuario');
       }
       return body;
     } catch (error) {

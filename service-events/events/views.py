@@ -2359,9 +2359,18 @@ class AdminAuditLogListView(APIView):
         from .models import EventAuditLog
 
         user = request.user
-        if not user.is_staff:
+        # Aceptar is_staff, is_superadmin o rol Administrador
+        es_admin = (
+            getattr(user, 'is_staff', False)
+            or getattr(user, 'is_superadmin', False)
+            or (
+                getattr(user, 'role', None)
+                and getattr(user.role, 'name', '').lower() in ['administrador', 'admin', 'superadmin']
+            )
+        )
+        if not es_admin:
             return Response(
-                {"status": "error", "message": "Permisos insuficientes."},
+                {"status": "error", "message": "Permisos insuficientes para ver el log de auditoría."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 

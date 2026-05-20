@@ -1,43 +1,90 @@
 import { useState, useEffect } from 'react';
 import { useNotifications } from '../context/NotificationContext';
+import { eventosService } from '../services/eventosService';
 import './NotificationPreferences.css';
+
+// Iconos sugeridos por nombre de categoria (case-insensitive)
+const CATEGORY_ICONS = {
+  musica: '🎵',
+  cine: '🎬',
+  teatro: '🎭',
+  arte: '🎨',
+  tecnologia: '💻',
+  tecnología: '💻',
+  gastronomia: '🍽️',
+  gastronomía: '🍽️',
+  familia: '👨‍👩‍👧‍👦',
+  educacion: '📚',
+  educación: '📚',
+  negocios: '💼',
+  festivales: '🎊',
+  conferencias: '🎤',
+  deportes: '🏆',
+  conciertos: '🎤',
+};
 
 function NotificationPreferences() {
   const {
     preferencias,
     loading,
     error,
-    actualizarPreferencias,
     toggleCategoria,
     toggleEmailNotifications,
     toggleInAppNotifications,
   } = useNotifications();
 
   const [mensaje, setMensaje] = useState('');
-  const [tipoMensaje, setTipoMensaje] = useState(''); // 'success' o 'error'
+  const [tipoMensaje, setTipoMensaje] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [categorias, setCategorias] = useState([]);
+  const [loadingCats, setLoadingCats] = useState(true);
 
-  const categoriasDisponibles = [
-    { id: 'futbol', label: '⚽ Fútbol' },
-    { id: 'cine', label: '🎬 Cine' },
-    { id: 'teatro', label: '🎭 Teatro' },
-    { id: 'musica', label: '🎵 Música' },
-    { id: 'deportes', label: '🏆 Deportes' },
-    { id: 'conciertos', label: '🎤 Conciertos' },
-    { id: 'otros', label: '📢 Otros' },
-  ];
+  // Cargar categorias REALES del backend
+  useEffect(() => {
+    let cancelled = false;
+    const cargar = async () => {
+      setLoadingCats(true);
+      try {
+        const data = await eventosService.getCategorias();
+        if (cancelled) return;
+        const lista = (Array.isArray(data) ? data : []).map((c) => {
+          const key = (c.name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+          return {
+            id: c.id, // UUID real
+            slug: key, // para localStorage / preferencias actuales (compat)
+            name: c.name,
+            icon: CATEGORY_ICONS[key] || '🏷️',
+          };
+        });
+        setCategorias(lista);
+      } catch (err) {
+        console.warn('No se pudieron cargar categorias:', err?.message);
+        setCategorias([]);
+      } finally {
+        setLoadingCats(false);
+      }
+    };
+    cargar();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const showMessage = (texto, tipo = 'success') => {
+    setMensaje(texto);
+    setTipoMensaje(tipo);
+    setTimeout(() => setMensaje(''), 3000);
+  };
 
   const handleToggleCategoria = async (categoria) => {
     setIsSaving(true);
-    setMensaje('');
     try {
-      await toggleCategoria(categoria);
-      setTipoMensaje('success');
-      setMensaje('Preferencias actualizadas correctamente');
-      setTimeout(() => setMensaje(''), 3000);
+      // Pasamos el id UUID y el slug — el context guarda por slug, pero
+      // tambien sincroniza con el backend usando los IDs reales si estan disponibles
+      await toggleCategoria(categoria.slug, categoria.id);
+      showMessage('Preferencias actualizadas correctamente');
     } catch (err) {
-      setTipoMensaje('error');
-      setMensaje('Error al actualizar preferencias');
+      showMessage('Error al actualizar preferencias', 'error');
       console.error(err);
     } finally {
       setIsSaving(false);
@@ -46,16 +93,11 @@ function NotificationPreferences() {
 
   const handleToggleEmail = async () => {
     setIsSaving(true);
-    setMensaje('');
     try {
       await toggleEmailNotifications();
-      setTipoMensaje('success');
-      setMensaje('Preferencias de email actualizadas');
-      setTimeout(() => setMensaje(''), 3000);
+      showMessage('Preferencias de email actualizadas');
     } catch (err) {
-      setTipoMensaje('error');
-      setMensaje('Error al actualizar preferencias');
-      console.error(err);
+      showMessage('Error al actualizar preferencias', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -63,16 +105,11 @@ function NotificationPreferences() {
 
   const handleToggleInApp = async () => {
     setIsSaving(true);
-    setMensaje('');
     try {
       await toggleInAppNotifications();
-      setTipoMensaje('success');
-      setMensaje('Preferencias de notificaciones en la app actualizadas');
-      setTimeout(() => setMensaje(''), 3000);
+      showMessage('Preferencias de notificaciones en la app actualizadas');
     } catch (err) {
-      setTipoMensaje('error');
-      setMensaje('Error al actualizar preferencias');
-      console.error(err);
+      showMessage('Error al actualizar preferencias', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -108,7 +145,7 @@ function NotificationPreferences() {
       {/* SECCIÓN: Canales de Notificación */}
       <div className="preferences-section">
         <h4>Canales de Notificación</h4>
-        
+
         <div className="preference-item">
           <div className="preference-info">
             <label htmlFor="email-toggle">📧 Notificaciones por Email</label>
@@ -118,7 +155,7 @@ function NotificationPreferences() {
             <input
               id="email-toggle"
               type="checkbox"
-              checked={preferencias.email_enabled}
+              checked={!!preferencias.email_enabled}
               onChange={handleToggleEmail}
               disabled={isSaving}
             />
@@ -135,7 +172,7 @@ function NotificationPreferences() {
             <input
               id="inapp-toggle"
               type="checkbox"
-              checked={preferencias.in_app_enabled}
+              checked={!!preferencias.in_app_enabled}
               onChange={handleToggleInApp}
               disabled={isSaving}
             />
@@ -144,34 +181,42 @@ function NotificationPreferences() {
         </div>
       </div>
 
-      {/* SECCIÓN: Categorías de Eventos */}
+      {/* SECCIÓN: Categorías reales del backend */}
       <div className="preferences-section">
-        <h4>Recibir Notificaciones de Categorías</h4>
+        <h4>Categorías favoritas</h4>
         <p className="section-description">
-          Selecciona qué tipos de eventos deseas que se notifiquen cuando haya un match con tu perfil
+          Marca las categorías que te interesan. Recibirás notificaciones cuando se publiquen eventos
+          de estas categorías y aparecerán priorizados en tu sección de eventos.
         </p>
 
-        <div className="categorias-grid">
-          {categoriasDisponibles.map((categoria) => (
-            <div
-              key={categoria.id}
-              className={`categoria-card ${
-                preferencias.categorias?.[categoria.id] ? 'activa' : 'inactiva'
-              }`}
-            >
-              <input
-                type="checkbox"
-                id={`cat-${categoria.id}`}
-                checked={preferencias.categorias?.[categoria.id] || false}
-                onChange={() => handleToggleCategoria(categoria.id)}
-                disabled={isSaving}
-              />
-              <label htmlFor={`cat-${categoria.id}`}>
-                {categoria.label}
-              </label>
-            </div>
-          ))}
-        </div>
+        {loadingCats ? (
+          <p style={{ color: '#9aa3b2' }}>Cargando categorías...</p>
+        ) : categorias.length === 0 ? (
+          <p style={{ color: '#9aa3b2' }}>No hay categorías disponibles.</p>
+        ) : (
+          <div className="categorias-grid">
+            {categorias.map((cat) => {
+              const isActive = !!preferencias.categorias?.[cat.slug];
+              return (
+                <div
+                  key={cat.id}
+                  className={`categoria-card ${isActive ? 'activa' : 'inactiva'}`}
+                >
+                  <input
+                    type="checkbox"
+                    id={`cat-${cat.slug}`}
+                    checked={isActive}
+                    onChange={() => handleToggleCategoria(cat)}
+                    disabled={isSaving}
+                  />
+                  <label htmlFor={`cat-${cat.slug}`}>
+                    {cat.icon} {cat.name}
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* SECCIÓN: Información */}
@@ -179,16 +224,16 @@ function NotificationPreferences() {
         <h4>ℹ️ Cómo Funcionan los Matches</h4>
         <ul>
           <li>
-            <strong>Match Automático:</strong> Sistema detecta automáticamente cuando un nuevo evento coincide con tus preferencias (categoría + ubicación)
+            <strong>Match Automático:</strong> El sistema detecta cuando un nuevo evento coincide con tus categorías favoritas
           </li>
           <li>
-            <strong>Notificación Inmediata:</strong> Recibirás una notificación en los canales que hayas habilitado
+            <strong>Notificación Inmediata:</strong> Recibirás una notificación en los canales que tengas habilitados
           </li>
           <li>
-            <strong>Sin Spam:</strong> Solo una notificación por evento y perfil para evitar saturación
+            <strong>Prioridad en eventos:</strong> Los eventos de tus categorías favoritas aparecen primero en la sección "Eventos"
           </li>
           <li>
-            <strong>Personalizable:</strong> Puedes cambiar tus preferencias en cualquier momento
+            <strong>Sin Spam:</strong> Solo una notificación por evento y perfil
           </li>
         </ul>
       </div>

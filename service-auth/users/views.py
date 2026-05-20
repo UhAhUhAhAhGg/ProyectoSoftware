@@ -576,6 +576,9 @@ class UserViewSet(viewsets.ModelViewSet):
 
         data = []
         for u in usuarios:
+            profile = getattr(u, 'profile', None)
+            first_name = profile.first_name if profile else ''
+            last_name = profile.last_name if profile else ''
             data.append({
                 "id": str(u.id),
                 "email": u.email,
@@ -584,6 +587,10 @@ class UserViewSet(viewsets.ModelViewSet):
                 "suspended_reason": u.suspended_reason,
                 "is_active": u.is_active,
                 "created_at": u.created_at.isoformat(),
+                "first_name": first_name,
+                "last_name": last_name,
+                "nombre": f"{first_name} {last_name}".strip() or None,
+                "phone": profile.phone if profile else '',
             })
 
         return Response({
@@ -607,7 +614,12 @@ class UserViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        qs = User.objects.select_related('role').filter(role__name__iexact=role_name).order_by('-created_at')
+        qs = (
+            User.objects
+            .select_related('role', 'profile')
+            .filter(role__name__iexact=role_name)
+            .order_by('-created_at')
+        )
 
         # Filtros adicionales opcionales
         account_status = request.query_params.get('account_status')
@@ -615,10 +627,20 @@ class UserViewSet(viewsets.ModelViewSet):
         if account_status:
             qs = qs.filter(account_status=account_status)
         if search:
-            qs = qs.filter(email__icontains=search)
+            # Busca por email, nombre o apellido
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(email__icontains=search)
+                | Q(profile__first_name__icontains=search)
+                | Q(profile__last_name__icontains=search)
+            )
 
         data = []
         for u in qs:
+            profile = getattr(u, 'profile', None)
+            first_name = profile.first_name if profile else ''
+            last_name = profile.last_name if profile else ''
+            nombre_completo = f"{first_name} {last_name}".strip()
             data.append({
                 "id": str(u.id),
                 "email": u.email,
@@ -627,6 +649,10 @@ class UserViewSet(viewsets.ModelViewSet):
                 "suspended_reason": u.suspended_reason,
                 "is_active": u.is_active,
                 "created_at": u.created_at.isoformat(),
+                "first_name": first_name,
+                "last_name": last_name,
+                "nombre": nombre_completo or None,
+                "phone": profile.phone if profile else '',
             })
         return Response(data, status=status.HTTP_200_OK)
 
@@ -1194,19 +1220,21 @@ class AdminUserManagementView(APIView):
                 user.save()
 
                 # 2. Actualizar UserProfile local (el signal ya lo creó automáticamente)
+                from datetime import date as _date_cls
+                dob_fallback = data.get('date_of_birth') or _date_cls(2000, 1, 1)
                 profile, _ = UserProfile.objects.get_or_create(
                     user=user,
                     defaults={
                         'first_name': '',
                         'last_name': '',
                         'phone': '',
-                        'date_of_birth': data['date_of_birth'],
+                        'date_of_birth': dob_fallback,
                     }
                 )
                 profile.first_name = data['first_name']
-                profile.last_name = data['last_name']
-                profile.phone = data['phone']
-                profile.date_of_birth = data['date_of_birth']
+                profile.last_name = data.get('last_name') or ''
+                profile.phone = data.get('phone') or ''
+                profile.date_of_birth = data.get('date_of_birth') or dob_fallback
                 profile.save()
 
                 # 3. Token interno para llamar a service-profiles

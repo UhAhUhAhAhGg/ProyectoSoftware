@@ -111,14 +111,27 @@ export const NotificationProvider = ({ children }) => {
   }, []);
 
   // Alternar notificaciones de una categoría
-  const toggleCategoria = useCallback(async (categoria) => {
+  // Acepta slug (key local) y opcionalmente category_id (UUID real del backend)
+  const toggleCategoria = useCallback(async (categoriaSlug, categoriaId) => {
     const nuevasPreferencias = {
       ...preferencias,
       categorias: {
-        ...preferencias.categorias,
-        [categoria]: !preferencias.categorias[categoria],
+        ...(preferencias.categorias || {}),
+        [categoriaSlug]: !preferencias.categorias?.[categoriaSlug],
       },
     };
+    // Tambien guardamos un map slug -> uuid para que el backend reciba IDs
+    if (categoriaId) {
+      nuevasPreferencias.categoriasIds = {
+        ...(preferencias.categoriasIds || {}),
+        [categoriaSlug]: categoriaId,
+      };
+    }
+    // Persistir en localStorage para que ExplorarEventos/Recommendations
+    // puedan leerlo sin esperar al backend
+    try {
+      localStorage.setItem('user_categorias_pref', JSON.stringify(nuevasPreferencias.categorias));
+    } catch {}
     await actualizarPreferencias(nuevasPreferencias);
   }, [preferencias, actualizarPreferencias]);
 

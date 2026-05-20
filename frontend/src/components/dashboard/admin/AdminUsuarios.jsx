@@ -61,9 +61,12 @@ function AdminUsuarios({ module }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [showCreateConfirm, setShowCreateConfirm] = useState(false);
   const [createForm, setCreateForm] = useState({
     email: '',
     password: '',
+    password_confirm: '',
     first_name: '',
     last_name: '',
     phone: '',
@@ -79,6 +82,7 @@ function AdminUsuarios({ module }) {
     setCreateForm({
       email: '',
       password: '',
+      password_confirm: '',
       first_name: '',
       last_name: '',
       phone: '',
@@ -89,24 +93,47 @@ function AdminUsuarios({ module }) {
       bank_account: '',
     });
     setCreateError('');
+    setShowCreatePassword(false);
+    setShowCreateConfirm(false);
   };
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
     setCreateError('');
     if (!createForm.email || !createForm.password || !createForm.first_name) {
-      setCreateError('Email, password y nombre son obligatorios.');
+      setCreateError('Email, contraseña y nombre son obligatorios.');
+      return;
+    }
+    // Validar contraseña (8+ chars, 1 mayúscula, 1 número) antes de enviar
+    if (createForm.password.length < 8) {
+      setCreateError('La contraseña debe tener al menos 8 caracteres.');
+      return;
+    }
+    if (!/[A-Z]/.test(createForm.password)) {
+      setCreateError('La contraseña debe contener al menos una mayúscula.');
+      return;
+    }
+    if (!/\d/.test(createForm.password)) {
+      setCreateError('La contraseña debe contener al menos un número.');
+      return;
+    }
+    if (createForm.password !== createForm.password_confirm) {
+      setCreateError('Las contraseñas no coinciden.');
       return;
     }
     setCreating(true);
     try {
       const payload = { ...createForm };
+      // No enviar el campo de confirmacion
+      delete payload.password_confirm;
       // Solo enviar campos de Promotor si aplica
       if (payload.role_name !== 'Promotor') {
         delete payload.company_name;
         delete payload.comercial_nit;
         delete payload.bank_account;
       }
+      // Si fecha esta vacia, no la mandamos (el backend la hace opcional)
+      if (!payload.date_of_birth) delete payload.date_of_birth;
       await userManagementService.crearUsuario(payload);
       showMessage(`✅ ${payload.role_name} ${payload.email} creado correctamente`, 'success');
       setActionHistory((prev) => [
@@ -711,121 +738,179 @@ const cambiarPagina = (numeroPagina) => {
 
       {/* TIC-438: Modal para crear nuevo Promotor/Comprador */}
       {createOpen && (
-        <div className="modal-overlay" onClick={() => setCreateOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
-            <div className="modal-header">
-              <h3>➕ Crear nueva cuenta ({createForm.role_name})</h3>
-              <button className="modal-close" onClick={() => setCreateOpen(false)}>×</button>
+        <div className="create-user-overlay" onClick={() => setCreateOpen(false)}>
+          <div className="create-user-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="create-user-header">
+              <h3>
+                <span className="create-user-icon">{createForm.role_name === 'Promotor' ? '📢' : '🛍️'}</span>
+                Crear nueva cuenta ({createForm.role_name})
+              </h3>
+              <button className="create-user-close" onClick={() => setCreateOpen(false)} aria-label="Cerrar">×</button>
             </div>
             <form onSubmit={handleCreateUser}>
-              <div className="modal-body">
-                {createError && <div className="alert alert-error" style={{ marginBottom: 12 }}>{createError}</div>}
-
-                <label>Rol</label>
-                <select
-                  value={createForm.role_name}
-                  onChange={(e) => setCreateForm({ ...createForm, role_name: e.target.value })}
-                  disabled={module === 'promotores' || module === 'compradores'}
-                >
-                  <option value="Comprador">Comprador</option>
-                  <option value="Promotor">Promotor</option>
-                </select>
-
-                <label>Email *</label>
-                <input
-                  type="email"
-                  value={createForm.email}
-                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                  required
-                />
-
-                <label>Contraseña *</label>
-                <input
-                  type="password"
-                  value={createForm.password}
-                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                  required
-                  minLength={6}
-                />
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div>
-                    <label>Nombre *</label>
-                    <input
-                      type="text"
-                      value={createForm.first_name}
-                      onChange={(e) => setCreateForm({ ...createForm, first_name: e.target.value })}
-                      required
-                    />
+              <div className="create-user-body">
+                {createError && (
+                  <div className="create-user-error">
+                    <span>⚠️</span> {createError}
                   </div>
-                  <div>
-                    <label>Apellido</label>
-                    <input
-                      type="text"
-                      value={createForm.last_name}
-                      onChange={(e) => setCreateForm({ ...createForm, last_name: e.target.value })}
-                    />
+                )}
+
+                <div className="create-user-section">
+                  <h4>Datos de acceso</h4>
+                  <div className="create-user-grid">
+                    <div className="create-user-field">
+                      <label>Rol</label>
+                      <select
+                        value={createForm.role_name}
+                        onChange={(e) => setCreateForm({ ...createForm, role_name: e.target.value })}
+                        disabled={module === 'promotores' || module === 'compradores'}
+                      >
+                        <option value="Comprador">Comprador</option>
+                        <option value="Promotor">Promotor</option>
+                      </select>
+                    </div>
+                    <div className="create-user-field create-user-field-full">
+                      <label>Email <span className="req">*</span></label>
+                      <input
+                        type="email"
+                        placeholder="correo@ejemplo.com"
+                        value={createForm.email}
+                        onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="create-user-field create-user-field-full">
+                      <label>Contraseña <span className="req">*</span></label>
+                      <div className="create-user-password-wrap">
+                        <input
+                          type={showCreatePassword ? 'text' : 'password'}
+                          placeholder="Mín. 8 caracteres, 1 mayúscula, 1 número"
+                          value={createForm.password}
+                          onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                          required
+                          minLength={8}
+                        />
+                        <button
+                          type="button"
+                          className="create-user-eye"
+                          onClick={() => setShowCreatePassword((v) => !v)}
+                          aria-label={showCreatePassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        >
+                          {showCreatePassword ? '🙈' : '👁️'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="create-user-field create-user-field-full">
+                      <label>Confirmar contraseña <span className="req">*</span></label>
+                      <div className="create-user-password-wrap">
+                        <input
+                          type={showCreateConfirm ? 'text' : 'password'}
+                          placeholder="Repite la contraseña"
+                          value={createForm.password_confirm}
+                          onChange={(e) => setCreateForm({ ...createForm, password_confirm: e.target.value })}
+                          required
+                        />
+                        <button
+                          type="button"
+                          className="create-user-eye"
+                          onClick={() => setShowCreateConfirm((v) => !v)}
+                          aria-label={showCreateConfirm ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        >
+                          {showCreateConfirm ? '🙈' : '👁️'}
+                        </button>
+                      </div>
+                      {createForm.password_confirm && createForm.password !== createForm.password_confirm && (
+                        <small style={{ color: '#fca5a5', fontSize: '0.78rem', marginTop: 2 }}>
+                          Las contraseñas no coinciden
+                        </small>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div>
-                    <label>Teléfono</label>
-                    <input
-                      type="text"
-                      value={createForm.phone}
-                      onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label>Fecha de nacimiento</label>
-                    <input
-                      type="date"
-                      value={createForm.date_of_birth}
-                      onChange={(e) => setCreateForm({ ...createForm, date_of_birth: e.target.value })}
-                    />
+                <div className="create-user-section">
+                  <h4>Datos personales</h4>
+                  <div className="create-user-grid">
+                    <div className="create-user-field">
+                      <label>Nombre <span className="req">*</span></label>
+                      <input
+                        type="text"
+                        placeholder="Nombre"
+                        value={createForm.first_name}
+                        onChange={(e) => setCreateForm({ ...createForm, first_name: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="create-user-field">
+                      <label>Apellido</label>
+                      <input
+                        type="text"
+                        placeholder="Apellido"
+                        value={createForm.last_name}
+                        onChange={(e) => setCreateForm({ ...createForm, last_name: e.target.value })}
+                      />
+                    </div>
+                    <div className="create-user-field">
+                      <label>Teléfono</label>
+                      <input
+                        type="text"
+                        placeholder="Ej. 76543210"
+                        value={createForm.phone}
+                        onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                      />
+                    </div>
+                    <div className="create-user-field">
+                      <label>Fecha de nacimiento</label>
+                      <input
+                        type="date"
+                        value={createForm.date_of_birth}
+                        onChange={(e) => setCreateForm({ ...createForm, date_of_birth: e.target.value })}
+                      />
+                    </div>
                   </div>
                 </div>
 
                 {createForm.role_name === 'Promotor' && (
-                  <>
-                    <hr style={{ margin: '14px 0', border: 'none', borderTop: '1px solid #262c3a' }} />
-                    <p style={{ fontSize: '0.85rem', color: '#9aa3b2', marginBottom: 8 }}>
-                      Datos comerciales (requeridos para Promotor)
-                    </p>
-                    <label>Razón social</label>
-                    <input
-                      type="text"
-                      value={createForm.company_name}
-                      onChange={(e) => setCreateForm({ ...createForm, company_name: e.target.value })}
-                    />
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      <div>
+                  <div className="create-user-section">
+                    <h4>Datos comerciales <span className="section-hint">(requeridos para Promotor)</span></h4>
+                    <div className="create-user-grid">
+                      <div className="create-user-field create-user-field-full">
+                        <label>Razón social</label>
+                        <input
+                          type="text"
+                          placeholder="Nombre de la empresa"
+                          value={createForm.company_name}
+                          onChange={(e) => setCreateForm({ ...createForm, company_name: e.target.value })}
+                        />
+                      </div>
+                      <div className="create-user-field">
                         <label>NIT comercial</label>
                         <input
                           type="text"
+                          placeholder="NIT"
                           value={createForm.comercial_nit}
                           onChange={(e) => setCreateForm({ ...createForm, comercial_nit: e.target.value })}
                         />
                       </div>
-                      <div>
+                      <div className="create-user-field">
                         <label>Cuenta bancaria</label>
                         <input
                           type="text"
+                          placeholder="Número de cuenta"
                           value={createForm.bank_account}
                           onChange={(e) => setCreateForm({ ...createForm, bank_account: e.target.value })}
                         />
                       </div>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)} disabled={creating}>
+              <div className="create-user-footer">
+                <button type="button" className="create-user-btn create-user-btn-secondary" onClick={() => setCreateOpen(false)} disabled={creating}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={creating}>
-                  {creating ? 'Creando...' : `Crear ${createForm.role_name}`}
+                <button type="submit" className="create-user-btn create-user-btn-primary" disabled={creating}>
+                  {creating ? '⏳ Creando...' : `➕ Crear ${createForm.role_name}`}
                 </button>
               </div>
             </form>

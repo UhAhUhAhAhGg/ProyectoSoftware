@@ -118,6 +118,34 @@
   letter-spacing: 0.04em;
 }
 
+.sidebar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sidebar-collapse-btn {
+  background: transparent;
+  border: 1px solid var(--admin-border);
+  color: var(--admin-text-dim);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.sidebar-collapse-btn:hover {
+  background: var(--admin-surface-2);
+  color: var(--admin-primary);
+  border-color: var(--admin-primary);
+}
+
 .sidebar-close {
   background: none;
   border: none;
@@ -126,6 +154,76 @@
   cursor: pointer;
   display: none;
   line-height: 1;
+}
+
+/* ─── Modo colapsado: solo iconos visibles ─────────────────────────────── */
+.admin-sidebar.collapsed {
+  width: 68px;
+}
+
+.admin-sidebar.collapsed .admin-logo-btn {
+  justify-content: center;
+}
+
+.admin-sidebar.collapsed .admin-profile {
+  flex-direction: column;
+  padding: 12px 8px;
+  text-align: center;
+}
+
+.admin-sidebar.collapsed .profile-info,
+.admin-sidebar.collapsed .superadmin-access,
+.admin-sidebar.collapsed .nav-section h3,
+.admin-sidebar.collapsed .nav-label,
+.admin-sidebar.collapsed .chevron,
+.admin-sidebar.collapsed .logout-btn span,
+.admin-sidebar.collapsed .nav-submenu {
+  display: none;
+}
+
+.admin-sidebar.collapsed .nav-link,
+.admin-sidebar.collapsed .nav-collapse {
+  justify-content: center;
+  padding: 10px 8px;
+}
+
+.admin-sidebar.collapsed .nav-link .nav-icon,
+.admin-sidebar.collapsed .nav-collapse .nav-icon {
+  font-size: 1.25rem;
+  width: auto;
+}
+
+.admin-sidebar.collapsed .logout-btn {
+  padding: 9px 8px;
+}
+
+.admin-sidebar.collapsed .logout-btn::before {
+  content: '🚪';
+  font-size: 1.1rem;
+}
+
+/* Tooltip al hover sobre nav cuando esta colapsado */
+.admin-sidebar.collapsed li,
+.admin-sidebar.collapsed .nav-collapse {
+  position: relative;
+}
+
+.admin-sidebar.collapsed li > button:hover::after,
+.admin-sidebar.collapsed .nav-collapse:hover::after {
+  content: attr(data-label);
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--admin-surface-2);
+  color: var(--admin-text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  border: 1px solid var(--admin-border);
+  z-index: 100;
+  pointer-events: none;
 }
 
 .admin-profile {

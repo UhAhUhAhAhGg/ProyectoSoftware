@@ -15,6 +15,9 @@ function AdminLogin() {
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
   const { darkMode, toggleDarkMode } = useTheme();
+  // Hydration-safe: el theme se aplica solo despues de montar en el cliente
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const { login, isAuthenticated, isAdministrador, sessionExpired, clearSessionExpired } = useAuth();
   const router = useRouter();
@@ -72,8 +75,8 @@ function AdminLogin() {
 
   return (
     <div className="admin-login-container">
-      <button onClick={toggleDarkMode} className="dark-mode-toggle">
-        {darkMode ? '☀️ Modo Claro' : '🌙 Modo Oscuro'}
+      <button onClick={toggleDarkMode} className="dark-mode-toggle" suppressHydrationWarning>
+        {mounted ? (darkMode ? '☀️ Modo Claro' : '🌙 Modo Oscuro') : '🌙 Modo Oscuro'}
       </button>
 
       <Link href="/" className="back-to-home">

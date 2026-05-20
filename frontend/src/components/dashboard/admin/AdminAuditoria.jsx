@@ -65,8 +65,9 @@ function AdminAuditoria() {
         ordering
       });
 
+      // Backend devuelve { status, total, page, page_size, total_pages, results }
       setLogs(resp.results || resp || []);
-      setTotal(resp.count || (resp.results ? resp.results.length : logs.length));
+      setTotal(resp.total ?? resp.count ?? (resp.results ? resp.results.length : 0));
     } catch (err) {
       console.error('Error cargando logs de auditoría', err);
       setError('No se pudieron cargar los registros. Intente nuevamente.');
@@ -89,8 +90,23 @@ function AdminAuditoria() {
   return (
     <div className="admin-audit-container">
       <div className="audit-header">
-        <h2>Historial de Auditoría</h2>
-        <p className="muted">Registro automático de cambios realizados sobre eventos</p>
+        <div>
+          <h2>Historial de Auditoría</h2>
+          <p className="muted">Registro automático de cambios realizados sobre eventos</p>
+        </div>
+        <button
+          type="button"
+          className="btn-export-csv"
+          onClick={async () => {
+            try {
+              await adminAuditService.exportToCsv();
+            } catch (err) {
+              alert('No se pudo exportar el CSV: ' + (err.message || ''));
+            }
+          }}
+        >
+          📥 Exportar CSV
+        </button>
       </div>
 
       <div className="audit-filters">
@@ -106,9 +122,12 @@ function AdminAuditoria() {
           <label>Tipo de acción</label>
           <select value={actionType} onChange={e => { setPage(1); setActionType(e.target.value); }}>
             <option value="">Todos</option>
-            {actionTypes.map(t => (
-              <option key={t} value={t}>{t}</option>
-            ))}
+            {actionTypes.map((t) => {
+              // soporta tanto strings como {value, label}
+              const value = typeof t === 'string' ? t : t.value;
+              const label = typeof t === 'string' ? t : t.label;
+              return <option key={value} value={value}>{label}</option>;
+            })}
           </select>
         </div>
 
@@ -158,15 +177,33 @@ function AdminAuditoria() {
               {logs.length === 0 && (
                 <tr><td colSpan={5} className="no-results">No se encontraron registros</td></tr>
               )}
-              {logs.map((log) => (
-                <tr key={log.id} className={log.action_type === 'suspended' ? 'row-muted' : ''}>
-                  <td>{new Date(log.timestamp).toLocaleString()}</td>
-                  <td>{log.admin_name || (log.admin && (log.admin.name || log.admin.email)) || 'Sistema'}</td>
-                  <td>{log.action_type}</td>
-                  <td>{log.event_title || (log.event && log.event.name) || '-'}</td>
-                  <td><div className="details-cell">{log.detail || log.changes || JSON.stringify(log.meta || {})}</div></td>
-                </tr>
-              ))}
+              {logs.map((log) => {
+                // Backend devuelve: id, event_id, event_name, admin_id, admin_email,
+                // action, reason, changed_fields, old_status, new_status, created_at
+                const actionLabels = {
+                  edit: 'Edición',
+                  deactivate: 'Baja',
+                  reactivate: 'Reactivación',
+                };
+                const cambiosTexto = log.changed_fields
+                  ? Object.entries(log.changed_fields)
+                      .map(([campo, vals]) => `${campo}: "${vals.antes ?? '-'}" → "${vals.despues ?? '-'}"`)
+                      .join(' | ')
+                  : log.reason || '-';
+                return (
+                  <tr key={log.id}>
+                    <td>{new Date(log.created_at).toLocaleString()}</td>
+                    <td>{log.admin_email || 'Sistema'}</td>
+                    <td>
+                      <span className={`action-pill action-${log.action}`}>
+                        {actionLabels[log.action] || log.action}
+                      </span>
+                    </td>
+                    <td>{log.event_name || '-'}</td>
+                    <td><div className="details-cell">{cambiosTexto}</div></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
