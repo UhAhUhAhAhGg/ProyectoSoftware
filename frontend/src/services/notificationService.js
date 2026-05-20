@@ -99,47 +99,108 @@ export const notificationService = {
     }
   },
 
-  // Obtener preferencias de notificación del usuario
+  // TIC-377: Obtener preferencias del usuario desde service-events.
+  // El backend devuelve { status, results: [{id, category_id, category_name, enabled}] }
+  // Lo normalizamos al shape que usa el frontend: { categorias: {slug: bool}, categoriasIds: {slug: uuid} }
   getPreferencias: async () => {
+    const userId = getCurrentUserId();
+    const defaults = {
+      email_enabled: true,
+      in_app_enabled: true,
+      categorias: {},
+      categoriasIds: {},
+    };
+    if (!userId) return defaults;
+
     try {
-      const res = await apiFetch(`${AUTH_URL}/api/v1/users/me/notification-preferences/`);
-      if (!res.ok) throw new Error('Endpoint no disponible');
-      return await res.json();
+      const res = await apiFetch(
+        `${EVENTS_URL}/api/v1/users/${userId}/notification-preferences/`
+      );
+      if (!res.ok) {
+        // Fallback a localStorage si el backend falla
+        try {
+          const local = JSON.parse(localStorage.getItem('user_categorias_pref') || '{}');
+          return { ...defaults, categorias: local };
+        } catch {
+          return defaults;
+        }
+      }
+      const data = await res.json();
+      const results = data.results || [];
+
+      // Convertir [{category_id, category_name, enabled}] -> { categorias: {slug: bool}, categoriasIds }
+      const categorias = {};
+      const categoriasIds = {};
+      for (const p of results) {
+        const slug = (p.category_name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        if (slug) {
+          categorias[slug] = !!p.enabled;
+          categoriasIds[slug] = p.category_id;
+        }
+      }
+      // Sincronizar con localStorage para que ExplorarEventos lo lea
+      try {
+        localStorage.setItem('user_categorias_pref', JSON.stringify(categorias));
+      } catch {}
+
+      return { ...defaults, categorias, categoriasIds };
     } catch (error) {
-      console.warn('Preferencias no disponibles (usando defaults):', error?.message);
-      // Retornar preferencias por defecto si el endpoint no existe
-      return {
-        email_enabled: true,
-        in_app_enabled: true,
-        categorias: {
-          futbol: true,
-          cine: true,
-          teatro: true,
-          musica: true,
-          deportes: true,
-          conciertos: true,
-          otros: true,
-        },
-      };
+      console.warn('Preferencias no disponibles (usando localStorage):', error?.message);
+      try {
+        const local = JSON.parse(localStorage.getItem('user_categorias_pref') || '{}');
+        return { ...defaults, categorias: local };
+      } catch {
+        return defaults;
+      }
     }
   },
 
-  // Actualizar preferencias de notificación
+  // TIC-377: Actualizar preferencias en service-events.
+  // Recibe el shape del frontend { categorias: {slug: bool}, categoriasIds: {slug: uuid} }
+  // y lo convierte a {preferences: [{category_id, enabled}]} que espera el backend.
   actualizarPreferencias: async (preferencias) => {
+    const userId = getCurrentUserId();
+    if (!userId) {
+      console.warn('No hay user_id — preferencias solo se guardan localmente');
+      return preferencias;
+    }
+
+    // Construir lista de {category_id, enabled} para todos los slugs con UUID conocido
+    const cats = preferencias.categorias || {};
+    const ids = preferencias.categoriasIds || {};
+    const prefs = [];
+    for (const slug of Object.keys(cats)) {
+      const uuid = ids[slug];
+      if (uuid) {
+        prefs.push({ category_id: uuid, enabled: !!cats[slug] });
+      }
+    }
+
+    if (prefs.length === 0) {
+      // No tenemos los UUIDs todavia — el toggle se guardo en localStorage,
+      // pero no podemos enviar al backend hasta que NotificationPreferences.jsx
+      // cargue las categorias (entonces va a venir con categoriasIds)
+      console.warn('Sin UUIDs de categoria — solo localStorage. Recarga el perfil para sincronizar.');
+      return preferencias;
+    }
+
     try {
       const res = await apiFetch(
-        `${AUTH_URL}/api/v1/users/me/notification-preferences/`,
+        `${EVENTS_URL}/api/v1/users/${userId}/notification-preferences/`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(preferencias),
+          body: JSON.stringify({ preferences: prefs }),
         }
       );
-      if (!res.ok) throw new Error('Error actualizando preferencias');
-      return await res.json();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || err.message || 'Error actualizando preferencias');
+      }
+      return preferencias;
     } catch (error) {
-      console.error('Error en actualizarPreferencias:', error);
-      // Si el endpoint no existe, retornar las preferencias que se intentaron guardar
+      console.error('Error en actualizarPreferencias:', error?.message);
+      // Aun asi devolvemos las preferencias para que el UI se mantenga consistente
       return preferencias;
     }
   },

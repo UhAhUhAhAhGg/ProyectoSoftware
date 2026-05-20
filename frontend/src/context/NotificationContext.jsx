@@ -29,24 +29,43 @@ export const NotificationProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Cargar preferencias al montar el componente
+  // Cargar preferencias + categorias al montar
+  // Importante: tambien cargamos TODAS las categorias del backend para tener
+  // los UUIDs disponibles en categoriasIds, asi cualquier toggle puede
+  // sincronizar con el backend (sin esperar a que el usuario las vea en el perfil)
   useEffect(() => {
-    const cargarPreferencias = async () => {
+    const cargar = async () => {
       try {
         setLoading(true);
-        const data = await notificationService.getPreferencias();
-        if (data) {
-          setPreferencias(data);
+        const [prefsData, cats] = await Promise.all([
+          notificationService.getPreferencias().catch(() => null),
+          // Cargar categorias para tener TODOS los slug->uuid
+          import('../services/eventosService').then(m => m.eventosService.getCategorias()).catch(() => []),
+        ]);
+
+        // Construir mapping completo slug -> uuid de todas las categorias
+        const allIds = {};
+        for (const c of (Array.isArray(cats) ? cats : [])) {
+          const slug = (c.name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+          if (slug) allIds[slug] = c.id;
         }
+
+        const merged = {
+          email_enabled: prefsData?.email_enabled ?? true,
+          in_app_enabled: prefsData?.in_app_enabled ?? true,
+          categorias: prefsData?.categorias || {},
+          // Merge: UUIDs del backend (si vinieron) + TODOS los UUIDs disponibles
+          categoriasIds: { ...allIds, ...(prefsData?.categoriasIds || {}) },
+        };
+        setPreferencias(merged);
       } catch (err) {
         console.error('Error cargando preferencias:', err);
-        // Continuar con valores por defecto
       } finally {
         setLoading(false);
       }
     };
 
-    cargarPreferencias();
+    cargar();
   }, []);
 
   // Cargar notificaciones
