@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '../context/AuthContext';
+import { userManagementService } from '../services/userManagementService';
+import { eventosService } from '../services/eventosService';
 import './AdminDashboard.css';
 
-// Importar módulos de administración
+// Módulos de administración
 import AdminUsuarios from '../components/dashboard/admin/AdminUsuarios';
 import AdminEventos from '../components/dashboard/admin/AdminEventos';
 import AdminConfiguracion from '../components/dashboard/admin/AdminConfiguracion';
@@ -15,13 +16,35 @@ import AdminAuditoria from '../components/dashboard/admin/AdminAuditoria';
 function AdminDashboard() {
   const { user, isAuthenticated, isAdministrador, logout } = useAuth();
   const router = useRouter();
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    if (typeof window === 'undefined') return true;
-    return window.innerWidth > 768;
-  });
-  const [activeSection, setActiveSection] = useState('home');
 
-  // Redirigir si no es admin — protección de ruta
+  // Hydration-safe: arrancamos cerrado y luego ajustamos al cliente
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeSection, setActiveSection] = useState('home');
+  const [usuariosMenuOpen, setUsuariosMenuOpen] = useState(true);
+  const [collapsed, setCollapsed] = useState(false); // Sidebar colapsado (solo iconos) en desktop
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    if (typeof window !== 'undefined') {
+      setSidebarOpen(window.innerWidth > 768);
+      // Recordar preferencia del usuario entre sesiones
+      const saved = localStorage.getItem('adminSidebarCollapsed');
+      if (saved === 'true') setCollapsed(true);
+    }
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('adminSidebarCollapsed', String(next));
+      }
+      return next;
+    });
+  };
+
+  // Protección de ruta
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace('/admin/login');
@@ -32,199 +55,254 @@ function AdminDashboard() {
 
   if (!user) {
     return (
-      <div className="admin-loading">
+      <div className="admin-loading" suppressHydrationWarning>
         <div className="spinner"></div>
         <p>Cargando panel de administración...</p>
       </div>
     );
   }
 
-  const menuItems = [
-    {
-      path: '/admin/usuarios',
-      icon: '👥',
-      label: 'Gestionar Usuarios',
-      badge: null,
-      section: 'usuarios'
-    },
-    {
-      path: '/admin/promotores',
-      icon: '📢',
-      label: 'Promotores',
-      badge: null,
-      section: 'usuarios'
-    },
-    {
-      path: '/admin/compradores',
-      icon: '🛍️',
-      label: 'Compradores',
-      badge: null,
-      section: 'usuarios'
-    },
-    {
-      path: '/admin/administradores',
-      icon: '⚙️',
-      label: 'Administradores',
-      badge: null,
-      section: 'usuarios'
-    },
-    {
-      path: '/admin/eventos',
-      icon: '📅',
-      label: 'Gestión de Eventos',
-      badge: null,
-      section: 'eventos'
-    },
-    {
-      path: '/admin/configuracion',
-      icon: '⚙️',
-      label: 'Configuración Global',
-      badge: null,
-      section: 'config'
-    },
-    {
-      path: '/admin/auditoria',
-      icon: '📋',
-      label: 'Log de Auditoria',
-      badge: null,
-      section: 'auditoria'
-    }
+  // Submenú de Gestionar Usuarios
+  // NOTA: "Administradores" se gestiona desde el panel SuperAdmin (TIC-401),
+  // no aparece aqui para un Admin estandar.
+  const usuariosSubmenu = [
+    { key: 'promotores', icon: '📢', label: 'Promotores' },
+    { key: 'compradores', icon: '🛍️', label: 'Compradores' },
   ];
 
-  const isActive = (section) => activeSection === section;
+  const handleSelectSection = (key) => {
+    setActiveSection(key);
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      setSidebarOpen(false);
+    }
+  };
+
+  const sectionTitles = {
+    home: 'Panel Principal',
+    promotores: 'Gestión de Promotores',
+    compradores: 'Gestión de Compradores',
+    eventos: 'Gestión de Eventos',
+    configuracion: 'Configuración Global',
+    auditoria: 'Log de Auditoría',
+  };
 
   return (
-    <div className="admin-dashboard">
-      {/* Overlay para móvil */}
-      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
+    <div className={`admin-dashboard ${collapsed ? 'sidebar-collapsed' : ''}`}>
+      {sidebarOpen && mounted && (
+        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>
+      )}
 
-      {/* Sidebar - Estilo como en la imagen */}
-      <aside className={`admin-sidebar ${sidebarOpen ? 'open' : ''}`}>
+      {/* Sidebar */}
+      <aside
+        className={`admin-sidebar ${sidebarOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}
+        suppressHydrationWarning
+      >
         <div className="sidebar-header">
-          <div className="admin-logo">
+          {/* Logo clickeable → home */}
+          <button
+            type="button"
+            className="admin-logo-btn"
+            onClick={() => handleSelectSection('home')}
+            title="Ir al panel principal"
+          >
             <span className="logo-icon">🎫</span>
-            <h2>TicketGo</h2>
-            <span className="admin-badge">Admin</span>
+            {!collapsed && <h2>TicketGo</h2>}
+            {!collapsed && <span className="admin-badge">Admin</span>}
+          </button>
+          <div className="sidebar-header-actions">
+            {/* Boton colapsar (solo desktop) */}
+            <button
+              className="sidebar-collapse-btn"
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+              title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+            >
+              {collapsed ? '»' : '«'}
+            </button>
+            {/* Boton cerrar (solo mobile) */}
+            <button
+              className="sidebar-close"
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Cerrar menú"
+            >
+              ×
+            </button>
           </div>
-          <button className="sidebar-close" onClick={() => setSidebarOpen(false)}>×</button>
         </div>
 
         <div className="admin-profile">
-          <div className="profile-avatar">
-            {user.nombre?.charAt(0) || 'A'}
-          </div>
+          <div className="profile-avatar">{user.nombre?.charAt(0) || 'A'}</div>
           <div className="profile-info">
             <p className="profile-name">{user.nombre}</p>
-            <p className="profile-role">Administrador</p>
+            <p className="profile-role">
+              {user.is_superadmin ? 'SuperAdministrador' : 'Administrador'}
+            </p>
           </div>
         </div>
 
+        {/* Acceso al panel SuperAdmin (solo si is_superadmin) */}
+        {user.is_superadmin && (
+          <div className="superadmin-access">
+            <button
+              type="button"
+              className="superadmin-access-btn"
+              onClick={() => router.push('/superadmin/dashboard')}
+              title="Ir al panel SuperAdmin"
+            >
+              👑 Panel SuperAdmin
+            </button>
+          </div>
+        )}
+
         <nav className="sidebar-nav">
-          {/* Sección: Gestión de Usuarios */}
+          {/* Inicio */}
           <div className="nav-section">
-            <h3>Gestionar Usuarios</h3>
             <ul>
-              {menuItems.filter(item => item.section === 'usuarios').map(item => (
-                <li key={item.path} className={isActive(item.section + '_' + item.path.split('/').pop()) ? 'active' : ''}>
-                  <button onClick={() => { setActiveSection(item.path.split('/').pop()); if (typeof window !== 'undefined' && window.innerWidth <= 768) setSidebarOpen(false); }} style={{background:'none',border:'none',cursor:'pointer',width:'100%',textAlign:'left',padding:0,color:'inherit'}}>
-                    <span className="nav-icon">{item.icon}</span>
-                    <span className="nav-label">{item.label}</span>
-                  </button>
-                </li>
-              ))}
+              <li className={activeSection === 'home' ? 'active' : ''}>
+                <button
+                  type="button"
+                  className="nav-link"
+                  onClick={() => handleSelectSection('home')}
+                >
+                  <span className="nav-icon">🏠</span>
+                  <span className="nav-label">Inicio</span>
+                </button>
+              </li>
             </ul>
           </div>
 
-          {/* Sección: Gestión de Eventos */}
+          {/* Gestión de Usuarios (colapsable) */}
+          <div className="nav-section">
+            <button
+              type="button"
+              className={`nav-collapse ${usuariosMenuOpen ? 'open' : ''}`}
+              onClick={() => setUsuariosMenuOpen((v) => !v)}
+            >
+              <span className="nav-icon">👥</span>
+              <span className="nav-label">Gestionar Usuarios</span>
+              <span className="chevron">{usuariosMenuOpen ? '▾' : '▸'}</span>
+            </button>
+            {usuariosMenuOpen && (
+              <ul className="nav-submenu">
+                {usuariosSubmenu.map((item) => (
+                  <li
+                    key={item.key}
+                    className={activeSection === item.key ? 'active' : ''}
+                  >
+                    <button
+                      type="button"
+                      className="nav-link sub"
+                      onClick={() => handleSelectSection(item.key)}
+                    >
+                      <span className="nav-icon">{item.icon}</span>
+                      <span className="nav-label">{item.label}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Gestión de Eventos */}
           <div className="nav-section">
             <h3>Gestión de Eventos</h3>
             <ul>
-              {menuItems.filter(item => item.section === 'eventos').map(item => (
-                <li key={item.path} className={isActive(item.path.split('/').pop()) ? 'active' : ''}>
-                  <button onClick={() => { setActiveSection(item.path.split('/').pop()); if (typeof window !== 'undefined' && window.innerWidth <= 768) setSidebarOpen(false); }} style={{background:'none',border:'none',cursor:'pointer',width:'100%',textAlign:'left',padding:0,color:'inherit'}}>
-                    <span className="nav-icon">{item.icon}</span>
-                    <span className="nav-label">{item.label}</span>
-                  </button>
-                </li>
-              ))}
+              <li className={activeSection === 'eventos' ? 'active' : ''}>
+                <button
+                  type="button"
+                  className="nav-link"
+                  onClick={() => handleSelectSection('eventos')}
+                >
+                  <span className="nav-icon">📅</span>
+                  <span className="nav-label">Gestión de Eventos</span>
+                </button>
+              </li>
             </ul>
           </div>
 
-          {/* Sección: Configuración */}
+          {/* Configuración Global */}
           <div className="nav-section">
             <h3>Configuración Global</h3>
             <ul>
-              {menuItems.filter(item => item.section === 'config').map(item => (
-                <li key={item.path} className={isActive(item.path.split('/').pop()) ? 'active' : ''}>
-                  <button onClick={() => { setActiveSection(item.path.split('/').pop()); if (typeof window !== 'undefined' && window.innerWidth <= 768) setSidebarOpen(false); }} style={{background:'none',border:'none',cursor:'pointer',width:'100%',textAlign:'left',padding:0,color:'inherit'}}>
-                    <span className="nav-icon">{item.icon}</span>
-                    <span className="nav-label">{item.label}</span>
-                  </button>
-                </li>
-              ))}
+              <li className={activeSection === 'configuracion' ? 'active' : ''}>
+                <button
+                  type="button"
+                  className="nav-link"
+                  onClick={() => handleSelectSection('configuracion')}
+                >
+                  <span className="nav-icon">⚙️</span>
+                  <span className="nav-label">Configuración Global</span>
+                </button>
+              </li>
             </ul>
           </div>
 
-          {/* Sección: Auditoría */}
+          {/* Auditoría */}
           <div className="nav-section">
-            <h3>Log de Auditoria</h3>
+            <h3>Log de Auditoría</h3>
             <ul>
-              {menuItems.filter(item => item.section === 'auditoria').map(item => (
-                <li key={item.path} className={isActive(item.path.split('/').pop()) ? 'active' : ''}>
-                  <button onClick={() => { setActiveSection(item.path.split('/').pop()); if (typeof window !== 'undefined' && window.innerWidth <= 768) setSidebarOpen(false); }} style={{background:'none',border:'none',cursor:'pointer',width:'100%',textAlign:'left',padding:0,color:'inherit'}}>
-                    <span className="nav-icon">{item.icon}</span>
-                    <span className="nav-label">{item.label}</span>
-                  </button>
-                </li>
-              ))}
+              <li className={activeSection === 'auditoria' ? 'active' : ''}>
+                <button
+                  type="button"
+                  className="nav-link"
+                  onClick={() => handleSelectSection('auditoria')}
+                >
+                  <span className="nav-icon">📋</span>
+                  <span className="nav-label">Log de Auditoría</span>
+                </button>
+              </li>
             </ul>
           </div>
         </nav>
 
         <div className="sidebar-footer">
-          <button onClick={logout} className="logout-btn">
-            <span className="logout-icon">��</span>
-            <span className="logout-label">Cerrar sesión</span>
+          <button type="button" className="logout-btn" onClick={logout}>
+            🚪 Cerrar sesión
           </button>
-          <div className="system-version">
-            <p>v2.0.0</p>
-            <p>© 2024 TicketGo</p>
-          </div>
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main content */}
       <main className="admin-main">
         <header className="admin-header">
-          <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+          <button
+            className="sidebar-toggle"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label="Abrir/cerrar menú"
+          >
             ☰
           </button>
-          
+
           <div className="header-title">
-            <h1>{menuItems.find(item => item.path.split('/').pop() === activeSection)?.label || 'Dashboard'}</h1>
+            <h1>{sectionTitles[activeSection] || 'Dashboard'}</h1>
           </div>
 
           <div className="header-actions">
-            <Link href="/" className="admin-back-link">← Inicio</Link>
-            <div className="date-display">
+            <button
+              type="button"
+              className="admin-back-link"
+              onClick={() => handleSelectSection('home')}
+            >
+              ← Inicio
+            </button>
+            <div className="date-display" suppressHydrationWarning>
               <span className="date-icon">📅</span>
               <span className="date-text">
-                {new Date().toLocaleDateString('es-ES', {
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric'
-                })}
+                {mounted &&
+                  new Date().toLocaleDateString('es-ES', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  })}
               </span>
             </div>
           </div>
         </header>
 
         <div className="admin-content">
-          {activeSection === 'home' && <AdminDashboardHome />}
-          {activeSection === 'usuarios' && <AdminUsuarios module="usuarios" />}
+          {activeSection === 'home' && <AdminDashboardHome onNavigate={handleSelectSection} />}
           {activeSection === 'promotores' && <AdminUsuarios module="promotores" />}
           {activeSection === 'compradores' && <AdminUsuarios module="compradores" />}
-          {activeSection === 'administradores' && <AdminUsuarios module="administradores" />}
           {activeSection === 'eventos' && <AdminEventos />}
           {activeSection === 'configuracion' && <AdminConfiguracion />}
           {activeSection === 'auditoria' && <AdminAuditoria />}
@@ -234,20 +312,59 @@ function AdminDashboard() {
   );
 }
 
-// Componente Home del Dashboard
-function AdminDashboardHome() {
+// Componente Home con datos REALES (sin gestion de Admins — eso es del SuperAdmin)
+function AdminDashboardHome({ onNavigate }) {
   const [stats, setStats] = useState({
-    usuarios: { total: 1250, nuevos: 12 },
-    promotores: { total: 45, nuevos: 3 },
-    compradores: { total: 1180, nuevos: 8 },
-    administradores: { total: 5, nuevos: 0 },
-    eventos: { total: 89, pendientes: 5 },
-    ventas: { total: 245000 }
+    promotores: 0,
+    compradores: 0,
+    eventos: { total: 0, publicados: 0, dados_de_baja: 0 },
+    loading: true,
   });
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const cargarStats = async () => {
+      try {
+        const [promotores, compradores, eventos] = await Promise.all([
+          userManagementService.getPromotores().catch(() => []),
+          userManagementService.getCompradores().catch(() => []),
+          eventosService.getEventosDisponibles().catch(() => []),
+        ]);
+
+        if (cancelled) return;
+
+        const eventosArr = Array.isArray(eventos) ? eventos : [];
+        const publicados = eventosArr.filter((e) => e.estado === 'publicado').length;
+        const dadosDeBaja = eventosArr.filter(
+          (e) => e.adminStatus === 'deactivated' || e.estado === 'cancelado'
+        ).length;
+
+        setStats({
+          promotores: Array.isArray(promotores) ? promotores.length : 0,
+          compradores: Array.isArray(compradores) ? compradores.length : 0,
+          eventos: { total: eventosArr.length, publicados, dados_de_baja: dadosDeBaja },
+          loading: false,
+        });
+      } catch (err) {
+        console.warn('Error cargando estadisticas:', err?.message);
+        if (!cancelled) {
+          setError('No se pudieron cargar todas las estadísticas');
+          setStats((s) => ({ ...s, loading: false }));
+        }
+      }
+    };
+
+    cargarStats();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const totalUsuarios = stats.promotores + stats.compradores;
 
   return (
     <div className="admin-home">
-      {/* Welcome Card */}
       <div className="welcome-card">
         <div className="welcome-text">
           <h2>¡Bienvenido al Panel de Administración!</h2>
@@ -255,61 +372,74 @@ function AdminDashboardHome() {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {error && <div className="alert alert-warn">{error}</div>}
+
       <div className="stats-grid">
-        <div className="stat-card">
+        <button
+          type="button"
+          className="stat-card stat-clickable"
+          onClick={() => onNavigate?.('promotores')}
+          title="Ver promotores"
+        >
           <div className="stat-icon">👥</div>
           <div className="stat-info">
-            <h3>{stats.usuarios.total}</h3>
+            <h3>{stats.loading ? '…' : totalUsuarios}</h3>
             <p>Usuarios Totales</p>
           </div>
-          <span className="stat-badge">+{stats.usuarios.nuevos} hoy</span>
-        </div>
+        </button>
 
-        <div className="stat-card">
+        <button
+          type="button"
+          className="stat-card stat-clickable"
+          onClick={() => onNavigate?.('promotores')}
+        >
           <div className="stat-icon">📢</div>
           <div className="stat-info">
-            <h3>{stats.promotores.total}</h3>
+            <h3>{stats.loading ? '…' : stats.promotores}</h3>
             <p>Promotores</p>
           </div>
-          <span className="stat-badge">+{stats.promotores.nuevos} nuevos</span>
-        </div>
+        </button>
 
-        <div className="stat-card">
+        <button
+          type="button"
+          className="stat-card stat-clickable"
+          onClick={() => onNavigate?.('compradores')}
+        >
           <div className="stat-icon">🛍️</div>
           <div className="stat-info">
-            <h3>{stats.compradores.total}</h3>
+            <h3>{stats.loading ? '…' : stats.compradores}</h3>
             <p>Compradores</p>
           </div>
-          <span className="stat-badge">+{stats.compradores.nuevos} hoy</span>
-        </div>
+        </button>
 
-        <div className="stat-card">
-          <div className="stat-icon">⚙️</div>
-          <div className="stat-info">
-            <h3>{stats.administradores.total}</h3>
-            <p>Administradores</p>
-          </div>
-          <span className="stat-badge">Activos</span>
-        </div>
-
-        <div className="stat-card">
+        <button
+          type="button"
+          className="stat-card stat-clickable"
+          onClick={() => onNavigate?.('eventos')}
+        >
           <div className="stat-icon">📅</div>
           <div className="stat-info">
-            <h3>{stats.eventos.total}</h3>
-            <p>Eventos Activos</p>
+            <h3>{stats.loading ? '…' : stats.eventos.publicados}</h3>
+            <p>Eventos Publicados</p>
           </div>
-          <span className="stat-badge pending">{stats.eventos.pendientes} pendientes</span>
-        </div>
+          {stats.eventos.dados_de_baja > 0 && (
+            <span className="stat-badge pending">
+              {stats.eventos.dados_de_baja} dados de baja
+            </span>
+          )}
+        </button>
 
-        <div className="stat-card">
-          <div className="stat-icon">💰</div>
+        <button
+          type="button"
+          className="stat-card stat-clickable"
+          onClick={() => onNavigate?.('auditoria')}
+        >
+          <div className="stat-icon">📋</div>
           <div className="stat-info">
-            <h3>${stats.ventas.total.toLocaleString()}</h3>
-            <p>Ventas Totales</p>
+            <h3>Ver historial</h3>
+            <p>Auditoría</p>
           </div>
-          <span className="stat-trend positive">+15%</span>
-        </div>
+        </button>
       </div>
     </div>
   );

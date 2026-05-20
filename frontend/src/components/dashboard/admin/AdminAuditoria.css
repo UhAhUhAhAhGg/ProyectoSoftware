@@ -1,0 +1,325 @@
+/* ─── Admin Auditoria ─────────────────────────────────────────────────── */
+.admin-audit-container {
+  background: var(--sa-surface, #161a23);
+  border: 1px solid var(--sa-border, #262c3a);
+  border-radius: 10px;
+  padding: 20px 24px;
+  color: var(--sa-text, #e6e8ed);
+}
+
+.audit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #262c3a;
+}
+
+.audit-header h2 {
+  margin: 0 0 4px 0;
+  font-size: 1.3rem;
+  color: #d4a256;
+}
+
+.audit-header .muted {
+  margin: 0;
+  color: #9aa3b2;
+  font-size: 0.9rem;
+}
+
+.btn-export-csv {
+  background: linear-gradient(135deg, #b8884a, #d4a256);
+  color: #1a1a1a;
+  border: none;
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-export-csv:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(212, 162, 86, 0.35);
+}
+
+/* ─── Filtros ──────────────────────────────────────────────────────────── */
+.audit-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  background: #1d222e;
+  border: 1px solid #262c3a;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 18px;
+}
+
+.filter-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-row label {
+  font-size: 0.78rem;
+  color: #9aa3b2;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.filter-row input,
+.filter-row select {
+  padding: 8px 12px;
+  background: #0f1117;
+  border: 1px solid #262c3a;
+  border-radius: 6px;
+  color: #e6e8ed;
+  font-size: 0.9rem;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.filter-row input:focus,
+.filter-row select:focus {
+  border-color: #d4a256;
+}
+
+.filter-row input::placeholder {
+  color: #6b7383;
+}
+
+.filter-row select option {
+  background: #1d222e;
+  color: #e6e8ed;
+}
+
+/* date picker icon */
+.filter-row input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+  cursor: pointer;
+}
+
+/* ─── Estados ──────────────────────────────────────────────────────────── */
+.alert {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.alert-error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.loader {
+  text-align: center;
+  padding: 50px 20px;
+  color: #9aa3b2;
+  font-style: italic;
+}
+
+/* ─── Tabla ────────────────────────────────────────────────────────────── */
+.audit-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #262c3a;
+  border-radius: 8px;
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #161a23;
+}
+
+.audit-table thead {
+  background: #1d222e;
+}
+
+.audit-table th {
+  padding: 12px 14px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: #d4a256;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #262c3a;
+  white-space: nowrap;
+}
+
+.audit-table .sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.audit-table .sortable:hover {
+  color: #e0b370;
+}
+
+.audit-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #262c3a;
+  font-size: 0.88rem;
+  color: #e6e8ed;
+  vertical-align: top;
+}
+
+.audit-table tbody tr:hover {
+  background: rgba(212, 162, 86, 0.04);
+}
+
+.audit-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.no-results {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6b7383;
+  font-style: italic;
+}
+
+/* ─── Pill por tipo de acción ──────────────────────────────────────────── */
+.action-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.action-pill.action-edit {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.action-pill.action-deactivate {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.action-pill.action-reactivate,
+.action-pill.action-reactivate_user {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.action-pill.action-suspend {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.action-pill.action-ban {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.action-pill.action-create_admin,
+.action-pill.action-create_user {
+  background: rgba(139, 92, 246, 0.15);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+/* ─── Pill por tipo (Evento vs Usuario) ───────────────────────────────── */
+.kind-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.kind-pill.kind-event {
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.kind-pill.kind-user {
+  background: rgba(212, 162, 86, 0.12);
+  color: #e0b370;
+  border: 1px solid rgba(212, 162, 86, 0.3);
+}
+
+/* ─── Detalles celda ───────────────────────────────────────────────────── */
+.details-cell {
+  max-width: 500px;
+  font-size: 0.82rem;
+  color: #9aa3b2;
+  word-break: break-word;
+  white-space: pre-wrap;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+/* ─── Paginación ───────────────────────────────────────────────────────── */
+.audit-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: #1d222e;
+  border: 1px solid #262c3a;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pagination-info {
+  color: #9aa3b2;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-controls button {
+  padding: 6px 14px;
+  background: #161a23;
+  border: 1px solid #262c3a;
+  border-radius: 6px;
+  color: #e6e8ed;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.pagination-controls button:hover:not(:disabled) {
+  background: #262c3a;
+  border-color: #d4a256;
+}
+
+.pagination-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-indicator {
+  padding: 0 8px;
+  color: #d4a256;
+  font-weight: 600;
+}

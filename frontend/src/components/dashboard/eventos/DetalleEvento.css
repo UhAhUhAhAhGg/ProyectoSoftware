@@ -153,3 +153,32 @@ body.dark-mode .estado-vacio {
   border-color: #3a3a4a;
   color: #aaa;
 }
+
+/* ─── Titulo con categoria ─────────────────────────────────────────────── */
+.detalle-titulo-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.detalle-titulo-row h2 {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.detalle-categoria-badge {
+  display: inline-flex;
+  align-items: center;
+  background: linear-gradient(135deg, #b8884a, #d4a256);
+  color: #1a1a1a;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 8px rgba(212, 162, 86, 0.3);
+  white-space: nowrap;
+}

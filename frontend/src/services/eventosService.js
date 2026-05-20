@@ -31,7 +31,7 @@ const mapTipoEntrada = (t) => ({
   asientosPorFila: t.seats_per_row ?? null,
 });
 
-const mapEvento = (e) => {
+export const mapEvento = (e) => {
   // Delega en mapTipoEntrada para que tipoZona, esVIP, filas, asientosPorFila
   // estén disponibles en getEventosDisponibles y getEventosByPromotor también.
   const tiposEntrada = (e.tickets ?? []).map(mapTipoEntrada);
@@ -313,9 +313,26 @@ export const eventosService = {
         quantity,
       }),
     });
-    const data = await res.json();
+
+    // Parseo defensivo: si el backend devuelve HTML (error 500/404), evitar
+    // que el SyntaxError de JSON oculte la causa real.
+    const contentType = res.headers.get('content-type') || '';
+    let data = {};
+    if (contentType.includes('application/json')) {
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = {};
+      }
+    } else {
+      // Respuesta no-JSON: el backend devolvio HTML/texto plano
+      const text = await res.text().catch(() => '');
+      console.warn(`[realizarCompra] Backend devolvio ${res.status} con content-type=${contentType}. Body: ${text.slice(0, 200)}`);
+      data = { error: `Error del servidor (${res.status}). Revisa los logs del backend.` };
+    }
+
     if (!res.ok) {
-      const error = new Error(data.error || data.detail || 'No se pudo procesar la compra.');
+      const error = new Error(data.error || data.detail || `No se pudo procesar la compra (HTTP ${res.status}).`);
       error.status = res.status;
       error.errorCode = data.error_code;
       throw error;
@@ -366,6 +383,23 @@ export const eventosService = {
     return data;
   },
 
+  /**
+   * Cancela la compra y libera asientos PERO mantiene el cupo en la cola.
+   * Se usa cuando el usuario hace clic en "Volver" para re-seleccionar asientos.
+   */
+  cancelarCompraKeepQueue: async (purchaseId) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/purchase/${purchaseId}/cancel/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keep_queue: true }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'No se pudo cancelar la compra.');
+    }
+    return data;
+  },
+
   // ===== CONFIGURACIÓN DE COLA VIRTUAL =====
 
   getQueueConfig: async (eventoId) => {
@@ -396,5 +430,33 @@ export const eventosService = {
       );
     }
     return data.data;
+  },
+
+  /**
+   * Obtiene el historial de compras del usuario autenticado.
+   * Backend: GET /api/v1/purchases/history/
+   */
+  getMisCompras: async () => {
+    try {
+      const res = await apiFetch(`${EVENTS_URL}/api/v1/purchases/history/`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      // Backend devuelve directo el array o {results}
+      const lista = Array.isArray(data) ? data : (data.results || []);
+      // Map a formato consistente
+      return lista.map((p) => ({
+        id: p.id,
+        evento_nombre: p.event?.name || p.event_name || 'Evento',
+        evento_id: p.event?.id || p.event_id,
+        status: p.status,
+        quantity: p.quantity,
+        total_price: parseFloat(p.total_price || 0),
+        created_at: p.created_at,
+        backup_code: p.backup_code,
+      }));
+    } catch (err) {
+      console.warn('No se pudo cargar historial de compras:', err?.message);
+      return [];
+    }
   },
 };

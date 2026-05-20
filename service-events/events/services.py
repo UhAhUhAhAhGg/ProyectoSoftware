@@ -16,6 +16,9 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Tabl
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from .models import Purchase
+import logging
+from .models import UserPreference, Notification
+from django.utils import timezone
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -348,3 +351,208 @@ def send_ticket_email(user_email, purchase, user_name="Comprador"):
     except Exception as e:
         print(f"Error al enviar email: {str(e)}")
         return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BehaviorAnalysisService — TIC-360
+# Actualiza los pesos de preferencia del usuario por categoría
+# según sus interacciones registradas en UserBehavior.
+# ─────────────────────────────────────────────────────────────────────────────
+
+import logging
+from .models import UserBehavior, UserPreference
+
+behavior_logger = logging.getLogger(__name__)
+
+# Pesos por tipo de acción (cuánto "vale" cada interacción)
+ACTION_WEIGHTS = {
+    'view':     0.5,   # Ver un evento → señal débil
+    'favorite': 2.0,   # Marcar favorito → señal media
+    'purchase': 5.0,   # Comprar → señal fuerte
+}
+
+
+class BehaviorAnalysisService:
+    """
+    TIC-360: Servicio de análisis de comportamiento.
+    Calcula y actualiza los pesos de preferencia de un usuario
+    por categoría tras cada interacción relevante.
+    """
+
+    @classmethod
+    def registrar_interaccion(cls, user_id, event, action_type):
+        """
+        Registra una interacción en UserBehavior y luego actualiza
+        los pesos en UserPreference para la categoría del evento.
+
+        Args:
+            user_id: UUID del usuario
+            event: Instancia del modelo Event
+            action_type: 'view' | 'favorite' | 'purchase'
+
+        Returns:
+            UserBehavior creado, o None si no hay categoría en el evento
+        """
+        if action_type not in ACTION_WEIGHTS:
+            behavior_logger.warning(f"[TIC-360] action_type inválido: {action_type}")
+            return None
+
+        # 1. Registrar la interacción
+        behavior = UserBehavior.objects.create(
+            user_id=user_id,
+            event=event,
+            action_type=action_type,
+        )
+        behavior_logger.info(
+            f"[TIC-360] Interacción registrada: user={user_id} | "
+            f"evento={event.name} | acción={action_type}"
+        )
+
+        # 2. Actualizar preferencia si el evento tiene categoría
+        if event.category:
+            cls._actualizar_peso(user_id, event.category, action_type)
+
+        return behavior
+
+    @classmethod
+    def _actualizar_peso(cls, user_id, category, action_type):
+        """
+        Incrementa el peso de la categoría dada para el usuario.
+        Usa get_or_create para garantizar que la fila exista.
+        """
+        incremento = ACTION_WEIGHTS.get(action_type, 0)
+
+        pref, creada = UserPreference.objects.get_or_create(
+            user_id=user_id,
+            category=category,
+            defaults={'weight': 0.0},
+        )
+        pref.weight = round(pref.weight + incremento, 4)
+        pref.save(update_fields=['weight', 'updated_at'])
+
+        behavior_logger.info(
+            f"[TIC-360] Preferencia actualizada: user={user_id} | "
+            f"categoría={category.name} | nuevo_peso={pref.weight}"
+        )
+        return pref
+
+    @classmethod
+    def recalcular_desde_historial(cls, user_id):
+        """
+        Recalcula todos los pesos del usuario desde cero basándose
+        en su historial completo de interacciones.
+        Útil para correcciones o migraciones de datos.
+        """
+        # Borrar preferencias actuales del usuario
+        UserPreference.objects.filter(user_id=user_id).delete()
+
+        # Reagrupar y recalcular
+        comportamientos = UserBehavior.objects.filter(
+            user_id=user_id
+        ).select_related('event__category')
+
+        for b in comportamientos:
+            if b.event.category:
+                cls._actualizar_peso(user_id, b.event.category, b.action_type)
+
+        behavior_logger.info(
+            f"[TIC-360] Recálculo completo para user={user_id}"
+        )
+
+    @classmethod
+    def obtener_preferencias_ordenadas(cls, user_id):
+        """
+        Retorna las preferencias del usuario ordenadas por peso desc.
+        Útil para el motor de recomendaciones (TIC-361).
+        """
+        return (
+            UserPreference.objects
+            .filter(user_id=user_id)
+            .select_related('category')
+            .order_by('-weight')
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MatchingService — TIC-373
+# Al publicarse un nuevo evento, compara su categoría contra los perfiles
+# de usuarios con preferencias activas y genera Notification para los matches.
+# ─────────────────────────────────────────────────────────────────────────────
+
+from .models import Notification, NotificationPreference
+
+matching_logger = logging.getLogger(__name__)
+
+
+class MatchingService:
+    """
+    TIC-373 Adaptado: Servicio de matching evento-usuario.
+    """
+
+    @classmethod
+    def procesar_evento_publicado(cls, event):
+        """
+        Punto de entrada principal. Llamado por el signal post_save de Event.
+        """
+        if not event.category:
+            matching_logger.info(
+                f"[TIC-373] Evento '{event.name}' sin categoría — matching omitido."
+            )
+            return 0
+
+        # 🚀 ADAPTACIÓN: Usamos UserPreference y el campo notifications_enabled
+        preferencias = UserPreference.objects.filter(
+            category=event.category,
+            notifications_enabled=True, # 👈 Tu campo
+        ).values_list('user_id', flat=True)
+
+        if not preferencias:
+            matching_logger.info(
+                f"[TIC-373] Sin usuarios suscritos a '{event.category.name}'."
+            )
+            return 0
+
+        titulo = f"Nuevo evento: {event.name}"
+        mensaje = (
+            f"¡Nuevo evento de {event.category.name}! "
+            f"'{event.name}' el {event.event_date.strftime('%d/%m/%Y')} "
+            f"en {event.location}. ¡No te lo pierdas!"
+        )
+
+        creadas = 0
+        for user_id in preferencias:
+            # Evitar duplicar: Si el usuario ya tiene una notif de este evento, no crear otra
+            _, fue_creada = Notification.objects.get_or_create(
+                user_id=user_id,
+                event=event,
+                tipo='new_event_match',
+                defaults={'titulo': titulo, 'mensaje': mensaje},
+            )
+            if fue_creada:
+                creadas += 1
+
+        matching_logger.info(
+            f"[TIC-373] Matching completado para '{event.name}': {creadas} creadas."
+        )
+        return creadas
+
+    @classmethod
+    def notificaciones_usuario(cls, user_id, solo_no_leidas=False):
+        """Para el endpoint GET /users/{id}/notifications"""
+        qs = Notification.objects.filter(user_id=user_id).select_related('event')
+        if solo_no_leidas:
+            qs = qs.filter(leida=False)
+        return qs.order_by('-created_at')
+
+    @classmethod
+    def marcar_leida(cls, user_id, notification_id):
+        """Para el endpoint PATCH de lectura"""
+        try:
+            notif = Notification.objects.get(id=notification_id, user_id=user_id)
+            if not notif.leida:
+                notif.leida = True
+                notif.leida_at = timezone.now()
+                notif.save(update_fields=['leida', 'leida_at'])
+            return notif
+        except Notification.DoesNotExist:
+            return None

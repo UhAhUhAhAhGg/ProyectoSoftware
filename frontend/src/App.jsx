@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { QueueProvider } from './context/QueueContext';
 import Home from './pages/Home';
 import Registro from './pages/Registro';
 import Login from './pages/Login';
@@ -12,28 +13,32 @@ import ListaEventos from './components/dashboard/eventos/ListaEventos';
 import FormularioEvento from './components/dashboard/eventos/FormularioEvento';
 import ExplorarEventos from './components/dashboard/eventos/ExplorarEventos';
 import DetalleEvento from './components/dashboard/eventos/DetalleEvento';
+import ColaBannerFlotante from './components/dashboard/eventos/ColaBannerFlotante';
 
 function App() {
   return (
     <Router>
-      <div className="App">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/registro" element={<Registro />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/recuperar-password" element={<RecuperarPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/cuenta-eliminada" element={<CuentaEliminada />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/dashboard/perfil" element={<PerfilUsuario />} />
-          <Route path="/dashboard/mis-compras" element={<MisCompras />} />
-          <Route path="/dashboard/eventos" element={<ExplorarEventos />} />
-          <Route path="/dashboard/evento/:id" element={<DetalleEvento />} />
-          <Route path="/dashboard/mis-eventos" element={<ListaEventos />} />
-          <Route path="/dashboard/crear-evento" element={<FormularioEvento />} />
-          <Route path="/dashboard/evento/:id/editar" element={<FormularioEvento />} />
-        </Routes>
-      </div>
+      <QueueProvider>
+        <div className="App">
+          <ColaBannerFlotante />
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/registro" element={<Registro />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/recuperar-password" element={<RecuperarPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/cuenta-eliminada" element={<CuentaEliminada />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/dashboard/perfil" element={<PerfilUsuario />} />
+            <Route path="/dashboard/mis-compras" element={<MisCompras />} />
+            <Route path="/dashboard/eventos" element={<ExplorarEventos />} />
+            <Route path="/dashboard/evento/:id" element={<DetalleEvento />} />
+            <Route path="/dashboard/mis-eventos" element={<ListaEventos />} />
+            <Route path="/dashboard/crear-evento" element={<FormularioEvento />} />
+            <Route path="/dashboard/evento/:id/editar" element={<FormularioEvento />} />
+          </Routes>
+        </div>
+      </QueueProvider>
     </Router>
   );
 }

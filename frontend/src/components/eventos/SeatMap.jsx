@@ -12,11 +12,11 @@ function idFromPos(r, c) {
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
-export default function SeatMap({ eventId, ticketType, onConfirm, onCancel }) {
+export default function SeatMap({ eventId, ticketType, onConfirm, onCancel, initialSelected }) {
   const rows = Number(ticketType?.filas) || DEFAULT_ROWS;
   const perRow = Number(ticketType?.asientosPorFila) || DEFAULT_PER_ROW;
   const [occupiedSet, setOccupiedSet] = useState(new Set());
-  const [selected, setSelected] = useState([]);
+  const [selected, setSelected] = useState(initialSelected || []);
   const [loading, setLoading] = useState(true);
 
   // Zoom / pan
@@ -92,27 +92,12 @@ export default function SeatMap({ eventId, ticketType, onConfirm, onCancel }) {
                 setOccupiedSet(occupied);
               }
             } else {
-              // generate mock
-              const s = new Set();
-              const total = rows * perRow;
-              const occupiedCount = Math.min(total, Number(ticketType?.cupoVendido || Math.floor(total * 0.15)));
-              while (s.size < occupiedCount) {
-                const r = Math.floor(Math.random() * rows);
-                const c = Math.floor(Math.random() * perRow);
-                s.add(idFromPos(r, c));
-              }
-              if (mounted) setOccupiedSet(s);
+              // API respondió con error — mantener estado actual, no generar datos falsos
+              console.warn('Error al cargar asientos:', res.status);
             }
           } catch (err) {
-            const s = new Set();
-            const total = rows * perRow;
-            const occupiedCount = Math.min(total, Number(ticketType?.cupoVendido || Math.floor(total * 0.15)));
-            while (s.size < occupiedCount) {
-              const r = Math.floor(Math.random() * rows);
-              const c = Math.floor(Math.random() * perRow);
-              s.add(idFromPos(r, c));
-            }
-            if (mounted) setOccupiedSet(s);
+            // Error de red — mantener estado actual
+            console.warn('Error de conexión al cargar asientos:', err.message);
           }
         };
 

@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
+import { useNotifications } from '../context/NotificationContext';
 import OpcionesComprador from '../components/dashboard/OpcionesComprador';
 import OpcionesPromotor from '../components/dashboard/OpcionesPromotor';
 import './Dashboard.css';
@@ -12,26 +13,49 @@ function Dashboard() {
   const { darkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const [sidebarAbierto, setSidebarAbierto] = useState(false);
-  const [notificaciones, setNotificaciones] = useState([
-    { id: 1, mensaje: '¡Bienvenido a tu panel!', leida: false },
-    { id: 2, mensaje: 'Completa tu perfil para mejores recomendaciones', leida: false }
-  ]);
 
-  // Redirigir si no está autenticado o si es admin (debe ir a /admin/dashboard)
+  // US-22: notificaciones reales del backend (no mock)
+  const {
+    notificaciones,
+    conteoNoLeidas,
+    marcarComoLeida,
+    marcarTodasComoLeidas,
+    cargarNotificaciones,
+  } = useNotifications();
+
+  const [notifOpen, setNotifOpen] = useState(false);
+
+  // Redirigir si no está autenticado o si es admin
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/login');
     } else if (isAdministrador) {
-      // /admin/dashboard es una ruta de Next.js App Router, no de React Router
       window.location.href = '/admin/dashboard';
     }
   }, [isAuthenticated, isAdministrador, navigate]);
 
+  // TIC-435: polling para actualizar campanita en tiempo real
+  useEffect(() => {
+    const interval = setInterval(() => {
+      cargarNotificaciones?.();
+    }, 30000); // 30s
+    return () => clearInterval(interval);
+  }, [cargarNotificaciones]);
 
+  // TIC-437: marcar como leída al abrir y al click
+  const handleNotifClick = async (notif) => {
+    if (!notif.leida) {
+      await marcarComoLeida?.(notif.id);
+    }
+  };
 
-  // Marcar notificaciones como leídas
-  const marcarComoLeidas = () => {
-    setNotificaciones(notificaciones.map(n => ({ ...n, leida: true })));
+  const handleAbrirNotifs = () => {
+    setNotifOpen((v) => !v);
+  };
+
+  const handleMarcarTodas = async (e) => {
+    e?.stopPropagation();
+    await marcarTodasComoLeidas?.();
   };
 
   // Mostrar loading mientras se verifica autenticación
@@ -56,41 +80,99 @@ function Dashboard() {
           <button className="menu-toggle-dashboard" onClick={toggleSidebar}>
             ☰
           </button>
+
           <div className="header-titulo">
             <h1>Panel de {isComprador ? 'Comprador' : 'Promotor'}</h1>
             <p className="user-email">{user.email}</p>
           </div>
         </div>
-        
+
         <div className="header-right">
-          <button onClick={toggleDarkMode} className="dashboard-theme-toggle" title="Cambiar tema">
+          <button
+            onClick={toggleDarkMode}
+            className="dashboard-theme-toggle"
+            title="Cambiar tema"
+          >
             {darkMode ? '☀️' : '🌙'}
           </button>
 
-          {/* Notificaciones */}
-          <div className="notificaciones-dropdown">
-            <button className="btn-notificaciones" onClick={marcarComoLeidas}>
+          {/* US-22: Notificaciones (TIC-378 campanita, TIC-379 dropdown, TIC-435 badge en tiempo real) */}
+          <div className={`notificaciones-dropdown ${notifOpen ? 'open' : ''}`}>
+            <button
+              className="btn-notificaciones"
+              onClick={handleAbrirNotifs}
+              aria-label="Notificaciones"
+            >
               🔔
-              {notificaciones.filter(n => !n.leida).length > 0 && (
-                <span className="notificaciones-badge">
-                  {notificaciones.filter(n => !n.leida).length}
-                </span>
+              {conteoNoLeidas > 0 && (
+                <span className="notificaciones-badge">{conteoNoLeidas}</span>
               )}
             </button>
-            <div className="notificaciones-menu">
-              {notificaciones.length > 0 ? (
-                notificaciones.map(n => (
-                  <div key={n.id} className={`notificacion-item ${!n.leida ? 'no-leida' : ''}`}>
-                    {n.mensaje}
+
+            {notifOpen && (
+              <div className="notificaciones-menu">
+                <div className="notificaciones-menu-header">
+                  <strong>Notificaciones</strong>
+                  {conteoNoLeidas > 0 && (
+                    <button
+                      type="button"
+                      className="btn-marcar-todas"
+                      onClick={handleMarcarTodas}
+                    >
+                      Marcar todas como leídas
+                    </button>
+                  )}
+                </div>
+                {notificaciones && notificaciones.length > 0 ? (
+                  <div className="notificaciones-lista">
+                    {notificaciones.slice(0, 8).map((n) => (
+                      <div
+                        key={n.id}
+                        className={`notificacion-item ${!n.leida ? 'no-leida' : ''}`}
+                        onClick={() => handleNotifClick(n)}
+                      >
+                        <div className="notif-content">
+                          <strong>{n.titulo || n.mensaje || 'Nuevo evento'}</strong>
+                          {n.mensaje && n.titulo && (
+                            <p className="notif-mensaje">{n.mensaje}</p>
+                          )}
+                          <div className="notif-meta">
+                            <span className="notif-fecha">
+                              📅 {n.created_at
+                                ? new Date(n.created_at).toLocaleDateString('es-ES')
+                                : ''}
+                            </span>
+                            {n.event && (
+                              <Link
+                                to={`/dashboard/evento/${n.event}`}
+                                className="btn-ver-evento-match"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                Ver evento →
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                        {!n.leida && <span className="notif-dot" title="No leída" />}
+                      </div>
+                    ))}
                   </div>
-                ))
-              ) : (
-                <div className="notificacion-item">No hay notificaciones</div>
-              )}
-            </div>
+                ) : (
+                  <div className="notificacion-item-vacia">
+                    <span>🔕</span>
+                    <p>No tienes notificaciones</p>
+                    <small>Te avisaremos cuando se publiquen eventos de tus categorías favoritas</small>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          <Link to="/dashboard/perfil" className="btn-perfil" title="Mi Perfil">
+          <Link
+            to="/dashboard/perfil"
+            className="btn-perfil"
+            title="Mi Perfil"
+          >
             <span className="btn-icono">👤</span>
             <span className="btn-texto">Mi Perfil</span>
           </Link>
@@ -99,17 +181,30 @@ function Dashboard() {
             {isComprador ? '🛍️ Comprador' : '📢 Promotor'}
           </span>
 
-          <button onClick={logout} className="btn-logout" title="Cerrar sesión">
+          <button
+            onClick={logout}
+            className="btn-logout"
+            title="Cerrar sesión"
+          >
             <span className="btn-icono">🚪</span>
             <span className="btn-texto">Salir</span>
           </button>
         </div>
       </header>
 
-      {/* Sidebar de navegación rápida */}
-      <aside className={`dashboard-sidebar ${sidebarAbierto ? 'abierto' : ''}`}>
-        <button className="sidebar-close" onClick={toggleSidebar}>×</button>
-        
+      {/* Sidebar */}
+      <aside
+        className={`dashboard-sidebar ${
+          sidebarAbierto ? 'abierto' : ''
+        }`}
+      >
+        <button
+          className="sidebar-close"
+          onClick={toggleSidebar}
+        >
+          ×
+        </button>
+
         <div className="sidebar-user">
           <div className="user-avatar">
             {user.avatar ? (
@@ -120,66 +215,100 @@ function Dashboard() {
               </div>
             )}
           </div>
+
           <h3>{user.nombre || 'Usuario'}</h3>
           <p>{user.email}</p>
         </div>
 
         <nav className="sidebar-nav">
           <h4>Accesos rápidos</h4>
+
           <ul>
-            <li><Link to="/dashboard/perfil">👤 Mi Perfil</Link></li>
+            <li>
+              <Link to="/dashboard/perfil">
+                👤 Mi Perfil
+              </Link>
+            </li>
+
             {isComprador ? (
-              // Enlaces rápidos para comprador
               <>
-                <li><Link to="/dashboard/eventos">🎫 Explorar Eventos</Link></li>
-                <li><Link to="/dashboard/mis-compras">🎟️ Mis Entradas</Link></li>
+                <li>
+                  <Link to="/dashboard/eventos">
+                    🎫 Explorar Eventos
+                  </Link>
+                </li>
+
+                <li>
+                  <Link to="/dashboard/mis-compras">
+                    🎟️ Mis Entradas
+                  </Link>
+                </li>
               </>
             ) : (
-              // Enlaces rápidos para promotor
               <>
-                <li><Link to="/dashboard/crear-evento">➕ Crear Evento</Link></li>
-                <li><Link to="/dashboard/mis-eventos">📋 Mis Eventos</Link></li>
+                <li>
+                  <Link to="/dashboard/crear-evento">
+                    ➕ Crear Evento
+                  </Link>
+                </li>
+
+                <li>
+                  <Link to="/dashboard/mis-eventos">
+                    📋 Mis Eventos
+                  </Link>
+                </li>
               </>
             )}
           </ul>
         </nav>
 
         <div className="sidebar-footer">
-          <button onClick={logout} className="sidebar-logout">
+          <button
+            onClick={logout}
+            className="sidebar-logout"
+          >
             🚪 Cerrar Sesión
           </button>
         </div>
       </aside>
 
-      {/* Overlay para móvil cuando el sidebar está abierto */}
-      {sidebarAbierto && <div className="sidebar-overlay" onClick={toggleSidebar}></div>}
+      {/* Overlay */}
+      {sidebarAbierto && (
+        <div
+          className="sidebar-overlay"
+          onClick={toggleSidebar}
+        ></div>
+      )}
 
-      {/* Contenido dinámico según el rol */}
+      {/* Contenido */}
       <main className="dashboard-content">
         <div className="content-wrapper">
-          {/* Mensaje de bienvenida personalizado */}
           <div className="welcome-message">
             <h2>
-              ¡Hola de nuevo, {user.nombre || 'Usuario'}! 
+              ¡Hola de nuevo, {user.nombre || 'Usuario'}!
               <span className="welcome-emoji">👋</span>
             </h2>
+
             <p>
-              {isComprador 
-                ? '¿Listo para encontrar los mejores eventos?' 
+              {isComprador
+                ? '¿Listo para encontrar los mejores eventos?'
                 : '¿Cómo van las ventas de tus eventos hoy?'}
             </p>
           </div>
 
-          {/* Renderizado condicional según el rol */}
           {isComprador && <OpcionesComprador />}
           {isPromotor && <OpcionesPromotor />}
         </div>
       </main>
 
-      {/* Footer del Dashboard */}
+      {/* Footer */}
       <footer className="dashboard-footer">
         <div className="footer-content">
-          <p>&copy; 2024 TicketGo - Panel de {isComprador ? 'Comprador' : 'Promotor'}</p>
+          <p>
+            &copy; 2024 TicketGo - Panel de{' '}
+            {isComprador ? 'Comprador' : 'Promotor'}
+          </p>
+
           <div className="footer-links">
             <a href="/ayuda">Ayuda</a>
             <a href="/terminos">Términos</a>

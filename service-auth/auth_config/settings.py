@@ -45,6 +45,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # NUEVO — middleware de protección de rutas Superadmin
+    'users.middleware.SuperadminRouteMiddleware',
 ]
 
 ROOT_URLCONF = 'auth_config.urls'

@@ -1,6 +1,8 @@
 import uuid
 import secrets
 from django.db import models
+from django.db.models import Count, OuterRef, Subquery, Value, Case, When, BooleanField, Exists
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from datetime import timedelta
 from django.conf import settings
@@ -65,6 +67,20 @@ class Event(models.Model):
     queue_timeout = models.IntegerField(default=10)
     # Timeout de pago en minutos
     payment_timeout_minutes = models.IntegerField(default=15)
+
+    # TIC-405: Gestión administrativa de eventos
+    ADMIN_STATUS_CHOICES = [
+        ('none', 'Sin intervención'),
+        ('modified', 'Modificado por admin'),
+        ('deactivated', 'Dado de baja por admin'),
+    ]
+    admin_status = models.CharField(
+        max_length=20,
+        choices=ADMIN_STATUS_CHOICES,
+        default='none',
+        db_index=True,
+    )
+    admin_reason = models.TextField(null=True, blank=True)
 
     class Meta:
         verbose_name = 'Event'
@@ -469,3 +485,344 @@ class SeatAuditLog(models.Model):
 
     def __str__(self):
         return f"{self.seat} - {self.action} - {self.created_at}"
+
+
+# ─── TIC-21: Recomendaciones personalizadas ──────────────────────────────────
+
+class UserBehavior(models.Model):
+    """
+    TIC-358: Registra interacciones del usuario con eventos.
+    Alimenta el motor de recomendaciones con señales de comportamiento.
+    Acciones posibles: view (ver evento), favorite (marcar favorito), purchase (comprar).
+    """
+    ACTION_CHOICES = [
+        ('view', 'Ver evento'),
+        ('favorite', 'Marcar favorito'),
+        ('purchase', 'Comprar'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField(db_index=True)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='behaviors')
+    action_type = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'User Behavior'
+        verbose_name_plural = 'User Behaviors'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user_id', 'action_type']),
+            models.Index(fields=['user_id', 'event']),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} - {self.action_type} - {self.event.name}"
+
+
+class UserPreference(models.Model):
+    """
+    TIC-359: Almacena el peso de preferencia de un usuario por categoría.
+    El peso se actualiza dinámicamente según el comportamiento (TIC-360).
+    Un peso mayor indica mayor afinidad con esa categoría.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField(db_index=True)
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='user_preferences')
+    weight = models.FloatField(default=0.0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'User Preference'
+        verbose_name_plural = 'User Preferences'
+        unique_together = ('user_id', 'category')
+        indexes = [
+            models.Index(fields=['user_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} - {self.category.name}: {self.weight}"
+
+
+# ─── TIC-21: Motor de recomendaciones ────────────────────────────────────────
+
+class RecommendationEngine:
+    """
+    TIC-361/TIC-364: Motor de recomendaciones personalizadas.
+    Cruza preferencias del usuario (UserPreference) con eventos futuros
+    priorizando favoritos. Fallback para usuarios nuevos: eventos populares.
+    """
+
+    @staticmethod
+    def get_fallback_events(limit=10):
+        """
+        TIC-364: Fallback para usuarios sin historial.
+        Retorna eventos publicados próximos ordenados por popularidad.
+        """
+        return Event.objects.filter(
+            event_date__gte=timezone.now().date(),
+            status='published',
+        ).annotate(
+            total_interactions=Count('behaviors')
+        ).order_by(
+            '-total_interactions',
+            'event_date',
+        )[:limit]
+
+    @staticmethod
+    def get_recommendation_queryset(user_id):
+        """
+        TIC-361: Retorna recomendaciones personalizadas o fallback si es usuario nuevo.
+        Priorización: favorito > afinidad categoría > popularidad global > fecha.
+        """
+        has_history = UserPreference.objects.filter(user_id=user_id).exists()
+
+        if not has_history:
+            return RecommendationEngine.get_fallback_events()
+
+        weight_subquery = UserPreference.objects.filter(
+            user_id=user_id,
+            category_id=OuterRef('category_id'),
+        ).values('weight')
+
+        is_fav_subquery = UserFavorite.objects.filter(
+            user_id=user_id,
+            event_id=OuterRef('pk'),
+        )
+
+        return Event.objects.filter(
+            event_date__gte=timezone.now().date(),
+            status='published',
+        ).annotate(
+            category_affinity=Coalesce(Subquery(weight_subquery), Value(0.0)),
+            is_favorite=Exists(is_fav_subquery),
+            global_popularity=Count('behaviors'),
+        ).order_by(
+            '-is_favorite',
+            '-category_affinity',
+            '-global_popularity',
+            'event_date',
+        )
+
+
+# ─── TIC-22: Notificaciones de match ─────────────────────────────────────────
+
+class Notification(models.Model):
+    """
+    TIC-372: Historial de notificaciones enviadas al usuario.
+    Soporta múltiples tipos: match de evento, turno en cola, compra confirmada.
+    """
+    TIPO_CHOICES = [
+        ('new_event_match', 'Nuevo evento compatible'),
+        ('waitlist_turn', 'Turno en lista de espera'),
+        ('purchase_confirmed', 'Compra confirmada'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField(db_index=True)
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        null=True,
+        blank=True,
+    )
+    tipo = models.CharField(max_length=30, choices=TIPO_CHOICES)
+    titulo = models.CharField(max_length=200)
+    mensaje = models.TextField()
+    leida = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    leida_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Notification'
+        verbose_name_plural = 'Notifications'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user_id'], name='events_noti_user_id_a9380d_idx'),
+            models.Index(fields=['user_id', 'leida'], name='events_noti_user_id_2dcfa8_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} — {self.titulo}"
+
+
+def generar_notificaciones_match(event):
+    """
+    TIC-373/TIC-374: Genera notificaciones para usuarios con afinidad a la categoría
+    del evento recién publicado. Se ejecuta en thread para garantizar entrega <5min.
+
+    Criterio de match: usuarios que tengan al menos 1 interacción previa
+    (view, favorite, purchase) con un evento de la misma categoría.
+    """
+    import threading
+
+    def _ejecutar():
+        try:
+            if not event.category:
+                return
+
+            user_ids_con_afinidad = UserBehavior.objects.filter(
+                event__category=event.category,
+            ).values_list('user_id', flat=True).distinct()
+
+            notificaciones_a_crear = []
+            for user_id in user_ids_con_afinidad:
+                if str(user_id) == str(event.promoter_id):
+                    continue
+
+                ya_notificado = Notification.objects.filter(
+                    user_id=user_id,
+                    event=event,
+                    tipo='new_event_match',
+                ).exists()
+
+                if not ya_notificado:
+                    notificaciones_a_crear.append(Notification(
+                        user_id=user_id,
+                        event=event,
+                        tipo='new_event_match',
+                        titulo=f"Nuevo evento: {event.name}",
+                        mensaje=(
+                            f"Hay un nuevo evento de {event.category.name} "
+                            f"que podría interesarte: '{event.name}' "
+                            f"el {event.event_date.strftime('%d/%m/%Y')} en {event.location}."
+                        ),
+                        leida=False,
+                    ))
+
+            if notificaciones_a_crear:
+                Notification.objects.bulk_create(notificaciones_a_crear)
+                logger.info(
+                    f"[TIC-373] {len(notificaciones_a_crear)} notificaciones "
+                    f"generadas para evento '{event.name}'"
+                )
+        except Exception as e:
+            logger.error(f"[TIC-373] Error al generar matches: {e}", exc_info=True)
+
+    threading.Thread(target=_ejecutar, daemon=True).start()
+
+
+class NotificationPreference(models.Model):
+    """
+    TIC-371: Preferencias de notificación por categoría por usuario.
+    Si enabled=True, el usuario recibirá notificaciones de eventos de esa categoría.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField(db_index=True)
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='notification_preferences')
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = 'Notification Preference'
+        verbose_name_plural = 'Notification Preferences'
+        unique_together = ('user_id', 'category')
+        indexes = [
+            models.Index(fields=['user_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} - {self.category.name}: {'on' if self.enabled else 'off'}"
+
+
+# ─── TIC-21: Favoritos ───────────────────────────────────────────────────────
+
+class UserFavorite(models.Model):
+    """
+    TIC-366: Eventos marcados como favoritos por un usuario.
+    Combinación (user_id, event) única para evitar duplicados.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField(db_index=True)
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='favorited_by',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'User Favorite'
+        verbose_name_plural = 'User Favorites'
+        unique_together = ('user_id', 'event')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user_id'], name='events_user_user_id_8b627f_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} → {self.event.name}"
+
+
+def registrar_comportamiento(user_id, event, action_type):
+    """
+    TIC-363: Helper para registrar interacciones (view, favorite, purchase)
+    en UserBehavior. Útil desde cualquier view que necesite trackear señales.
+    """
+    try:
+        UserBehavior.objects.create(
+            user_id=user_id,
+            event=event,
+            action_type=action_type,
+        )
+    except Exception as e:
+        logger.error(f"[TIC-363] Error al registrar comportamiento: {e}")
+
+
+# ─── TIC-26: Auditoría de eventos ─────────────────────────────────────────────
+
+class EventAuditLog(models.Model):
+    """
+    TIC-415: Registro completo de todas las intervenciones administrativas
+    sobre eventos. Captura qué cambió, quién lo hizo y cuándo.
+
+    Acciones posibles:
+      - edit: Modificación de campos del evento
+      - deactivate: Dar de baja el evento
+      - reactivate: Reactivar evento previamente dado de baja
+    """
+    ACTION_CHOICES = [
+        ('edit', 'Edición de campos'),
+        ('deactivate', 'Dar de baja'),
+        ('reactivate', 'Reactivar evento'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # Evento intervenido
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='audit_logs',
+    )
+    event_name = models.CharField(max_length=200)  # snapshot del nombre al momento
+
+    # Admin que ejecutó la acción
+    admin_id = models.UUIDField(db_index=True)
+    admin_email = models.EmailField()
+
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES, db_index=True)
+    reason = models.TextField(null=True, blank=True)
+
+    # Snapshot de qué cambió (JSON-like string o texto libre)
+    changed_fields = models.JSONField(null=True, blank=True)  # {campo: {old: x, new: y}}
+    old_status = models.CharField(max_length=20, null=True, blank=True)
+    new_status = models.CharField(max_length=20, null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Event Audit Log'
+        verbose_name_plural = 'Event Audit Logs'
+        ordering = ['-created_at']
+        # TIC-416: Índices para consultas eficientes de auditoría
+        indexes = [
+            models.Index(fields=['event'], name='eaudit_event_idx'),
+            models.Index(fields=['admin_id'], name='eaudit_admin_idx'),
+            models.Index(fields=['action'], name='eaudit_action_idx'),
+            models.Index(fields=['created_at'], name='eaudit_created_idx'),
+            models.Index(fields=['event', 'created_at'], name='eaudit_event_date_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.admin_email} → {self.action} | {self.event_name} | {self.created_at:%Y-%m-%d}"

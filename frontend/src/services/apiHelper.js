@@ -76,5 +76,29 @@ export const apiFetch = async (url, options = {}) => {
     }
   }
 
+  // Si la cuenta esta suspendida/banned (403 con code), forzar logout
+  if (res.status === 403) {
+    try {
+      const cloned = res.clone();
+      const body = await cloned.json();
+      if (body?.code === 'ACCOUNT_SUSPENDED' || body?.code === 'ACCOUNT_BANNED') {
+        const motivo = body?.message || 'Tu cuenta ha sido suspendida.';
+        // Mostrar aviso al usuario antes de redirigir
+        try {
+          alert('🚫 ' + motivo);
+        } catch {}
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        localStorage.removeItem('refresh');
+        try {
+          localStorage.setItem('account_status_message', motivo);
+        } catch {}
+        if (typeof window !== 'undefined') window.location.href = '/login';
+      }
+    } catch {
+      // Si el body no es JSON o no tiene code, dejar pasar
+    }
+  }
+
   return res;
 };
