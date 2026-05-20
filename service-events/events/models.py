@@ -773,3 +773,93 @@ def registrar_comportamiento(user_id, event, action_type):
         )
     except Exception as e:
         logger.warning(f"[UserBehavior] No se pudo registrar: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUBTAREAS 1 y 2: Auditoría automática de cambios en Event
+# ─────────────────────────────────────────────────────────────────────────────
+
+class EventAuditLog(models.Model):
+    """
+    Registro automático de TODOS los cambios sobre el modelo Event.
+    Se pobla exclusivamente via Django signals (post_save, post_delete).
+    No depende de quién haga el cambio — captura cualquier escritura.
+    
+    Diferencia con AdminAuditLog:
+      - AdminAuditLog: acciones manuales explícitas del administrador
+      - EventAuditLog: trazabilidad automática de cualquier operación
+    """
+    OPERACION_CHOICES = [
+        ('create',  'Creación'),
+        ('update',  'Actualización'),
+        ('delete',  'Eliminación'),
+        ('soft_delete', 'Baja lógica'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # No ForeignKey — el log debe sobrevivir si el Event es eliminado
+    evento_id = models.UUIDField(db_index=True)
+    evento_nombre = models.CharField(max_length=255)
+
+    operacion = models.CharField(max_length=20, choices=OPERACION_CHOICES)
+
+    # Snapshot completo del estado antes y después del cambio
+    estado_anterior = models.JSONField(
+        null=True, blank=True,
+        help_text='Estado del evento ANTES del cambio. Null en creaciones.'
+    )
+    estado_nuevo = models.JSONField(
+        null=True, blank=True,
+        help_text='Estado del evento DESPUÉS del cambio. Null en eliminaciones.'
+    )
+
+    # Solo los campos que realmente cambiaron
+    campos_modificados = models.JSONField(
+        null=True, blank=True,
+        help_text='Dict {campo: {antes, despues}} de campos que cambiaron.'
+    )
+
+    # Motivo de baja (solo aplica en soft_delete)
+    motivo_baja = models.TextField(null=True, blank=True)
+
+    # Metadatos de auditoría
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'event_audit_log'
+        verbose_name = 'Event Audit Log'
+        verbose_name_plural = 'Event Audit Logs'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['evento_id']),
+            models.Index(fields=['operacion']),
+            models.Index(fields=['evento_id', 'operacion']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f"[{self.operacion}] {self.evento_nombre} — {self.created_at}"
+
+
+def event_to_dict(event):
+    """
+    Convierte una instancia de Event a un dict serializable para JSON.
+    Se usa para guardar snapshots en EventAuditLog.
+    """
+    return {
+        'id': str(event.id),
+        'name': event.name,
+        'description': event.description,
+        'event_date': str(event.event_date) if event.event_date else None,
+        'event_time': str(event.event_time) if event.event_time else None,
+        'location': event.location,
+        'status': event.status,
+        'admin_status': event.admin_status,
+        'admin_baja_motivo': event.admin_baja_motivo,
+        'admin_baja_por': event.admin_baja_por,
+        'admin_baja_at': str(event.admin_baja_at) if event.admin_baja_at else None,
+        'capacity': event.capacity if hasattr(event, 'capacity') else None,
+        'promoter_id': str(event.promoter_id) if event.promoter_id else None,
+        'category_id': str(event.category_id) if event.category_id else None,
+    }

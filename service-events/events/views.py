@@ -40,6 +40,7 @@ from .models import (
     UserFavorite,
     Notification,
     generar_notificaciones_match,
+    EventAuditLog,
 )
 from .permissions import IsAdministrador, IsComprador, IsPromotor
 from .services import TicketGenerationService, send_ticket_email
@@ -2302,3 +2303,61 @@ class AdminUserDeleteView(APIView):
                 {"error": f"Error al procesar la baja: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class EventAuditLogView(APIView):
+    """
+    GET /api/v1/admin/events/audit-log/
+    Consulta el historial automático de cambios sobre eventos.
+
+    Query params opcionales:
+      ?evento_id=UUID         → filtrar por evento específico
+      ?operacion=update       → create | update | delete | soft_delete
+      ?desde=2025-01-01       → filtrar desde fecha
+      ?hasta=2025-12-31       → filtrar hasta fecha
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _es_admin(self, user):
+        return (
+            getattr(user, 'is_staff', False) or
+            (
+                user.role and
+                user.role.name.lower() in
+                ['administrador', 'admin', 'superadmin']
+            )
+        )
+
+    def get(self, request):
+        if not self._es_admin(request.user):
+            return Response(
+                {"error": "No tienes permisos de Administrador."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        logs = EventAuditLog.objects.all()
+
+        evento_id = request.query_params.get('evento_id', None)
+        if evento_id:
+            logs = logs.filter(evento_id=evento_id)
+
+        operacion = request.query_params.get('operacion', None)
+        if operacion:
+            logs = logs.filter(operacion=operacion)
+
+        desde = request.query_params.get('desde', None)
+        if desde:
+            logs = logs.filter(created_at__date__gte=desde)
+
+        hasta = request.query_params.get('hasta', None)
+        if hasta:
+            logs = logs.filter(created_at__date__lte=hasta)
+
+        from .serializers import EventAuditLogSerializer
+        serializer = EventAuditLogSerializer(logs, many=True)
+
+        return Response({
+            "status": "success",
+            "total": logs.count(),
+            "results": serializer.data,
+        }, status=status.HTTP_200_OK)

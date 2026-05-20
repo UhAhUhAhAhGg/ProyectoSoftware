@@ -29,6 +29,7 @@ from .views import (
     UserNotificationsView,       # NUEVO: listar notificaciones
     UserNotificationReadView,    # NUEVO: marcar una notificación como leída
     UserNotificationReadAllView, # NUEVO: marcar todas como leídas
+    EventAuditLogView,       # NUEVO: historial automático de cambios en eventos
 )
 
 app_name = 'events'
@@ -106,5 +107,12 @@ urlpatterns = [
         'users/<uuid:user_id>/notifications/<uuid:notif_id>/read/',
         UserNotificationReadView.as_view(),
         name='user-notification-read'
+    ),
+
+    # NUEVO: Historial automático de auditoría de eventos
+    path(
+        'admin/events/audit-log/',
+        EventAuditLogView.as_view(),
+        name='event-audit-log'
     ),
 ]

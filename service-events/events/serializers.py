@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import AdminAuditLog, Category, Event, TicketType, UserFavorite, Notification
+from .models import AdminAuditLog, Category, Event, TicketType, UserFavorite, Notification, EventAuditLog
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -286,6 +286,23 @@ class AdminAuditLogSerializer(serializers.ModelSerializer):
             'campos_modificados',
             'ejecutado_por_email',
             'ejecutado_por_id',
+            'created_at',
+        ]
+        read_only_fields = fields
+
+
+class EventAuditLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EventAuditLog
+        fields = [
+            'id',
+            'evento_id',
+            'evento_nombre',
+            'operacion',
+            'estado_anterior',
+            'estado_nuevo',
+            'campos_modificados',
+            'motivo_baja',
             'created_at',
         ]
         read_only_fields = fields
