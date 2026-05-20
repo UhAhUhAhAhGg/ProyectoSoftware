@@ -594,6 +594,56 @@ class UserViewSet(viewsets.ModelViewSet):
             "results": data,
         }, status=status.HTTP_200_OK)
 
+    def _list_by_role(self, request, role_name):
+        """
+        Helper interno reutilizado por endpoints /promotores/, /compradores/, /administradores/.
+        Reusa la logica de admin_users con filtro de rol fijo.
+        """
+        admin = request.user
+        if not admin.is_staff and not (admin.role and admin.role.name.lower() in ['administrador', 'admin', 'superadmin']):
+            return Response(
+                {"status": "error", "message": "Permisos insuficientes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        qs = User.objects.select_related('role').filter(role__name__iexact=role_name).order_by('-created_at')
+
+        # Filtros adicionales opcionales
+        account_status = request.query_params.get('account_status')
+        search = request.query_params.get('search')
+        if account_status:
+            qs = qs.filter(account_status=account_status)
+        if search:
+            qs = qs.filter(email__icontains=search)
+
+        data = []
+        for u in qs:
+            data.append({
+                "id": str(u.id),
+                "email": u.email,
+                "role": u.role.name if u.role else None,
+                "account_status": u.account_status,
+                "suspended_reason": u.suspended_reason,
+                "is_active": u.is_active,
+                "created_at": u.created_at.isoformat(),
+            })
+        return Response(data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='promotores')
+    def list_promotores(self, request):
+        """GET /users/promotores/ — Lista usuarios con rol Promotor."""
+        return self._list_by_role(request, 'Promotor')
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='compradores')
+    def list_compradores(self, request):
+        """GET /users/compradores/ — Lista usuarios con rol Comprador."""
+        return self._list_by_role(request, 'Comprador')
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='administradores')
+    def list_administradores(self, request):
+        """GET /users/administradores/ — Lista usuarios con rol Administrador."""
+        return self._list_by_role(request, 'Administrador')
+
     @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='suspend')
     def suspend_user(self, request, pk=None):
         """
