@@ -213,10 +213,52 @@
   border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
-.action-pill.action-reactivate {
+.action-pill.action-reactivate,
+.action-pill.action-reactivate_user {
   background: rgba(34, 197, 94, 0.15);
   color: #4ade80;
   border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.action-pill.action-suspend {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.action-pill.action-ban {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.action-pill.action-create_admin,
+.action-pill.action-create_user {
+  background: rgba(139, 92, 246, 0.15);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+/* ─── Pill por tipo (Evento vs Usuario) ───────────────────────────────── */
+.kind-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.kind-pill.kind-event {
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.kind-pill.kind-user {
+  background: rgba(212, 162, 86, 0.12);
+  color: #e0b370;
+  border: 1px solid rgba(212, 162, 86, 0.3);
 }
 
 /* ─── Detalles celda ───────────────────────────────────────────────────── */

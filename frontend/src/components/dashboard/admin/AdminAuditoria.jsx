@@ -92,7 +92,7 @@ function AdminAuditoria() {
       <div className="audit-header">
         <div>
           <h2>Historial de Auditoría</h2>
-          <p className="muted">Registro automático de cambios realizados sobre eventos</p>
+          <p className="muted">Registro automático de cambios sobre eventos y cuentas de usuario</p>
         </div>
         <button
           type="button"
@@ -143,7 +143,7 @@ function AdminAuditoria() {
 
         <div className="filter-row search-row">
           <label>Buscar</label>
-          <input placeholder="Evento, detalles..." value={searchTerm} onChange={e => { setPage(1); setSearchTerm(e.target.value); }} />
+          <input placeholder="Evento, usuario, detalles..." value={searchTerm} onChange={e => { setPage(1); setSearchTerm(e.target.value); }} />
         </div>
 
         <div className="filter-row page-size-row">
@@ -167,40 +167,56 @@ function AdminAuditoria() {
             <thead>
               <tr>
                 <th onClick={() => handleSort('timestamp')} className="sortable">Fecha {sortConfig.key === 'timestamp' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</th>
+                <th>Tipo</th>
                 <th onClick={() => handleSort('admin')} className="sortable">Administrador {sortConfig.key === 'admin' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</th>
                 <th onClick={() => handleSort('action_type')} className="sortable">Acción {sortConfig.key === 'action_type' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</th>
-                <th>Evento</th>
+                <th>Objetivo</th>
                 <th>Detalles</th>
               </tr>
             </thead>
             <tbody>
               {logs.length === 0 && (
-                <tr><td colSpan={5} className="no-results">No se encontraron registros</td></tr>
+                <tr><td colSpan={6} className="no-results">No se encontraron registros</td></tr>
               )}
               {logs.map((log) => {
-                // Backend devuelve: id, event_id, event_name, admin_id, admin_email,
-                // action, reason, changed_fields, old_status, new_status, created_at
-                const actionLabels = {
-                  edit: 'Edición',
-                  deactivate: 'Baja',
-                  reactivate: 'Reactivación',
-                };
-                const cambiosTexto = log.changed_fields
-                  ? Object.entries(log.changed_fields)
-                      .map(([campo, vals]) => `${campo}: "${vals.antes ?? '-'}" → "${vals.despues ?? '-'}"`)
-                      .join(' | ')
-                  : log.reason || '-';
+                // Log normalizado por adminAuditService.getAuditLogs:
+                //   { id, kind, kind_label, created_at, admin_email,
+                //     action, action_label, target, reason,
+                //     changed_fields?, old_status?, new_status?, previous_status? }
+                let detalles = '-';
+                if (log.changed_fields && Object.keys(log.changed_fields).length > 0) {
+                  detalles = Object.entries(log.changed_fields)
+                    .map(([campo, vals]) => `${campo}: "${vals.antes ?? '-'}" → "${vals.despues ?? '-'}"`)
+                    .join(' | ');
+                } else if (log.previous_status || log.new_status) {
+                  const prev = log.previous_status || log.old_status || '-';
+                  const next = log.new_status || '-';
+                  const motivo = log.reason ? ` — ${log.reason}` : '';
+                  detalles = `${prev} → ${next}${motivo}`;
+                } else if (log.old_status || log.new_status) {
+                  const prev = log.old_status || '-';
+                  const next = log.new_status || '-';
+                  detalles = `${prev} → ${next}`;
+                } else if (log.reason) {
+                  detalles = log.reason;
+                }
+
                 return (
-                  <tr key={log.id}>
+                  <tr key={`${log.kind || 'x'}-${log.id}`}>
                     <td>{new Date(log.created_at).toLocaleString()}</td>
+                    <td>
+                      <span className={`kind-pill kind-${log.kind || 'event'}`}>
+                        {log.kind_label || (log.kind === 'user' ? '👤 Usuario' : '📅 Evento')}
+                      </span>
+                    </td>
                     <td>{log.admin_email || 'Sistema'}</td>
                     <td>
                       <span className={`action-pill action-${log.action}`}>
-                        {actionLabels[log.action] || log.action}
+                        {log.action_label || log.action}
                       </span>
                     </td>
-                    <td>{log.event_name || '-'}</td>
-                    <td><div className="details-cell">{cambiosTexto}</div></td>
+                    <td>{log.target || '-'}</td>
+                    <td><div className="details-cell">{detalles}</div></td>
                   </tr>
                 );
               })}

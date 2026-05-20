@@ -48,6 +48,21 @@ class UserViewSet(viewsets.ModelViewSet):
         """
         user = request.user
 
+        # Guard de seguridad: bloquear acceso si la cuenta esta suspendida/banned.
+        # El frontend hace polling a /users/me/ — al recibir 403 con code, fuerza logout.
+        if user.account_status == 'suspended':
+            return Response({
+                "status": "error",
+                "message": f"Tu cuenta está suspendida. {('Motivo: ' + user.suspended_reason) if user.suspended_reason else 'Contacta al administrador.'}",
+                "code": "ACCOUNT_SUSPENDED",
+            }, status=status.HTTP_403_FORBIDDEN)
+        if user.account_status == 'banned':
+            return Response({
+                "status": "error",
+                "message": "Tu cuenta ha sido dada de baja permanentemente.",
+                "code": "ACCOUNT_BANNED",
+            }, status=status.HTTP_403_FORBIDDEN)
+
         # 1. LEER DATOS (GET)
         if request.method == 'GET':
             serializer = UserMeSerializer(user)
@@ -409,11 +424,36 @@ class UserViewSet(viewsets.ModelViewSet):
     # --- LOGIN con JWT ---
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def login(self, request):
-        serializer = LoginSerializer(data=request.data)
+        # Pre-check: bloquear login si la cuenta esta suspendida/dada de baja
+        # (antes de que el serializer valide credenciales)
+        email = request.data.get('email')
+        if email:
+            try:
+                u = User.objects.get(email=email)
+                if u.account_status == 'suspended':
+                    return Response(
+                        {
+                            "status": "error",
+                            "message": f"Tu cuenta está suspendida. {('Motivo: ' + u.suspended_reason) if u.suspended_reason else 'Contacta al administrador.'}",
+                            "code": "ACCOUNT_SUSPENDED",
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                if u.account_status == 'banned':
+                    return Response(
+                        {
+                            "status": "error",
+                            "message": "Tu cuenta ha sido dada de baja permanentemente.",
+                            "code": "ACCOUNT_BANNED",
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            except User.DoesNotExist:
+                pass  # Dejar que el serializer maneje el "usuario no existe"
 
+        serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
             return Response(serializer.validated_data, status=status.HTTP_200_OK)
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
@@ -465,6 +505,19 @@ class UserViewSet(viewsets.ModelViewSet):
                     "message": "Permisos insuficientes."
                 }, status=status.HTTP_403_FORBIDDEN)
 
+            # 4. Bloquear si la cuenta esta suspendida o dada de baja
+            if user.account_status == 'suspended':
+                return Response({
+                    "status": "error",
+                    "message": f"Tu cuenta de administrador está suspendida. {('Motivo: ' + user.suspended_reason) if user.suspended_reason else ''}",
+                    "code": "ACCOUNT_SUSPENDED",
+                }, status=status.HTTP_403_FORBIDDEN)
+            if user.account_status == 'banned':
+                return Response({
+                    "status": "error",
+                    "message": "Tu cuenta ha sido dada de baja permanentemente.",
+                    "code": "ACCOUNT_BANNED",
+                }, status=status.HTTP_403_FORBIDDEN)
 
             cache.delete(cache_key)
 
@@ -477,7 +530,12 @@ class UserViewSet(viewsets.ModelViewSet):
             ]
             
             refresh = RefreshToken.for_user(user)
-            
+            # Claims custom para que service-events identifique al SuperAdmin
+            refresh['email'] = user.email
+            refresh['role'] = user.role.name if user.role else None
+            refresh['is_staff'] = bool(user.is_staff)
+            refresh['is_superadmin'] = bool(user.is_superadmin)
+
             return Response({
                 "status": "success",
                 "message": "Bienvenido al panel de administración.",
@@ -670,6 +728,101 @@ class UserViewSet(viewsets.ModelViewSet):
     def list_administradores(self, request):
         """GET /users/administradores/ — Lista usuarios con rol Administrador."""
         return self._list_by_role(request, 'Administrador')
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='admin-audit-log')
+    def admin_audit_log_list(self, request):
+        """
+        GET /users/admin-audit-log/
+        Lista el historial de acciones administrativas sobre USUARIOS
+        (suspend, reactivate, ban, create_admin, update_admin, grant/revoke_superadmin).
+        Complementa el log de auditoria de eventos.
+
+        Query params:
+          - action: filtrar por tipo de accion
+          - admin_id: filtrar por administrador que ejecuto
+          - target_id: filtrar por usuario afectado
+          - date_from / date_to: rango de fechas (YYYY-MM-DD)
+          - page / page_size: paginacion
+        """
+        admin = request.user
+        es_admin = (
+            getattr(admin, 'is_staff', False)
+            or getattr(admin, 'is_superadmin', False)
+            or (admin.role and (admin.role.name if hasattr(admin.role, 'name') else str(admin.role)).lower()
+                in ['administrador', 'admin', 'superadmin'])
+        )
+        if not es_admin:
+            return Response(
+                {"status": "error", "message": "Permisos insuficientes para ver el log de auditoria."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        qs = AdminAuditLog.objects.all().order_by('-created_at')
+
+        action = request.query_params.get('action')
+        admin_id = request.query_params.get('admin_id')
+        target_id = request.query_params.get('target_id')
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+
+        if action:
+            qs = qs.filter(action=action)
+        if admin_id:
+            qs = qs.filter(admin_id=admin_id)
+        if target_id:
+            qs = qs.filter(target_user_id=target_id)
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        try:
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 20))
+        except ValueError:
+            page, page_size = 1, 20
+
+        total = qs.count()
+        start = (page - 1) * page_size
+        registros = qs[start:start + page_size]
+
+        ACTION_LABELS = {
+            'suspend': 'Suspensión',
+            'reactivate': 'Reactivación',
+            'ban': 'Baja permanente',
+            'delete': 'Eliminación',
+            'role_change': 'Cambio de rol',
+            'create_admin': 'Creación de Admin',
+            'update_admin': 'Actualización de Admin',
+            'grant_superadmin': 'Otorgar SuperAdmin',
+            'revoke_superadmin': 'Revocar SuperAdmin',
+        }
+
+        data = []
+        for log in registros:
+            data.append({
+                "id": str(log.id),
+                "admin_id": str(log.admin_id),
+                "admin_email": log.admin_email,
+                "target_user_id": str(log.target_user_id),
+                "target_user_email": log.target_user_email,
+                "action": log.action,
+                "action_label": ACTION_LABELS.get(log.action, log.action),
+                "action_category": log.action_category,
+                "reason": log.reason,
+                "previous_status": log.previous_status,
+                "new_status": log.new_status,
+                "created_at": log.created_at.isoformat(),
+            })
+
+        return Response({
+            "status": "success",
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
+            "results": data,
+        }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='suspend')
     def suspend_user(self, request, pk=None):

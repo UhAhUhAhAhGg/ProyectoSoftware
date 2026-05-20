@@ -195,10 +195,17 @@ function AdminUsuarios({ module }) {
   };
 
   const calcularEstadisticas = (usuarios) => {
+    // Backend usa account_status: 'active'|'suspended'|'banned'
     const total = usuarios.length;
-    const activos = usuarios.filter(u => u.status === 'active' || u.is_active).length;
-    const suspendidos = usuarios.filter(u => u.status === 'suspended').length;
-    const baja = usuarios.filter(u => u.status === 'deleted').length;
+    const activos = usuarios.filter((u) => {
+      const st = u.account_status || u.status;
+      return st === 'active' || (!st && u.is_active);
+    }).length;
+    const suspendidos = usuarios.filter((u) => (u.account_status || u.status) === 'suspended').length;
+    const baja = usuarios.filter((u) => {
+      const st = u.account_status || u.status;
+      return st === 'banned' || st === 'deleted';
+    }).length;
 
     setStats({ total, activos, suspendidos, baja });
   };
@@ -329,13 +336,14 @@ function AdminUsuarios({ module }) {
     setTimeout(() => setActionMessage(''), 4000);
   };
 
-  // Filtrar usuarios
-  const usuariosFiltrados = usuarios.filter(u => {
+  // Filtrar usuarios (backend usa account_status)
+  const usuariosFiltrados = usuarios.filter((u) => {
+    const st = u.account_status || u.status;
     const cumpleFiltroEstado =
       filtroEstado === 'todos' ||
-      (filtroEstado === 'activos' && (u.status === 'active' || u.is_active)) ||
-      (filtroEstado === 'suspendidos' && u.status === 'suspended') ||
-      (filtroEstado === 'baja' && u.status === 'deleted');
+      (filtroEstado === 'activos' && (st === 'active' || (!st && u.is_active))) ||
+      (filtroEstado === 'suspendidos' && st === 'suspended') ||
+      (filtroEstado === 'baja' && (st === 'banned' || st === 'deleted'));
 
     const cumplebúsqueda =
       u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -362,8 +370,10 @@ const cambiarPagina = (numeroPagina) => {
   setPaginaActual(numeroPagina);
 };
   const obtenerEstado = (usuario) => {
-    if (usuario.status === 'suspended') return 'suspendido';
-    if (usuario.status === 'deleted') return 'baja';
+    // Backend devuelve 'account_status': 'active' | 'suspended' | 'banned'
+    const st = usuario.account_status || usuario.status;
+    if (st === 'suspended') return 'suspendido';
+    if (st === 'banned' || st === 'deleted') return 'baja';
     return usuario.is_active !== false ? 'activo' : 'inactivo';
   };
 

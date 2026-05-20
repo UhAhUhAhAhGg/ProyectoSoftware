@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { authService } from '../services/authService';
 import { apiFetch, refreshAccessToken } from '../services/apiHelper';
 
+const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:8000';
+
 const AuthContext = createContext();
 
 // Valor por defecto: 15 minutos (en ms)
@@ -165,6 +167,22 @@ export const AuthProvider = ({ children }) => {
       if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     };
   }, [user, resetInactivityTimer]);
+
+  // Verificacion periodica de account_status (cada 60s).
+  // Si la cuenta fue suspendida/banned mientras el usuario navegaba,
+  // /users/me/ devuelve 403 con code -> apiHelper hace logout forzado.
+  useEffect(() => {
+    if (!user) return;
+    const checkStatus = async () => {
+      try {
+        await apiFetch(`${AUTH_URL}/api/v1/users/me/`);
+      } catch {
+        // apiHelper ya maneja el redirect en caso de suspended/banned
+      }
+    };
+    const interval = setInterval(checkStatus, 60000); // 60 segundos
+    return () => clearInterval(interval);
+  }, [user]);
 
   const login = (userData, authToken, refreshToken) => {
     setSessionExpired(false);

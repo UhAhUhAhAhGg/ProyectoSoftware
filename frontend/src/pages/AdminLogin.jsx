@@ -19,6 +19,16 @@ function AdminLogin() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
+  // Mostrar motivo si el usuario fue redirigido por suspension/baja
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const msg = localStorage.getItem('account_status_message');
+    if (msg) {
+      setLoginError(msg);
+      localStorage.removeItem('account_status_message');
+    }
+  }, []);
+
   const { login, isAuthenticated, isAdministrador, sessionExpired, clearSessionExpired } = useAuth();
   const router = useRouter();
 

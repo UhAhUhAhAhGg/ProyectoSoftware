@@ -121,6 +121,8 @@ class LoginSerializer(serializers.Serializer):
         refresh = RefreshToken.for_user(user)
         refresh['email'] = user.email
         refresh['role'] = user.role.name if user.role else None
+        refresh['is_staff'] = bool(getattr(user, 'is_staff', False))
+        refresh['is_superadmin'] = bool(getattr(user, 'is_superadmin', False))
 
         return {
             'id': str(user.id),
@@ -245,6 +247,8 @@ class AdminLoginSerializer(serializers.Serializer):
         refresh = RefreshToken.for_user(user)
         refresh['email'] = user.email
         refresh['role'] = user.role.name if user.role else None
+        refresh['is_staff'] = bool(getattr(user, 'is_staff', False))
+        refresh['is_superadmin'] = bool(getattr(user, 'is_superadmin', False))
 
         return {
             'id': str(user.id),

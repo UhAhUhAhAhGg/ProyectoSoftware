@@ -17,6 +17,17 @@ function Login() {
   const [loginError, setLoginError] = useState('');
   const { darkMode, toggleDarkMode } = useTheme();
 
+  // Si el usuario llego aqui por una suspension/baja forzada,
+  // mostrar el motivo guardado por apiHelper antes del redirect
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const msg = localStorage.getItem('account_status_message');
+    if (msg) {
+      setLoginError(msg);
+      localStorage.removeItem('account_status_message');
+    }
+  }, []);
+
   const { login, isAuthenticated, isComprador, isPromotor, isAdministrador, sessionExpired, clearSessionExpired } = useAuth();
   const navigate = useNavigate();
 
