@@ -40,7 +40,7 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Event, EventAuditLog
 from .serializers import EventSerializer
-from .permissions import IsAdministrador, IsPromotor, IsComprador, IsAdminWithAudit
+from .permissions import IsAdministrador, IsPromotor, IsComprador, IsAdminWithAudit, HasAdminCapability
 from .services import TicketGenerationService, send_ticket_email
 from .models import (
     Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat,
@@ -108,6 +108,15 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class EventViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
+        from django.utils import timezone as _tz
+        # Auto-marcar como 'completed' eventos cuya fecha ya paso (lazy, una vez por request).
+        # Esto cubre el caso en que no hay un cron corriendo: cualquier lista refresca el estado.
+        try:
+            hoy = _tz.localdate()
+            Event.objects.filter(status='published', event_date__lt=hoy).update(status='completed')
+        except Exception:
+            pass  # nunca rompemos el endpoint por esto
+
         queryset = Event.objects.all().select_related('category').prefetch_related('ticket_types')
 
         if self.action == 'list':
@@ -129,6 +138,10 @@ class EventViewSet(viewsets.ModelViewSet):
                 queryset = Event.objects.all().select_related('category').prefetch_related('ticket_types')
             else:
                 queryset = queryset.filter(status='published')
+                # El comprador no ve eventos cuya fecha ya paso.
+                # Los admins ven todo (la tabla admin muestra estados, finalizados incluidos).
+                if not es_admin:
+                    queryset = queryset.filter(event_date__gte=_tz.localdate())
 
         status_param = self.request.query_params.get('status', None)
         if status_param:
@@ -2160,9 +2173,9 @@ class AdminEventEditView(APIView):
     Permite a un administrador modificar cualquier campo de un evento
     (nombre, fecha, capacidad, descripción, etc.) y registra la intervención.
 
-    Solo accesible por usuarios con rol Administrador o is_staff=True.
+    Acceso: Admin con capability 'manage_events' o SuperAdmin (bypass).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasAdminCapability('manage_events')]
 
     def patch(self, request, event_id):
         from .models import Event
@@ -2199,18 +2212,52 @@ class AdminEventEditView(APIView):
         ]
 
         # TIC-453: snapshot antes/despues para registrar en EventAuditLog
+        from .models import Category
         changed_fields = {}
         old_status = event.status
         for field in ALLOWED_FIELDS:
-            if field in request.data:
-                old_value = getattr(event, field, None)
-                new_value = request.data[field]
+            if field not in request.data:
+                continue
+            new_value = request.data[field]
+
+            # category llega como UUID/string -> resolver a instancia Category (FK).
+            # Aceptar None/'' para limpiar la categoria.
+            if field == 'category':
+                old_value = event.category_id  # comparamos por id, no por instancia
+                resolved = None
+                if new_value:
+                    try:
+                        resolved = Category.objects.get(pk=new_value)
+                    except (Category.DoesNotExist, ValueError, Exception):
+                        return Response(
+                            {"status": "error", "message": f"Categoría no encontrada: {new_value}"},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
                 if str(old_value) != str(new_value):
                     changed_fields[field] = {
                         'antes': str(old_value) if old_value is not None else None,
                         'despues': str(new_value) if new_value is not None else None,
                     }
-                    setattr(event, field, new_value)
+                    event.category = resolved
+                continue
+
+            # Capacity llega como string -> convertir a int para evitar errores de comparacion/persistencia
+            if field == 'capacity' and new_value not in (None, ''):
+                try:
+                    new_value = int(new_value)
+                except (TypeError, ValueError):
+                    return Response(
+                        {"status": "error", "message": "La capacidad debe ser un número entero."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            old_value = getattr(event, field, None)
+            if str(old_value) != str(new_value):
+                changed_fields[field] = {
+                    'antes': str(old_value) if old_value is not None else None,
+                    'despues': str(new_value) if new_value is not None else None,
+                }
+                setattr(event, field, new_value)
 
         if not changed_fields:
             return Response(
@@ -2255,9 +2302,9 @@ class AdminEventDeactivateView(APIView):
     Da de baja un evento: cambia su status a 'cancelled' y registra
     admin_status='deactivated' con el motivo obligatorio.
 
-    Solo accesible por usuarios con is_staff=True.
+    Acceso: Admin con capability 'manage_events' o SuperAdmin (bypass).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasAdminCapability('manage_events')]
 
     def patch(self, request, event_id):
         from .models import Event
@@ -2343,8 +2390,10 @@ class AdminAuditLogListView(APIView):
     TIC-421: GET /admin/audit-log/
     Retorna el historial completo de intervenciones administrativas sobre eventos.
     Soporta filtros (event_id, admin_id, action, date_from, date_to) y paginación.
+
+    Acceso: Admin con capability 'view_reports' o SuperAdmin (bypass).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasAdminCapability('view_reports')]
 
     def get(self, request):
         from .models import EventAuditLog
@@ -2426,9 +2475,11 @@ class EventAuditLogListView(generics.ListAPIView):
     """
     TIC-420: GET /admin/events/{event_id}/audit-log/
     Historial completo de cambios de un evento específico, paginado y ordenado
-    por fecha descendente. Protegido por permiso audit_view (TIC-422).
+    por fecha descendente.
+
+    Acceso: Admin con capability 'view_reports' o SuperAdmin (bypass).
     """
-    permission_classes = [IsAuthenticated, IsAdminWithAudit]
+    permission_classes = [IsAuthenticated, HasAdminCapability('view_reports')]
 
     def get(self, request, event_id):
         from .serializers import EventAuditLogSerializer
@@ -2446,9 +2497,10 @@ class ExportAuditLogCSVView(APIView):
     """
     TIC-423: GET /admin/audit-log/export/
     Genera y retorna un CSV con el historial completo de auditoría para uso externo.
-    Protegido por permiso audit_view (TIC-422).
+
+    Acceso: Admin con capability 'view_reports' o SuperAdmin (bypass).
     """
-    permission_classes = [IsAuthenticated, IsAdminWithAudit]
+    permission_classes = [IsAuthenticated, HasAdminCapability('view_reports')]
 
     def get(self, request):
         import csv
@@ -2544,8 +2596,10 @@ class AdminEventoBajaView(APIView):
     Da de baja un evento con motivo obligatorio.
     Registra la accion en EventAuditLog automaticamente.
     Endpoint paralelo a AdminEventDeactivateView (TIC-407) con validaciones extra.
+
+    Acceso: Admin con capability 'manage_events' o SuperAdmin (bypass).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasAdminCapability('manage_events')]
 
     def _es_admin(self, user):
         return (
@@ -2633,8 +2687,10 @@ class AdminEventoModificarView(APIView):
     Registra en EventAuditLog los campos que cambiaron con valores antes/despues.
 
     Campos modificables por el admin: name, description, event_date, location, status
+
+    Acceso: Admin con capability 'manage_events' o SuperAdmin (bypass).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasAdminCapability('manage_events')]
 
     CAMPOS_PERMITIDOS = ['name', 'description', 'event_date', 'location', 'status']
 
@@ -2735,8 +2791,10 @@ class AdminAuditLogView(APIView):
       ?evento_id=UUID    -> filtrar por evento
       ?accion=baja       -> filtrar por tipo de accion (baja, modificacion)
       ?admin_id=UUID     -> filtrar por administrador
+
+    Acceso: Admin con capability 'view_reports' o SuperAdmin (bypass).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasAdminCapability('view_reports')]
 
     ACCION_MAP = {
         'baja': 'deactivate',
@@ -2792,8 +2850,10 @@ class EventAuditLogView(APIView):
     GET /api/v1/admin/events/{event_id}/audit-log-v2/
     Vista detallada del historial de auditoria de UN evento especifico.
     Endpoint paralelo a EventAuditLogListView (TIC-420) con formato simplificado.
+
+    Acceso: Admin con capability 'view_reports' o SuperAdmin (bypass).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasAdminCapability('view_reports')]
 
     def _es_admin(self, user):
         return (

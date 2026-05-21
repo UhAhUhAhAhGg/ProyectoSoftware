@@ -21,6 +21,7 @@ function AdminEventsTable() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalAction, setModalAction] = useState(null);
   const [takedownReason, setTakedownReason] = useState('');
+  const [takedownError, setTakedownError] = useState('');
   const [additionalDetails, setAdditionalDetails] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'event_date', direction: 'desc' });
 
@@ -59,18 +60,21 @@ function AdminEventsTable() {
   const handleTakedown = async () => {
     try {
       if (!takedownReason.trim()) {
-        mostrarMensaje('⚠️ Debes proporcionar una razón');
+        // Mostrar mensaje en el propio modal (mas visible que el banner de fondo)
+        setTakedownError('Debes seleccionar una razón antes de confirmar la baja.');
         return;
       }
+      setTakedownError('');
 
       await adminEventsService.takedownEvent(selectedEvent.id, takedownReason);
       mostrarMensaje('✅ Evento dado de baja correctamente');
       setModalOpen(false);
       setTakedownReason('');
+      setAdditionalDetails('');
       await cargarEventos();
       await cargarEstadisticas();
     } catch (error) {
-      mostrarMensaje('❌ Error al dar de baja el evento');
+      setTakedownError(`❌ ${error?.message || 'Error al dar de baja el evento'}`);
     }
   };
 
@@ -338,8 +342,9 @@ function AdminEventsTable() {
                 <label>Razón de baja (obligatoria):</label>
                 <select
                   value={takedownReason}
-                  onChange={(e) => setTakedownReason(e.target.value)}
-                  className="reason-select"
+                  onChange={(e) => { setTakedownReason(e.target.value); setTakedownError(''); }}
+                  className={`reason-select ${takedownError ? 'has-error' : ''}`}
+                  style={takedownError ? { borderColor: '#ef4444' } : undefined}
                 >
                   <option value="">-- Selecciona una razón --</option>
                   <option value="Violación de términos de uso">Violación de términos de uso</option>
@@ -350,6 +355,19 @@ function AdminEventsTable() {
                   <option value="Evento duplicado">Evento duplicado</option>
                   <option value="Otro incumplimiento">Otro incumplimiento</option>
                 </select>
+                {takedownError && (
+                  <p style={{
+                    color: '#fca5a5',
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    margin: '8px 0 0 0',
+                    fontSize: '0.88rem',
+                  }}>
+                    ⚠️ {takedownError}
+                  </p>
+                )}
                 <textarea
                   placeholder="Detalles adicionales (opcional)..."
                   value={additionalDetails}
@@ -364,14 +382,16 @@ function AdminEventsTable() {
             </div>
 
             <div className="modal-footer">
-              <button onClick={() => setModalOpen(false)} className="btn btn-secondary">
+              <button
+                onClick={() => { setModalOpen(false); setTakedownError(''); }}
+                className="btn btn-secondary"
+              >
                 Cancelar
               </button>
               <button
                 onClick={handleTakedown}
                 className="btn btn-danger"
-                disabled={!takedownReason.trim()}
-                >
+              >
                 Confirmar Baja
               </button>
             </div>

@@ -8,7 +8,7 @@ from django.db import transaction
 from django.core.mail import send_mail
 from .models import User, Role, Permission, UserProfile, AccountDeletionLog, AdminAuditLog
 from .decorators import superadmin_required, log_superadmin_action
-from .permissions import IsSuperadmin
+from .permissions import IsSuperadmin, HasAdminCapability, ADMIN_CAPABILITIES
 from .serializers import (
     UserSerializer,
     UserCreateSerializer,
@@ -585,7 +585,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
     # ─── TIC-384: Gestión de usuarios desde panel Admin ──────────────────────
 
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='admin-list')
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, HasAdminCapability('manage_users')], url_path='admin-list')
     def admin_users(self, request):
         """
         TIC-384: GET /users/admin-list/
@@ -714,22 +714,24 @@ class UserViewSet(viewsets.ModelViewSet):
             })
         return Response(data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='promotores')
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, HasAdminCapability('manage_users')], url_path='promotores')
     def list_promotores(self, request):
         """GET /users/promotores/ — Lista usuarios con rol Promotor."""
         return self._list_by_role(request, 'Promotor')
 
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='compradores')
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, HasAdminCapability('manage_users')], url_path='compradores')
     def list_compradores(self, request):
         """GET /users/compradores/ — Lista usuarios con rol Comprador."""
         return self._list_by_role(request, 'Comprador')
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='administradores')
     def list_administradores(self, request):
-        """GET /users/administradores/ — Lista usuarios con rol Administrador."""
+        """GET /users/administradores/ — Lista usuarios con rol Administrador.
+        Sin capability check porque lo usa tambien el SuperAdmin desde su panel
+        y los filtros del log de auditoria."""
         return self._list_by_role(request, 'Administrador')
 
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='admin-audit-log')
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, HasAdminCapability('view_reports')], url_path='admin-audit-log')
     def admin_audit_log_list(self, request):
         """
         GET /users/admin-audit-log/
@@ -824,7 +826,7 @@ class UserViewSet(viewsets.ModelViewSet):
             "results": data,
         }, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='suspend')
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated, HasAdminCapability('manage_users')], url_path='suspend')
     def suspend_user(self, request, pk=None):
         """
         TIC-384: PATCH /users/{id}/suspend/
@@ -876,7 +878,7 @@ class UserViewSet(viewsets.ModelViewSet):
             "message": f"Cuenta de {target.email} suspendida correctamente.",
         }, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='reactivate')
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated, HasAdminCapability('manage_users')], url_path='reactivate')
     def reactivate_user(self, request, pk=None):
         """
         TIC-384: PATCH /users/{id}/reactivate/
@@ -911,7 +913,7 @@ class UserViewSet(viewsets.ModelViewSet):
             "message": f"Cuenta de {target.email} reactivada correctamente.",
         }, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated], url_path='ban')
+    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated, HasAdminCapability('manage_users')], url_path='ban')
     def ban_user(self, request, pk=None):
         """
         TIC-441: PATCH /users/{id}/ban/
@@ -1110,6 +1112,9 @@ class UserViewSet(viewsets.ModelViewSet):
                 {"status": "error", "message": "El campo permissions debe ser una lista."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # Sanitizar: descartar capabilities fuera del set valido (p.ej. 'manage_admins',
+        # que es prerrogativa exclusiva del SuperAdmin y no se asigna a Admins normales).
+        permissions = [p for p in permissions if p in ADMIN_CAPABILITIES]
 
         first_name = request.data.get('first_name', '')
         last_name = request.data.get('last_name', '')
@@ -1209,6 +1214,9 @@ class UserViewSet(viewsets.ModelViewSet):
                 {"status": "error", "message": "El campo permissions debe ser una lista."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # Sanitizar: solo aceptar capabilities del set canonico. Esto descarta
+        # 'manage_admins' (prerrogativa del SuperAdmin) y cualquier valor invalido.
+        nuevos_permisos = [p for p in nuevos_permisos if p in ADMIN_CAPABILITIES]
 
         # TIC-398/445: persistir los permisos en User.admin_permissions
         permisos_anteriores = list(target.admin_permissions or [])
@@ -1320,6 +1328,67 @@ class UserViewSet(viewsets.ModelViewSet):
             },
         }, status=status.HTTP_200_OK)
 
+    @action(
+        detail=True,
+        methods=['patch'],
+        permission_classes=[IsAuthenticated],
+        url_path='superadmin/admins/reactivate',
+    )
+    @superadmin_required
+    def superadmin_reactivate_admin(self, request, pk=None):
+        """
+        PATCH /users/{id}/superadmin/admins/reactivate/
+        Reactiva una cuenta de Administrador previamente suspendida.
+        Espejo de superadmin_suspend_admin — registra en AdminAuditLog para
+        que el cambio quede en el historial (antes se hacia con un PATCH
+        generico al UserViewSet, que NO registraba la accion).
+
+        Validaciones:
+        - Solo SuperAdmin (decorator)
+        - El usuario debe tener rol Administrador
+        """
+        try:
+            target = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response(
+                {"status": "error", "message": "Administrador no encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not (target.role and target.role.name.lower() in ['administrador', 'admin']):
+            return Response(
+                {"status": "error", "message": "Solo se pueden reactivar Administradores con este endpoint."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        previous_status = target.account_status
+        target.account_status = 'active'
+        target.suspended_reason = None
+        target.is_active = True
+        target.save(update_fields=['account_status', 'suspended_reason', 'is_active'])
+
+        AdminAuditLog.objects.create(
+            admin_id=request.user.id,
+            admin_email=request.user.email,
+            target_user_id=target.id,
+            target_user_email=target.email,
+            action='reactivate',
+            action_category='admin_mgmt',
+            reason=request.data.get('reason') or 'Reactivado por SuperAdmin',
+            previous_status=previous_status,
+            new_status='active',
+        )
+
+        return Response({
+            "status": "success",
+            "message": f"Administrador {target.email} reactivado correctamente.",
+            "data": {
+                "admin_id": str(target.id),
+                "email": target.email,
+                "account_status": target.account_status,
+            },
+        }, status=status.HTTP_200_OK)
+
 
 class RoleViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Role.objects.all()
@@ -1341,7 +1410,7 @@ class AdminUserManagementView(APIView):
     Incluye creación de UserProfile local y perfil remoto
     en service-profiles según el rol.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasAdminCapability('manage_users')]
 
     def _es_admin(self, user):
         return (
@@ -1662,7 +1731,7 @@ class AdminSuspendUserView(APIView):
     Suspende una cuenta de Promotor o Comprador.
     El motivo es obligatorio para cumplir auditoría.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasAdminCapability('manage_users')]
 
     def _es_admin(self, user):
         return (

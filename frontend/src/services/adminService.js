@@ -101,18 +101,20 @@ export const adminService = {
   },
 
   /**
-   * Reactiva una cuenta de administrador
+   * Reactiva una cuenta de administrador.
+   * Usa el endpoint dedicado del SuperAdmin que SI registra en AdminAuditLog
+   * (antes usabamos PATCH /users/{id}/ generico que no dejaba rastro).
    */
-  reactivateAdmin: async (adminId) => {
+  reactivateAdmin: async (adminId, reason = '') => {
     try {
-      const response = await api.patch(`${API_URL}/api/v1/users/${adminId}/`, {
-        is_active: true,
-        deactivation_reason: null
-      });
+      const response = await api.patch(
+        `${API_URL}/api/v1/users/${adminId}/superadmin/admins/reactivate/`,
+        { reason }
+      );
       return response.data;
     } catch (error) {
-      console.error('Error al reactivar administrador:', error);
-      throw error;
+      console.error('Error al reactivar administrador:', error?.response?.data || error?.message);
+      throw new Error(error?.response?.data?.message || 'Error al reactivar administrador');
     }
   },
 

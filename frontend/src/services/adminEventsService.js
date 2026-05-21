@@ -5,25 +5,27 @@ const EVENTS_URL = process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002'
 
 export const adminEventsService = {
   /**
-   * Obtiene todos los eventos con filtros opcionales (admin)
+   * Obtiene todos los eventos con filtros opcionales (admin).
+   * Siempre pasa incluir_bajas=true para que el admin vea TODOS los estados
+   * (activo, borrador, dado de baja, finalizado).
    */
   getAllEvents: async (filters = {}) => {
     try {
       let url = `${EVENTS_URL}/api/v1/events/`;
-      
-      // Construir query string
+
       const params = new URLSearchParams();
-      if (filters.status) params.append('status', filters.status);
+      // Critico: sin esto el backend filtra status='published' y oculta
+      // borradores/cancelados/finalizados.
+      params.append('incluir_bajas', 'true');
+      if (filters.status) params.set('status', filters.status);
       if (filters.search) params.append('search', filters.search);
       if (filters.promoter_id) params.append('promoter_id', filters.promoter_id);
-      
-      if (params.toString()) {
-        url += `?${params.toString()}`;
-      }
+
+      url += `?${params.toString()}`;
 
       const res = await apiFetch(url);
       if (!res.ok) throw new Error('No se pudieron cargar los eventos');
-      
+
       const data = await res.json();
       return data.results || data;
     } catch (error) {

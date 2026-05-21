@@ -168,21 +168,44 @@ export const AuthProvider = ({ children }) => {
     };
   }, [user, resetInactivityTimer]);
 
-  // Verificacion periodica de account_status (cada 60s).
-  // Si la cuenta fue suspendida/banned mientras el usuario navegaba,
-  // /users/me/ devuelve 403 con code -> apiHelper hace logout forzado.
+  // Verificacion periodica cada 60s. Cumple dos funciones:
+  //   1) Si la cuenta fue suspendida/banned, /users/me/ devuelve 403 con code
+  //      y apiHelper hace logout forzado.
+  //   2) TIC-398/445: refresca admin_permissions e is_superadmin sin re-login.
+  //      Cuando el SuperAdmin cambia los permisos, el siguiente tick los aplica
+  //      y el sidebar se re-renderiza automaticamente.
   useEffect(() => {
     if (!user) return;
     const checkStatus = async () => {
       try {
-        await apiFetch(`${AUTH_URL}/api/v1/users/me/`);
+        const res = await apiFetch(`${AUTH_URL}/api/v1/users/me/`);
+        if (!res || !res.ok) return; // apiHelper maneja 403 suspended/banned
+        const fresh = await res.json().catch(() => null);
+        if (!fresh) return;
+        setUser(prev => {
+          if (!prev) return prev;
+          const nextPerms = Array.isArray(fresh.admin_permissions) ? fresh.admin_permissions : [];
+          const nextSuper = !!fresh.is_superadmin;
+          // Evitar re-render si nada relevante cambio
+          const prevPerms = Array.isArray(prev.admin_permissions) ? prev.admin_permissions : [];
+          const sameSuper = !!prev.is_superadmin === nextSuper;
+          const samePerms =
+            prevPerms.length === nextPerms.length &&
+            prevPerms.every((p, i) => p === nextPerms[i]);
+          if (sameSuper && samePerms) return prev;
+          const merged = { ...prev, admin_permissions: nextPerms, is_superadmin: nextSuper };
+          try { localStorage.setItem('user', JSON.stringify(merged)); } catch {}
+          return merged;
+        });
       } catch {
-        // apiHelper ya maneja el redirect en caso de suspended/banned
+        // ignorar; apiHelper ya maneja redirects en casos de auth
       }
     };
+    // Disparar una vez inmediatamente al montar para no esperar 60s tras login
+    checkStatus();
     const interval = setInterval(checkStatus, 60000); // 60 segundos
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user?.email]);
 
   const login = (userData, authToken, refreshToken) => {
     setSessionExpired(false);
@@ -247,7 +270,18 @@ export const AuthProvider = ({ children }) => {
   const isComprador = user?.role === 'Comprador';
   const isPromotor = user?.role === 'Promotor';
   const isAdministrador = user?.role === 'Administrador';
-  const isSuperAdmin = user?.role === 'SuperAdmin';
+  const isSuperAdmin = user?.role === 'SuperAdmin' || !!user?.is_superadmin;
+
+  // TIC-398/445: capabilities granulares del Administrador.
+  // SuperAdmin tiene bypass total (siempre devuelve true).
+  // Comprador y Promotor no usan este sistema: hasPermission(*) = false.
+  const permissions = Array.isArray(user?.admin_permissions) ? user.admin_permissions : [];
+  const hasPermission = (cap) => {
+    if (!user) return false;
+    if (user.is_superadmin) return true;
+    if (!isAdministrador) return false;
+    return permissions.includes(cap);
+  };
 
   // Ruta de dashboard según el rol del usuario
   const getDashboardPath = () => {
@@ -272,6 +306,8 @@ export const AuthProvider = ({ children }) => {
     isPromotor,
     isAdministrador,
     isSuperAdmin,
+    permissions,
+    hasPermission,
     getDashboardPath,
     sessionExpired,
     clearSessionExpired,

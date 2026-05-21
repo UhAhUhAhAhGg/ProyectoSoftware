@@ -46,6 +46,9 @@ class JWTUser:
         self.is_superuser = payload.get('is_superuser', False)
         # Custom claim del service-auth — necesario para checks de SuperAdmin
         self.is_superadmin = payload.get('is_superadmin', False)
+        # TIC-398/445: capabilities granulares del admin viajan en el JWT
+        # emitido por service-auth — service-events las lee sin consultar la BD remota.
+        self.admin_permissions = list(payload.get('admin_permissions', []) or [])
 
     def __str__(self):
         return self.email or str(self.id)
