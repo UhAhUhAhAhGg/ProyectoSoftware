@@ -35,6 +35,8 @@ function App() {
               <Route path="/dashboard/mis-eventos" element={<ListaEventos />} />
               <Route path="/dashboard/crear-evento" element={<FormularioEvento />} />
               <Route path="/dashboard/evento/:id/editar" element={<FormularioEvento />} />
+              {/* TIC-25: admin edita el evento con el mismo formulario + control administrativo */}
+              <Route path="/admin/evento/:id/editar" element={<FormularioEvento adminMode={true} />} />
               <Route path="/dashboard/mis-compras" element={<MisCompras />} />
               <Route path="/dashboard/boletos" element={<Navigate to="/dashboard/mis-compras" replace />} />
               <Route path="/dashboard/historial" element={<Navigate to="/dashboard/mis-compras" replace />} />

@@ -1,432 +1,330 @@
-# 🎟️ ProyectoSoftware — Plataforma de Tickets
+# 🎟️ TicketGo / ProyectoSoftware
 
 Plataforma de venta de entradas construida con arquitectura de microservicios.
+Sprint actual: **Sprint 4** (recomendaciones, notificaciones, gestión administrativa, SuperAdmin con permisos granulares, auditoría unificada).
+
+---
 
 ## 🏗️ Arquitectura
 
 ```
-┌─────────────────────────────────┐
-│         Frontend (Next.js)       │  :3000
-└─────────────────────────────────┘
-          │         │         │
-┌─────────┐ ┌───────────┐ ┌────────────┐
-│ service │ │  service  │ │  service   │
-│  -auth  │ │ -profiles │ │  -events   │
-│  :8000  │ │   :8001   │ │   :8002    │
-└─────────┘ └───────────┘ └────────────┘
-     │             │             │
-┌─────────┐ ┌───────────┐ ┌────────────┐
-│ auth_db │ │profiles_db│ │ events_db  │
-│  :5432  │ │   :5433   │ │   :5434    │
-└─────────┘ └───────────┘ └────────────┘
+                         ┌──────────────────┐
+                         │ Frontend Next.js │  :3000
+                         └────────┬─────────┘
+        ┌────────────────────┬────┴─────────┬────────────────────┐
+        ▼                    ▼              ▼                    ▼
+ ┌──────────────┐    ┌────────────────┐ ┌──────────────┐  ┌───────────────┐
+ │ service-auth │    │service-profiles│ │service-events│  │ service-queue │
+ │   :8000      │    │     :8001      │ │    :8002     │  │    :8003      │
+ └──────┬───────┘    └────────┬───────┘ └──────┬───────┘  └───────┬───────┘
+        ▼                     ▼                ▼                  ▼
+ ┌──────────────┐    ┌────────────────┐ ┌──────────────┐  ┌───────────────┐
+ │   auth_db    │    │  profiles_db   │ │  events_db   │  │   queue_db    │
+ │    :5432     │    │     :5433      │ │    :5434     │  │    :5435      │
+ └──────────────┘    └────────────────┘ └──────────────┘  └───────────────┘
 ```
 
 | Servicio | Tecnología | Puerto | Descripción |
 |---|---|---|---|
-| `service-auth` | Django + DRF | 8000 | Autenticación JWT, usuarios, roles |
-| `service-profiles` | Django + DRF | 8001 | Perfiles de Admin, Comprador, Promotor |
-| `service-events` | Django + DRF | 8002 | Eventos, categorías, tipos de ticket |
-| `frontend` | Next.js 16 | 3000 | Interfaz de usuario |
+| `service-auth` | Django + DRF + simplejwt | 8000 | JWT, usuarios, roles, permisos granulares, auditoría de usuarios |
+| `service-profiles` | Django + DRF | 8001 | Perfiles por rol (Admin, Comprador, Promotor) |
+| `service-events` | Django + DRF | 8002 | Eventos, tickets, asientos, compras, favoritos, notificaciones, auditoría de eventos |
+| `service-queue` | Django + DRF | 8003 | Cola virtual para alta demanda (Sprint 3) |
+| `frontend` | Next.js 16 + React 19 | 3000 | UI |
 
 ---
 
 ## ✅ Requisitos previos
 
-Antes de empezar, asegúrate de tener instalado:
-
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (incluye Docker Compose)
 - [Git](https://git-scm.com/)
 
-**Verificar instalación:**
 ```bash
-docker --version       # Docker version 24+
-docker compose version # Docker Compose version 2+
+docker --version           # 24+
+docker compose version     # 2+
 git --version
 ```
 
 ---
 
-## 🚀 Cómo ejecutar el proyecto (primera vez)
+## 🚀 Primera ejecución
 
-### 1. Clonar el repositorio
+### 1. Clonar y configurar
 
 ```bash
 git clone git@github.com:UhAhUhAhAhGg/ProyectoSoftware.git
 cd ProyectoSoftware
-```
-
-### 2. Configurar variables de entorno
-
-```bash
-# Copiar el archivo de ejemplo
 cp .env.example .env
 ```
 
-> El archivo `.env.example` ya tiene valores por defecto para desarrollo local. No necesitas cambiar nada para correr el proyecto por primera vez.
+> El `.env.example` ya tiene valores por defecto. Solo edítalo si quieres recibir mails reales — ver sección [Email](#-email-opcional).
 
-### 3. Levantar todos los servicios
+### 2. Levantar todo
 
 ```bash
 docker compose up --build
 ```
 
-Este comando:
-- Construye las imágenes Docker de cada servicio
-- Levanta las 3 bases de datos PostgreSQL
-- Genera y aplica las migraciones automáticamente
-- Inicia los 4 servicios
+La primera vez tarda unos minutos descargando imágenes y aplicando migraciones.
 
-⏳ La primera vez puede tardar unos minutos mientras descarga las imágenes base.
+### 3. Cargar datos iniciales (seeds)
 
-### 4. Verificar que todo funciona
+**Imprescindible la primera vez** — sin esto no hay roles ni usuarios de prueba:
 
-Abre tu navegador y accede a:
+```bash
+# 1. Crea los roles base + el SuperAdmin "histórico" (asigna rol Superadmin a usuarios is_staff existentes)
+docker compose exec service-auth python seed_superadmin_role.py
+
+# 2. Crea las 4 cuentas de prueba (admin SuperAdmin, admin con permisos limitados, promotor, comprador)
+docker compose exec service-auth python seed_users.py
+
+# 3. Crea las 10 categorías de eventos
+docker compose exec service-events python seed_categories.py
+```
+
+> **Nota**: el orden importa. `seed_users.py` asume que los roles ya existen (los crea automáticamente si faltan).
+
+### 4. Verificar
 
 | URL | Qué deberías ver |
 |---|---|
-| http://localhost:3000 | Frontend (Next.js) |
-| http://localhost:8000/api/v1/ | API de autenticación |
-| http://localhost:8001/api/v1/ | API de perfiles |
-| http://localhost:8002/api/v1/ | API de eventos |
+| http://localhost:3000 | Frontend |
+| http://localhost:8000/api/v1/ | API auth |
+| http://localhost:8001/api/v1/ | API perfiles |
+| http://localhost:8002/api/v1/ | API eventos |
+| http://localhost:8003/api/v1/ | API cola |
+
+---
+
+## 👤 Cuentas de prueba
+
+Tras ejecutar `seed_users.py`:
+
+| Rol | Email | Contraseña | Notas |
+|---|---|---|---|
+| **SuperAdmin** | `admin@ticketproject.com` | `Admin1234!` | `is_superadmin=True`. Bypass total de permisos. |
+| **Admin (limitado)** | `admin2@ticketproject.com` | `Admin1234!` | Solo `manage_events`. Útil para probar gating del sidebar. |
+| **Promotor** | `promotor@ticketproject.com` | `Promotor1234!` | Crea eventos. |
+| **Comprador** | `comprador@ticketproject.com` | `Comprador1234!` | Compra entradas. |
+
+> Para SuperAdmin desde consola (alternativa): `docker compose exec service-auth python manage.py create_superadmin --email superadmin@ticketgo.com --password admin123`.
 
 ---
 
 ## 💻 Uso diario
 
-### Levantar los servicios (sin rebuild)
 ```bash
-docker compose up
+docker compose up                 # sin rebuild
+docker compose up -d              # en background
+docker compose down               # apagar
+docker compose down -v            # apagar + borrar volúmenes (¡pierdes BD!)
+docker compose logs -f service-auth   # logs en vivo
+docker compose up --build service-auth  # rebuild de un servicio
 ```
 
-### Levantar en segundo plano (detached)
-```bash
-docker compose up -d
-```
+### Reset completo del entorno
 
-### Apagar todos los servicios
-```bash
-docker compose down
-```
-
-### Apagar y **borrar los datos de las bases de datos**
 ```bash
 docker compose down -v
-```
-> ⚠️ Esto elimina los volúmenes de PostgreSQL. Usar solo si quieres empezar desde cero.
-
-### Ver logs de un servicio específico
-```bash
-docker compose logs -f service-auth
-docker compose logs -f service-profiles
-docker compose logs -f service-events
-docker compose logs -f frontend
+docker compose up --build
+docker compose exec service-auth python seed_superadmin_role.py
+docker compose exec service-auth python seed_users.py
+docker compose exec service-events python seed_categories.py
 ```
 
-### Reconstruir un servicio específico (ej: después de cambiar el Dockerfile)
+### Crear admin de Django (acceso a /admin/)
+
 ```bash
-docker compose up --build service-auth
+docker compose exec service-auth python manage.py createsuperuser
+```
+
+### Migraciones manuales
+
+```bash
+docker compose exec service-auth python manage.py makemigrations
+docker compose exec service-auth python manage.py migrate
+```
+
+### Acceder a la BD
+
+```bash
+docker compose exec auth-db psql -U admin -d auth_db
+docker compose exec events-db psql -U admin -d events_db
 ```
 
 ---
 
 ## 🔑 Autenticación (JWT)
 
-El sistema usa JWT con `djangorestframework-simplejwt`.
-
-### Obtener token
 ```bash
-POST http://localhost:8000/api/v1/token/
-Content-Type: application/json
+# Obtener token
+POST http://localhost:8000/api/v1/users/login/
+{ "email": "admin@ticketproject.com", "password": "Admin1234!" }
 
-{
-  "username": "tu@email.com",
-  "password": "tupassword"
-}
-```
-
-### Usar el token en requests protegidos
-```bash
-GET http://localhost:8000/api/v1/users/
+# Usar el token
+GET http://localhost:8000/api/v1/users/me/
 Authorization: Bearer <access_token>
-```
 
-### Refrescar token
-```bash
+# Refrescar
 POST http://localhost:8000/api/v1/token/refresh/
-Content-Type: application/json
-
-{
-  "refresh": "<refresh_token>"
-}
+{ "refresh": "<refresh_token>" }
 ```
 
----
-
-## 📋 Estructura del proyecto
-
-```
-ProyectoSoftware/
-├── docker-compose.yml          # Orquestación de todos los servicios
-├── .env.example                # Variables de entorno de ejemplo
-├── requirements.txt            # Dependencias Python compartidas
-│
-├── service-auth/               # Microservicio de autenticación
-│   ├── Dockerfile
-│   ├── auth_config/            # Configuración Django
-│   ├── users/                  # App: modelos User, Role, Permission
-│   └── tests/
-│
-├── service-profiles/           # Microservicio de perfiles
-│   ├── Dockerfile
-│   ├── profiles_config/        # Configuración Django
-│   ├── profiles/               # App: AdminProfile, BuyerProfile, PromotorProfile
-│   └── tests/
-│
-├── service-events/             # Microservicio de eventos
-│   ├── Dockerfile
-│   ├── events_config/          # Configuración Django
-│   ├── events/                 # App: Category, Event, TicketType
-│   └── tests/
-│
-└── frontend/                   # Frontend Next.js
-    ├── Dockerfile
-    ├── app/                    # App Router de Next.js
-    └── src/                    # Componentes y servicios
-```
+El JWT incluye claims custom: `email`, `role`, `is_staff`, `is_superadmin`, `admin_permissions` (lista de capabilities, ver [US-24](docs/sprint-4/US24_permisos_granulares.md)).
 
 ---
 
-## 🌱 Semillas de Base de Datos Básico (Seeds)
+## 📚 Documentación
 
-Para que el proyecto funcione correctamente (tanto en Back como en Front) sin que tengas que crearlo todo desde cero a mano, incluimos scripts "Seed" que inyectan los datos primordiales.
+Toda la documentación está en [`docs/`](docs/README.md), organizada por sprint:
 
-Debes ejecutar estos comandos **inmediatamente después de hacer `docker compose up` por primera vez**, en otra terminal:
-
-### 1. Semilla de Usuarios Básica (`service-auth`)
-Pre-carga roles y 3 usuarios de prueba con la contraseña `*Password1234!*`:
-* Administrador (`admin@ticketproject.com`)
-* Promotor (`promotor@ticketproject.com`)
-* Comprador (`comprador@ticketproject.com`)
-```bash
-docker compose exec service-auth python seed_users.py
-```
-
-### 2. Semilla de Categorías de Eventos (`service-events`)
-Pre-carga las 8 categorías oficiales de eventos para que el Frontend y el Backend hablen el mismo idioma al crear funciones (Música, Deportes, Festivales, etc.).
-```bash
-docker compose exec service-events python seed_categories.py
-```
+| Sprint | Carpeta | Resumen |
+|---|---|---|
+| 🔧 Deuda técnica | [docs/DEUDA_TECNICA.md](docs/DEUDA_TECNICA.md) | **US-21 y US-22 pendientes de validar antes de producción** |
+| Architecture | [docs/architecture/](docs/architecture/) | Estructura, API, BD, Swagger, guías técnicas |
+| Sprint 1 | [docs/sprint-1/](docs/sprint-1/) | HU-1 a HU-8: registro, login, roles, eventos básicos |
+| Sprint 2 | [docs/sprint-2/](docs/sprint-2/) | HU-9 a HU-32: explorar, comprar, pago QR, perfil |
+| Sprint 3 | [docs/sprint-3/](docs/sprint-3/) | US-11 a US-20: mapa de asientos, cola virtual |
+| Sprint 4 | [docs/sprint-4/](docs/sprint-4/) | US-21 a US-26: recomendaciones, notificaciones, admin |
 
 ---
 
-## 🧪 Cómo probar los Flujos de Usuario y Administrador (HU-4 y HU-5)
+## 🧪 Cómo probar Sprint 4
 
-Una vez que tengas los contenedores corriendo (`docker compose up`), sigue estos pasos para probar el ecosistema de roles:
+Esta es la entrega más reciente. Para una guía detallada por US, ver [docs/sprint-4/](docs/sprint-4/).
 
-### Flujo 1: Crear el SuperAdmin inicial (Vía Docker)
-Dado que la plataforma requiere extrema seguridad, el primer administrador general debe crearse desde la consola de comandos del servidor backend:
+### Prerrequisitos
 
-```bash
-docker compose exec service-auth python manage.py create_superadmin --email superadmin@ticketgo.com --password admin123
-```
-*Si omites los parámetros `--email` o `--password`, el script te los pedirá de forma interactiva en la consola.*
+- `docker compose up` corriendo
+- Seeds ejecutados (paso 3 de la instalación)
+- Al menos un evento publicado por el Promotor (login → "Crear Evento" → publicar)
 
-### Flujo 2: Invitar a un Nuevo Administrador
-1. Ve a la **página de Login Privado**: [http://localhost:3000/admin/login](http://localhost:3000/admin/login)
-2. Inicia sesión con el email y contraseña del **SuperAdmin** que acabas de crear.
-3. Serás redirigido al `Dashboard`. En la barra lateral, haz click en **⚙️ Administradores**.
-4. En el módulo superior verás **✉️ Invitar Nuevo Administrador**. Escribe el correo de tu colega (ej. `segundo@admin.com`) y genera el enlace.
-5. El sistema mostrará un mensaje verde con un Link Secreto. **Cópialo**.
+### US-21 — Recomendaciones y favoritos ([detalle](docs/sprint-4/RECOMMENDATIONS_INTEGRATION_GUIDE.md))
 
-### Flujo 3: Registro y Aprobación de Seguridad
-1. Abre una **ventana de incógnito** y pega el Link Secreto (`http://localhost:3000/admin/register?token=...`).
-2. Llena el formulario de seguridad (Código de Empleado y Departamento). Al enviarlo, la cuenta quedará como "Pendiente".
-3. Vuelve a tu ventana normal (la del SuperAdmin) y actualiza la tabla de **⏳ Solicitudes Pendientes de Aprobación**.
-4. Encontrarás la solicitud en rojo. Haz click en el botón **Aprobar**.
-5. ¡Listo! El nuevo colega ya puede iniciar sesión libremente en `/admin/login`.
+1. Login como Comprador → "Explorar Eventos" → marcar evento como favorito (corazón).
+2. Comprar un evento → en home aparecen "Recomendaciones para ti" basadas en categoría/comportamiento.
 
-### Flujo 4: Usuarios Públicos (Compradores y Promotores)
-1. Para los clientes normales, ve a la ruta raíz: [http://localhost:3000](http://localhost:3000) y pulsa "Acceder" (o directamente ve a `/login`).
-2. Si intentas poner las credenciales del SuperAdmin aquí, el sistema **te rechazará o redirigirá** a los modulos equivocados para forzarte a usar el portal privado de la empresa.
-3. En la página de Login o `/registro`, pulsa "¿No tienes una cuenta? Regístrate aquí".
-4. Podrás elegir entre el perfil de **Comprador** o **Promotor**. Tras el registro, podrás iniciar sesión normalmente.
+### US-22 — Notificaciones y preferencias ([detalle](docs/sprint-4/NOTIFICATIONS_IMPLEMENTATION.md))
 
----
+1. Comprador → "Notificaciones" en el header → ver historial.
+2. "Mi perfil → Preferencias de notificación" → activar/desactivar por canal y categoría.
+3. Comprar un evento → llega notificación de confirmación.
 
-## 🎯 Guía de Pruebas — Sprint 2
+### US-23 — Gestión de usuarios por admin ([detalle](docs/sprint-4/US23_gestion_usuarios.md))
 
-Esta sección resume cómo probar cada Historia de Usuario del Sprint 2. Para detalles completos, consulta la documentación en la carpeta `docs/`.
+1. Login como `admin@ticketproject.com` (SuperAdmin) → "Gestionar Usuarios → Compradores".
+2. Suspender un comprador con motivo → en otra pestaña con esa sesión, en ≤60s lo sacan.
+3. Reactivar el comprador → vuelve a poder loguearse.
 
-### Prerrequisitos generales
+### US-24 — SuperAdmin + Permisos granulares ([detalle](docs/sprint-4/US24_permisos_granulares.md))
 
-1. Levantar todos los servicios:
-   ```bash
-   docker compose up
-   ```
-2. Ejecutar los seeds (solo la primera vez):
-   ```bash
-   docker compose exec service-auth python seed_users.py
-   docker compose exec service-events python seed_categories.py
-   ```
-3. Crear al menos un evento como Promotor (ver más abajo)
+1. Como SuperAdmin → panel SuperAdmin → "Crear nuevo Administrador" con solo `manage_events`.
+2. Logout. Login con el admin nuevo → sidebar solo muestra **Inicio + Gestión de Eventos**.
+3. Sin recargar, el SuperAdmin le agrega `manage_users` → en ≤60s aparece "Gestionar Usuarios" en el sidebar del admin (polling de `/users/me/`).
+4. **Bypass test**: con `admin2@ticketproject.com` (semilla), intentar `PATCH /api/v1/users/{id}/suspend/` → **403** (no tiene `manage_users`). Con SuperAdmin → 200.
 
-### Cuentas de prueba
+### US-25 — Edición y baja de eventos por admin ([detalle](docs/sprint-4/US25_admin_eventos.md))
 
-| Rol | Email | Contraseña |
-|-----|-------|------------|
-| Administrador | `admin@ticketproject.com` | `Admin1234!` |
-| Promotor | `promotor@ticketproject.com` | `Promotor1234!` |
-| Comprador | `comprador@ticketproject.com` | `Comprador1234!` |
+1. Como admin con `manage_events` → "Gestión de Eventos" → editar un evento (mismo formulario del Promotor + sección Control Administrativo).
+2. Dar de baja con motivo → status pasa a `cancelled`.
+3. Probar baja sin motivo → modal muestra "Debes seleccionar una razón".
 
-> **Nota:** Si quieres recibir el email con el ticket, registra una cuenta con tu correo real.
+### US-26 — Auditoría unificada ([detalle](docs/sprint-4/US26_auditoria.md))
 
-### Preparación: Crear un evento de prueba
-
-1. Login como **Promotor** en http://localhost:3000
-2. Dashboard → "Crear Evento"
-3. Llenar datos: nombre, descripción, fecha futura, ubicación, imagen
-4. En "Gestión de Zonas/Entradas", agregar al menos una zona (ej: VIP, $500, 200 cupos)
-5. Guardar → Publicar el evento
+1. Tras hacer cualquier acción de US-23/24/25, ir a "Log de Auditoría".
+2. Tabla muestra ambas fuentes: 📅 Evento y 👤 Usuario.
+3. Filtrar por tipo de acción / admin / fecha.
+4. "Exportar CSV" descarga el log.
 
 ---
 
-### HU-9: Explorar Catálogo de Eventos 📖 [docs/HU-9_explorar_eventos.md](docs/HU-9_explorar_eventos.md)
+## 📧 Email (opcional)
 
-| # | Prueba | Pasos | Resultado esperado |
-|---|--------|-------|-------------------|
-| 1 | Ver listado | Login comprador → "Explorar Eventos" | Lista de eventos con imagen, nombre, fecha, ubicación |
-| 2 | Buscar | Escribir en el buscador | Lista se filtra por nombre, ubicación o ciudad en tiempo real |
-| 3 | Ver detalle | Click en un evento | Página con info completa y tipos de entrada |
+Para que los correos de confirmación de compra lleguen de verdad, edita `.env`:
 
----
-
-### HU-10: Selección de Tipo de Entrada 📖 [docs/HU-10_seleccion_entradas.md](docs/HU-10_seleccion_entradas.md)
-
-| # | Prueba | Pasos | Resultado esperado |
-|---|--------|-------|-------------------|
-| 1 | Ver tipos | En detalle de evento, ver sección "Tipos de entrada" | Nombre, zona, precio, disponibilidad por cada tipo |
-| 2 | Seleccionar | Click "Pagar con QR" en un tipo | Se abre modal de pago con QR, resumen y temporizador |
-
----
-
-### HU-13: Compra Única por Evento 📖 [docs/HU-13_compra_unica.md](docs/HU-13_compra_unica.md)
-
-| # | Prueba | Pasos | Resultado esperado |
-|---|--------|-------|-------------------|
-| 1 | Compra duplicada | Completar pago → volver al evento → intentar comprar de nuevo | Mensaje: "🛑 Ya compraste una entrada para este evento" |
-| 2 | Otro evento | Con la misma cuenta, comprar en un evento diferente | Compra se realiza normalmente |
-
----
-
-### HU-15: Mis Entradas (Visualización) 📖 [docs/HU-15_mis_entradas.md](docs/HU-15_mis_entradas.md)
-
-| # | Prueba | Pasos | Resultado esperado |
-|---|--------|-------|-------------------|
-| 1 | Ver entradas | Comprar una entrada → sidebar "Mis Entradas" | Compra visible con estado, evento, precio |
-| 2 | Ver detalle | Click en una compra | Panel lateral con QR, código de respaldo, info completa |
-| 3 | Descargar PDF | En detalle, click "📄 Descargar entrada PDF" | Se descarga PDF con QR y código de acceso |
-| 4 | Filtrar | Click en filtros (Completadas, Pendientes, etc.) | Lista se filtra por estado |
-
----
-
-### HU-17: Pago con QR 📖 [docs/HU-17_pago_qr.md](docs/HU-17_pago_qr.md)
-
-| # | Prueba | Pasos | Resultado esperado |
-|---|--------|-------|-------------------|
-| 1 | Iniciar pago | En evento → "Pagar con QR" | Modal con QR de pago, temporizador 15 min, botón simular |
-| 2 | Simular pago | Click "Simular pago aprobado" | 🎉 Pago Exitoso + QR de entrada + código de respaldo |
-| 3 | Email | Tras pago, si configuraste Gmail | Banner "📧 Ticket enviado a tu@correo.com" |
-| 4 | Expiración | Iniciar pago → NO pagar → esperar 15 min | Modal muestra "Tiempo Expirado", permite reintentar |
-
-**Configuración de Email (opcional):**
-Para recibir el ticket por correo, edita el archivo `.env` raíz:
 ```env
 EMAIL_HOST_USER=tucorreo@gmail.com
 EMAIL_HOST_PASSWORD=tuapppassword16chars
-DEFAULT_FROM_EMAIL=TicketProject <tucorreo@gmail.com>
-```
-> Necesitas una [App Password de Google](https://myaccount.google.com/apppasswords) (16 caracteres sin espacios).
-
----
-
-### HU-32: Historial de Compras 📖 [docs/HU-32_historial_compras.md](docs/HU-32_historial_compras.md)
-
-| # | Prueba | Pasos | Resultado esperado |
-|---|--------|-------|-------------------|
-| 1 | Historial | Varias compras → "Mis Entradas" | Todas las compras ordenadas por fecha |
-| 2 | Filtros | Click en Completadas/Pendientes/Canceladas | Solo compras del estado seleccionado |
-| 3 | Paginación | Más de 10 compras | Botones Anterior/Siguiente |
-
----
-
-### Flujo completo de prueba (de inicio a fin)
-
-1. `docker compose up` + seeds
-2. Login como **Promotor** → Crear evento con zonas y precios → Publicar
-3. Login como **Comprador** → Explorar Eventos → Seleccionar evento
-4. Ver tipos de entrada → "Pagar con QR" → Simular pago
-5. Verificar: 🎉 Pago exitoso + QR + código + email (si configurado)
-6. Ir a "Mis Entradas" → Ver compra + descargar PDF
-7. Volver al evento → Intentar comprar de nuevo → Verificar bloqueo "Ya compraste"
-
----
-
-## 📚 Documentación completa
-
-| Documento | Descripción |
-|-----------|-------------|
-| [docs/HU-9_explorar_eventos.md](docs/HU-9_explorar_eventos.md) | Explorar catálogo de eventos |
-| [docs/HU-10_seleccion_entradas.md](docs/HU-10_seleccion_entradas.md) | Selección de tipo de entrada |
-| [docs/HU-13_compra_unica.md](docs/HU-13_compra_unica.md) | Restricción de compra única |
-| [docs/HU-15_mis_entradas.md](docs/HU-15_mis_entradas.md) | Visualización de entradas compradas |
-| [docs/HU-17_pago_qr.md](docs/HU-17_pago_qr.md) | Pago con QR + email |
-| [docs/HU-32_historial_compras.md](docs/HU-32_historial_compras.md) | Historial de compras |
-| [docs/HU-1_registro.md](docs/HU-1_registro.md) | Registro de usuarios |
-| [docs/HU-2_login.md](docs/HU-2_login.md) | Inicio de sesión |
-| [docs/HU-7_gestion_eventos.md](docs/HU-7_gestion_eventos.md) | Gestión de eventos (Promotor) |
-| [docs/HU-8_gestion_entradas.md](docs/HU-8_gestion_entradas.md) | Gestión de entradas/zonas |
-
----
-
-### Crear un superusuario para el admin de Django
-```bash
-docker compose exec service-auth python manage.py createsuperuser
+DEFAULT_FROM_EMAIL=TicketGo <tucorreo@gmail.com>
 ```
 
-### Acceder al shell de Django
-```bash
-docker compose exec service-auth python manage.py shell
-```
-
-### Crear migraciones manualmente (si modificas modelos)
-```bash
-docker compose exec service-auth python manage.py makemigrations
-docker compose exec service-auth python manage.py migrate
-```
-
-### Acceder a la base de datos
-```bash
-docker compose exec auth-db psql -U admin -d auth_db
-```
+Necesitas una [App Password de Google](https://myaccount.google.com/apppasswords) (16 caracteres). Sin esto, los mails se imprimen en la consola del backend.
 
 ---
 
 ## ❓ Problemas comunes
 
-### "Port is already in use"
-Algún puerto (8000, 8001, 8002, 3000, 5432, 5433, 5434) ya está en uso. Detén cualquier servicio local que use esos puertos y vuelve a intentarlo.
+### "Port already in use"
 
-### Los servicios no pueden conectarse entre sí
-Asegúrate de ejecutar `docker compose up` desde la raíz del proyecto (donde está el `docker-compose.yml`), no desde una subcarpeta.
+Algún puerto (3000, 8000-8003, 5432-5435) está ocupado. Detén lo que lo use y reintenta.
 
-### "Permission denied" en Linux/Mac
+### Los servicios no se ven entre sí
+
+Asegúrate de ejecutar `docker compose up` desde la raíz (donde está `docker-compose.yml`).
+
+### Las migraciones no aplican
+
 ```bash
-sudo chmod +x manage.py
+docker compose exec service-auth python manage.py migrate
+docker compose exec service-events python manage.py migrate
+docker compose exec service-profiles python manage.py migrate
+docker compose exec service-queue python manage.py migrate
+```
+
+### Quiero empezar de cero
+
+```bash
+docker compose down -v
+docker compose up --build
+# luego re-ejecutar los seeds
 ```
 
 ### Cambios en el código no se reflejan
-El proyecto usa volúmenes montados, los cambios en el código Python se recargan automáticamente. Para cambios en el `Dockerfile` o en `requirements.txt` es necesario reconstruir:
+
+Volúmenes montados recargan Python automáticamente. Para cambios en `Dockerfile` o `requirements.txt`:
+
 ```bash
 docker compose up --build
 ```
-update
+
+### "Cannot assign UUID to Event.category"
+
+Resuelto en US-25 — el endpoint admin convierte el UUID en instancia `Category` antes de persistir.
+
+---
+
+## 🧱 Estructura del proyecto
+
+```
+ProyectoSoftware/
+├── docker-compose.yml
+├── .env.example
+├── README.md
+├── docs/
+│   ├── README.md              ← Índice de documentación
+│   ├── architecture/
+│   ├── sprint-1/ … sprint-4/
+├── service-auth/
+│   ├── Dockerfile
+│   ├── seed_users.py
+│   ├── seed_superadmin_role.py
+│   ├── auth_config/
+│   └── users/
+├── service-profiles/
+│   ├── Dockerfile
+│   ├── profiles_config/
+│   └── profiles/
+├── service-events/
+│   ├── Dockerfile
+│   ├── seed_categories.py
+│   ├── events_config/
+│   └── events/
+├── service-queue/
+│   ├── Dockerfile
+│   ├── queue_config/
+│   └── queue_app/
+└── frontend/
+    ├── Dockerfile
+    ├── package.json
+    └── src/
+```

@@ -36,6 +36,8 @@ function App() {
             <Route path="/dashboard/mis-eventos" element={<ListaEventos />} />
             <Route path="/dashboard/crear-evento" element={<FormularioEvento />} />
             <Route path="/dashboard/evento/:id/editar" element={<FormularioEvento />} />
+            {/* TIC-25: admin edita el evento con el mismo formulario + control administrativo */}
+            <Route path="/admin/evento/:id/editar" element={<FormularioEvento adminMode={true} />} />
           </Routes>
         </div>
       </QueueProvider>

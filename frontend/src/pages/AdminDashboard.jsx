@@ -13,8 +13,19 @@ import AdminEventos from '../components/dashboard/admin/AdminEventos';
 import AdminConfiguracion from '../components/dashboard/admin/AdminConfiguracion';
 import AdminAuditoria from '../components/dashboard/admin/AdminAuditoria';
 
+// TIC-398/445: cada seccion del panel requiere una capability del admin.
+// SuperAdmin tiene bypass total en hasPermission().
+const SECTION_PERMISSION = {
+  home: null, // todos los admins ven Inicio
+  promotores: 'manage_users',
+  compradores: 'manage_users',
+  eventos: 'manage_events',
+  configuracion: 'system_config',
+  auditoria: 'view_reports',
+};
+
 function AdminDashboard() {
-  const { user, isAuthenticated, isAdministrador, logout } = useAuth();
+  const { user, isAuthenticated, isAdministrador, logout, hasPermission } = useAuth();
   const router = useRouter();
 
   // Hydration-safe: arrancamos cerrado y luego ajustamos al cliente
@@ -70,12 +81,32 @@ function AdminDashboard() {
     { key: 'compradores', icon: '🛍️', label: 'Compradores' },
   ];
 
+  // TIC-398/445: helper para chequear si una seccion es accesible.
+  // Si SECTION_PERMISSION[key] es null, todos los admins entran.
+  const canAccessSection = (key) => {
+    const cap = SECTION_PERMISSION[key];
+    if (!cap) return true;
+    return hasPermission(cap);
+  };
+
   const handleSelectSection = (key) => {
+    // Defensa contra deep-link: si la seccion requiere permiso ausente, ir a Inicio
+    if (!canAccessSection(key)) {
+      setActiveSection('home');
+      return;
+    }
     setActiveSection(key);
     if (typeof window !== 'undefined' && window.innerWidth <= 768) {
       setSidebarOpen(false);
     }
   };
+
+  // Sub-items de Usuarios visibles segun manage_users
+  const usuariosSubmenuVisible = usuariosSubmenu.filter((item) => canAccessSection(item.key));
+  const showUsuariosMenu = usuariosSubmenuVisible.length > 0;
+  const showEventosMenu = canAccessSection('eventos');
+  const showConfigMenu = canAccessSection('configuracion');
+  const showAuditoriaMenu = canAccessSection('auditoria');
 
   const sectionTitles = {
     home: 'Panel Principal',
@@ -171,88 +202,96 @@ function AdminDashboard() {
             </ul>
           </div>
 
-          {/* Gestión de Usuarios (colapsable) */}
-          <div className="nav-section">
-            <button
-              type="button"
-              className={`nav-collapse ${usuariosMenuOpen ? 'open' : ''}`}
-              onClick={() => setUsuariosMenuOpen((v) => !v)}
-            >
-              <span className="nav-icon">👥</span>
-              <span className="nav-label">Gestionar Usuarios</span>
-              <span className="chevron">{usuariosMenuOpen ? '▾' : '▸'}</span>
-            </button>
-            {usuariosMenuOpen && (
-              <ul className="nav-submenu">
-                {usuariosSubmenu.map((item) => (
-                  <li
-                    key={item.key}
-                    className={activeSection === item.key ? 'active' : ''}
-                  >
-                    <button
-                      type="button"
-                      className="nav-link sub"
-                      onClick={() => handleSelectSection(item.key)}
+          {/* Gestión de Usuarios (colapsable) — visible solo con manage_users */}
+          {showUsuariosMenu && (
+            <div className="nav-section">
+              <button
+                type="button"
+                className={`nav-collapse ${usuariosMenuOpen ? 'open' : ''}`}
+                onClick={() => setUsuariosMenuOpen((v) => !v)}
+              >
+                <span className="nav-icon">👥</span>
+                <span className="nav-label">Gestionar Usuarios</span>
+                <span className="chevron">{usuariosMenuOpen ? '▾' : '▸'}</span>
+              </button>
+              {usuariosMenuOpen && (
+                <ul className="nav-submenu">
+                  {usuariosSubmenuVisible.map((item) => (
+                    <li
+                      key={item.key}
+                      className={activeSection === item.key ? 'active' : ''}
                     >
-                      <span className="nav-icon">{item.icon}</span>
-                      <span className="nav-label">{item.label}</span>
-                    </button>
-                  </li>
-                ))}
+                      <button
+                        type="button"
+                        className="nav-link sub"
+                        onClick={() => handleSelectSection(item.key)}
+                      >
+                        <span className="nav-icon">{item.icon}</span>
+                        <span className="nav-label">{item.label}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {/* Gestión de Eventos — visible solo con manage_events */}
+          {showEventosMenu && (
+            <div className="nav-section">
+              <h3>Gestión de Eventos</h3>
+              <ul>
+                <li className={activeSection === 'eventos' ? 'active' : ''}>
+                  <button
+                    type="button"
+                    className="nav-link"
+                    onClick={() => handleSelectSection('eventos')}
+                  >
+                    <span className="nav-icon">📅</span>
+                    <span className="nav-label">Gestión de Eventos</span>
+                  </button>
+                </li>
               </ul>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Gestión de Eventos */}
-          <div className="nav-section">
-            <h3>Gestión de Eventos</h3>
-            <ul>
-              <li className={activeSection === 'eventos' ? 'active' : ''}>
-                <button
-                  type="button"
-                  className="nav-link"
-                  onClick={() => handleSelectSection('eventos')}
-                >
-                  <span className="nav-icon">📅</span>
-                  <span className="nav-label">Gestión de Eventos</span>
-                </button>
-              </li>
-            </ul>
-          </div>
+          {/* Configuración Global — visible solo con system_config */}
+          {showConfigMenu && (
+            <div className="nav-section">
+              <h3>Configuración Global</h3>
+              <ul>
+                <li className={activeSection === 'configuracion' ? 'active' : ''}>
+                  <button
+                    type="button"
+                    className="nav-link"
+                    onClick={() => handleSelectSection('configuracion')}
+                  >
+                    <span className="nav-icon">⚙️</span>
+                    <span className="nav-label">Configuración Global</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+          )}
 
-          {/* Configuración Global */}
-          <div className="nav-section">
-            <h3>Configuración Global</h3>
-            <ul>
-              <li className={activeSection === 'configuracion' ? 'active' : ''}>
-                <button
-                  type="button"
-                  className="nav-link"
-                  onClick={() => handleSelectSection('configuracion')}
-                >
-                  <span className="nav-icon">⚙️</span>
-                  <span className="nav-label">Configuración Global</span>
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          {/* Auditoría */}
-          <div className="nav-section">
-            <h3>Log de Auditoría</h3>
-            <ul>
-              <li className={activeSection === 'auditoria' ? 'active' : ''}>
-                <button
-                  type="button"
-                  className="nav-link"
-                  onClick={() => handleSelectSection('auditoria')}
-                >
-                  <span className="nav-icon">📋</span>
-                  <span className="nav-label">Log de Auditoría</span>
-                </button>
-              </li>
-            </ul>
-          </div>
+          {/* Auditoría — visible solo con view_reports */}
+          {showAuditoriaMenu && (
+            <div className="nav-section">
+              <h3>Log de Auditoría</h3>
+              <ul>
+                <li className={activeSection === 'auditoria' ? 'active' : ''}>
+                  <button
+                    type="button"
+                    className="nav-link"
+                    onClick={() => handleSelectSection('auditoria')}
+                  >
+                    <span className="nav-icon">📋</span>
+                    <span className="nav-label">Log de Auditoría</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+          )}
         </nav>
 
         <div className="sidebar-footer">
@@ -301,11 +340,21 @@ function AdminDashboard() {
 
         <div className="admin-content">
           {activeSection === 'home' && <AdminDashboardHome onNavigate={handleSelectSection} />}
-          {activeSection === 'promotores' && <AdminUsuarios module="promotores" />}
-          {activeSection === 'compradores' && <AdminUsuarios module="compradores" />}
-          {activeSection === 'eventos' && <AdminEventos />}
-          {activeSection === 'configuracion' && <AdminConfiguracion />}
-          {activeSection === 'auditoria' && <AdminAuditoria />}
+          {activeSection === 'promotores' && (
+            canAccessSection('promotores') ? <AdminUsuarios module="promotores" /> : <SinPermisos cap="manage_users" />
+          )}
+          {activeSection === 'compradores' && (
+            canAccessSection('compradores') ? <AdminUsuarios module="compradores" /> : <SinPermisos cap="manage_users" />
+          )}
+          {activeSection === 'eventos' && (
+            canAccessSection('eventos') ? <AdminEventos /> : <SinPermisos cap="manage_events" />
+          )}
+          {activeSection === 'configuracion' && (
+            canAccessSection('configuracion') ? <AdminConfiguracion /> : <SinPermisos cap="system_config" />
+          )}
+          {activeSection === 'auditoria' && (
+            canAccessSection('auditoria') ? <AdminAuditoria /> : <SinPermisos cap="view_reports" />
+          )}
         </div>
       </main>
     </div>
@@ -441,6 +490,35 @@ function AdminDashboardHome({ onNavigate }) {
           </div>
         </button>
       </div>
+    </div>
+  );
+}
+
+// TIC-398/445: pantalla mostrada cuando un Admin intenta acceder
+// (por deep-link o navegacion forzada) a una seccion que requiere una
+// capability que no tiene. El sidebar normalmente la oculta, asi que esto
+// es defensa en profundidad para casos como ?section=usuarios en la URL.
+const CAP_LABEL = {
+  manage_users: 'Gestionar Usuarios',
+  manage_events: 'Gestionar Eventos',
+  view_reports: 'Ver Reportes / Auditoría',
+  manage_queue: 'Gestionar Cola',
+  system_config: 'Configuración del Sistema',
+};
+
+function SinPermisos({ cap }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', minHeight: '400px', padding: '40px',
+      textAlign: 'center', color: '#9aa3b2',
+    }}>
+      <div style={{ fontSize: '4rem', marginBottom: '16px' }}>🔒</div>
+      <h2 style={{ color: '#e6e8ed', margin: '0 0 8px 0' }}>Sin permisos suficientes</h2>
+      <p style={{ maxWidth: 460 }}>
+        No tienes el permiso <b>{CAP_LABEL[cap] || cap}</b> para acceder a esta sección.
+        Solicítaselo al SuperAdmin si necesitas usarla.
+      </p>
     </div>
   );
 }

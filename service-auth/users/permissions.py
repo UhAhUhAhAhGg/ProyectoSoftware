@@ -49,3 +49,57 @@ class IsAdminOrSuperadmin(BasePermission):
             return True
 
         return False
+
+
+# ─── TIC-398 / TIC-445: Capabilities granulares de Administrador ──────────────
+# Cada Administrador tiene un subconjunto de estas capabilities almacenado en
+# User.admin_permissions (JSONField). SuperAdmin tiene bypass total.
+# Comprador y Promotor son roles funcionales y no usan este sistema.
+
+ADMIN_CAPABILITIES = [
+    'manage_users',
+    'manage_events',
+    'view_reports',
+    'manage_queue',
+    'system_config',
+]
+
+
+def has_admin_capability(user, cap):
+    """
+    True si el usuario puede ejecutar la capability dada.
+
+    Reglas:
+      - Anónimo / no autenticado → False
+      - SuperAdmin (is_superadmin=True) → True (bypass total)
+      - is_staff=True (SuperAdmin "historico" del seed) → True
+      - Rol Administrador con `cap` en su admin_permissions → True
+      - Cualquier otro caso → False
+    """
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    if getattr(user, 'is_superadmin', False):
+        return True
+    if getattr(user, 'is_staff', False):
+        return True
+    role = getattr(user, 'role', None)
+    role_name = (getattr(role, 'name', '') or '').lower()
+    if role_name in ('administrador', 'admin'):
+        perms = getattr(user, 'admin_permissions', None) or []
+        return cap in perms
+    return False
+
+
+def HasAdminCapability(required):
+    """
+    Factory que devuelve una clase BasePermission para usar en
+    permission_classes=[IsAuthenticated, HasAdminCapability('manage_users')].
+    """
+    class _HasAdminCap(BasePermission):
+        message = f"Falta el permiso '{required}' para realizar esta acción."
+
+        def has_permission(self, request, view):
+            return has_admin_capability(request.user, required)
+
+    _HasAdminCap.__name__ = f"HasAdminCapability_{required}"
+    return _HasAdminCap

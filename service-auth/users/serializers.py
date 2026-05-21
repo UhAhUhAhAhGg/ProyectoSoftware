@@ -123,11 +123,16 @@ class LoginSerializer(serializers.Serializer):
         refresh['role'] = user.role.name if user.role else None
         refresh['is_staff'] = bool(getattr(user, 'is_staff', False))
         refresh['is_superadmin'] = bool(getattr(user, 'is_superadmin', False))
+        # TIC-398/445: las capabilities del admin viajan en el JWT para que
+        # service-events tambien las pueda leer sin consultar la BD de auth.
+        refresh['admin_permissions'] = list(getattr(user, 'admin_permissions', None) or [])
 
         return {
             'id': str(user.id),
             'email': user.email,
             'role': user.role.name if user.role else None,
+            'is_superadmin': bool(getattr(user, 'is_superadmin', False)),
+            'admin_permissions': list(getattr(user, 'admin_permissions', None) or []),
             'access': str(refresh.access_token),
             'refresh': str(refresh),
         }
@@ -160,7 +165,11 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
 
 class UserMeSerializer(serializers.ModelSerializer):
-    """Serializer para el endpoint /users/me/ (obtener/actualizar perfil del usuario autenticado)"""
+    """Serializer para el endpoint /users/me/ (obtener/actualizar perfil del usuario autenticado).
+
+    TIC-398/445: incluye admin_permissions e is_superadmin para que el polling
+    cada 60s del frontend (AuthContext) detecte cambios sin re-login.
+    """
     first_name = serializers.SerializerMethodField()
     last_name = serializers.SerializerMethodField()
     phone = serializers.SerializerMethodField()
@@ -169,8 +178,12 @@ class UserMeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'role', 'first_name', 'last_name', 'phone', 'profile_photo_url']
-        read_only_fields = ['id', 'email', 'role']
+        fields = [
+            'id', 'email', 'role',
+            'first_name', 'last_name', 'phone', 'profile_photo_url',
+            'is_superadmin', 'admin_permissions',
+        ]
+        read_only_fields = ['id', 'email', 'role', 'is_superadmin', 'admin_permissions']
 
     def get_first_name(self, obj):
         return getattr(obj.profile, 'first_name', '') if hasattr(obj, 'profile') else ''
@@ -249,11 +262,15 @@ class AdminLoginSerializer(serializers.Serializer):
         refresh['role'] = user.role.name if user.role else None
         refresh['is_staff'] = bool(getattr(user, 'is_staff', False))
         refresh['is_superadmin'] = bool(getattr(user, 'is_superadmin', False))
+        # TIC-398/445: capabilities granulares del admin en el JWT
+        refresh['admin_permissions'] = list(getattr(user, 'admin_permissions', None) or [])
 
         return {
             'id': str(user.id),
             'email': user.email,
             'role': user.role.name if user.role else None,
+            'is_superadmin': bool(getattr(user, 'is_superadmin', False)),
+            'admin_permissions': list(getattr(user, 'admin_permissions', None) or []),
             'access': str(refresh.access_token),
             'refresh': str(refresh),
         }

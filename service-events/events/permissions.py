@@ -53,3 +53,45 @@ class CanViewAuditLogs(CheckRolePermission):
 # Definimos el alias para usarlo fácilmente
 class IsAdminWithAudit(CanViewAuditLogs):
     allowed_roles = ['Administrador']
+
+
+# ─── TIC-398 / TIC-445: Capabilities granulares de Administrador ──────────────
+# Espejo del helper en service-auth/users/permissions.py. Las capabilities
+# viajan en el JWT (campo admin_permissions) emitido por service-auth y se
+# leen aqui desde el JWTUser construido en authentication.py.
+
+ADMIN_CAPABILITIES = [
+    'manage_users',
+    'manage_events',
+    'view_reports',
+    'manage_queue',
+    'system_config',
+]
+
+
+def has_admin_capability(user, cap):
+    """SuperAdmin (is_superadmin / is_staff) bypass; Admins normales validan cap."""
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    if getattr(user, 'is_superadmin', False):
+        return True
+    if getattr(user, 'is_staff', False):
+        return True
+    role = getattr(user, 'role', None)
+    role_name = (getattr(role, 'name', '') or '').lower()
+    if role_name in ('administrador', 'admin'):
+        perms = getattr(user, 'admin_permissions', None) or []
+        return cap in perms
+    return False
+
+
+def HasAdminCapability(required):
+    """Factory para usar como permission_classes=[IsAuthenticated, HasAdminCapability('manage_events')]."""
+    class _HasAdminCap(permissions.BasePermission):
+        message = f"Falta el permiso '{required}' para realizar esta acción."
+
+        def has_permission(self, request, view):
+            return has_admin_capability(request.user, required)
+
+    _HasAdminCap.__name__ = f"HasAdminCapability_{required}"
+    return _HasAdminCap

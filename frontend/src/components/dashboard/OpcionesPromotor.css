@@ -504,3 +504,72 @@ body.dark-mode .btn-accion.secundario {
     text-align: center;
   }
 }
+/* ─── Card deshabilitada (Proximamente) ────────────────────────────────── */
+.gestion-card-disabled {
+  position: relative;
+  cursor: not-allowed;
+  opacity: 0.55;
+  background: #f5f5f5;
+  border: 1px dashed #cdcdcd;
+}
+
+.gestion-card-disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.gestion-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #cdaa6b;
+  color: #fff;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ─── Estado vacio: sin eventos proximos ───────────────────────────────── */
+.evento-proximo-empty {
+  text-align: center;
+  padding: 32px 20px;
+  color: #888;
+  background: #fafafa;
+  border: 1px dashed #d8d8d8;
+  border-radius: 10px;
+}
+
+.evento-proximo-empty p {
+  margin: 0 0 14px 0;
+  font-size: 1rem;
+}
+
+.evento-proximo-empty .btn-accion {
+  display: inline-block;
+  padding: 9px 18px;
+  background: linear-gradient(135deg, #b8884a, #d4a256);
+  color: #fff;
+  border-radius: 8px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.evento-proximo-empty .btn-accion:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(212, 162, 86, 0.35);
+}
+
+/* ─── Alert de error ────────────────────────────────────────────────────── */
+.opciones-promotor .alert-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}

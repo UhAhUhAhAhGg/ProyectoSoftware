@@ -451,3 +451,169 @@ body.dark-mode .preview-detalles {
     grid-template-columns: 1fr;
   }
 }
+/* ─── Bloque Administrativo (adminMode) ────────────────────────────────── */
+.form-admin-block {
+  margin: 24px 0;
+  padding: 20px 24px;
+  background: rgba(212, 162, 86, 0.06);
+  border: 1px solid rgba(212, 162, 86, 0.35);
+  border-radius: 10px;
+}
+
+.form-admin-title {
+  margin: 0 0 16px 0;
+  color: #d4a256;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.admin-status-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.admin-status-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.92rem;
+  color: #1f2937;
+  user-select: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.admin-status-option:hover {
+  border-color: rgba(212, 162, 86, 0.5);
+}
+
+.admin-status-option.on {
+  border-color: #d4a256;
+  background: rgba(212, 162, 86, 0.12);
+  color: #b8884a;
+  font-weight: 600;
+}
+
+.admin-status-option input[type='radio'] {
+  accent-color: #d4a256;
+  cursor: pointer;
+}
+
+.admin-status-icon {
+  font-size: 1.1rem;
+}
+
+.form-admin-warning {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: rgba(239, 68, 68, 0.08);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+
+/* ─── Tabs sticky para navegar entre Info / Zonas / Admin ───────────────── */
+.form-tabs-bar {
+  display: flex;
+  gap: 4px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--color-fondo, #fff);
+  border-bottom: 2px solid #e6e6e6;
+  margin: 0 -24px 20px -24px;
+  padding: 8px 24px 0 24px;
+  overflow-x: auto;
+}
+
+.form-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #6b7280;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  margin-bottom: -2px;
+}
+
+.form-tab:hover {
+  color: #b8884a;
+  background: rgba(212, 162, 86, 0.05);
+}
+
+.form-tab.active {
+  color: #b8884a;
+  border-bottom-color: #d4a256;
+  background: rgba(212, 162, 86, 0.08);
+}
+
+.form-tab.has-error {
+  color: #b91c1c;
+}
+
+.form-tab.has-error.active {
+  border-bottom-color: #ef4444;
+}
+
+.form-tab-icon {
+  font-size: 1.05rem;
+}
+
+.form-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: #ef4444;
+  color: #fff;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+/* ─── Footer sticky con acciones ─────────────────────────────────────────── */
+.form-footer-sticky {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  align-items: center;
+  background: var(--color-fondo, #fff);
+  border-top: 1px solid #e6e6e6;
+  padding: 14px 24px;
+  margin: 24px -24px 0 -24px;
+  box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.06);
+}
+
+@media (max-width: 640px) {
+  .form-footer-sticky {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .form-tab-label {
+    display: none;
+  }
+  .form-tab {
+    padding: 10px 14px;
+  }
+}
