@@ -95,3 +95,21 @@ def HasAdminCapability(required):
 
     _HasAdminCap.__name__ = f"HasAdminCapability_{required}"
     return _HasAdminCap
+
+
+class IsSuperadmin(permissions.BasePermission):
+    """
+    US566 (US-32): Solo el SuperAdmin puede acceder.
+    Bypass para is_staff (seed histórico). Los Admins normales y Promotores/Compradores
+    reciben 403 aunque tengan todas las capabilities.
+    """
+    message = "Solo el SuperAdmin puede realizar esta acción."
+
+    def has_permission(self, request, view):
+        if not request.user or not getattr(request.user, 'is_authenticated', False):
+            return False
+        if getattr(request.user, 'is_superadmin', False):
+            return True
+        if getattr(request.user, 'is_staff', False):
+            return True
+        return False

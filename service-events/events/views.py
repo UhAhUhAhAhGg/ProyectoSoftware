@@ -40,7 +40,7 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Event, EventAuditLog
 from .serializers import EventSerializer
-from .permissions import IsAdministrador, IsPromotor, IsComprador, IsAdminWithAudit, HasAdminCapability
+from .permissions import IsAdministrador, IsPromotor, IsComprador, IsAdminWithAudit, HasAdminCapability, IsSuperadmin
 from .services import TicketGenerationService, send_ticket_email
 from .models import (
     Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat,
@@ -2883,4 +2883,227 @@ class EventAuditLogView(APIView):
             "evento_nombre": event.name,
             "total": logs.count(),
             "historial": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+
+# ─── US566 (US-32): Dashboard Financiero Global del Sistema ──────────────────
+
+class SuperAdminGlobalDashboardView(APIView):
+    """
+    US566 (US-32): Dashboard financiero global de la plataforma.
+    GET /api/v1/superadmin/dashboard/global/
+
+    Retorna métricas de toda la plataforma:
+      - total_eventos, total_promotores únicos
+      - total_compradores_unicos, total_tickets_vendidos
+      - ingresos_brutos_plataforma  (sum total_price de compras active/used)
+      - comisiones_plataforma       (sum commission_amount — disponible tras US567)
+      - ingresos_netos_promotores   (sum net_amount — disponible tras US567)
+      - ingresos_por_promociones    (sum EventPromotion.amount_paid activas — US570)
+      - total_ingresos_plataforma   (comisiones + ingresos_por_promociones)
+      - top_categorias: top 5 categorías por tickets vendidos
+
+    Permisos: IsAuthenticated + IsSuperadmin.
+    """
+    permission_classes = [IsAuthenticated, IsSuperadmin]
+
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request):
+        from decimal import Decimal as D
+        from django.db.models import Sum, Count
+        from django.db.models.functions import Coalesce
+
+        # ── Eventos ──────────────────────────────────────────────────────────
+        total_eventos = Event.objects.count()
+        total_promotores = Event.objects.values('promoter_id').distinct().count()
+
+        # ── Compras pagadas ───────────────────────────────────────────────────
+        compras_qs = Purchase.objects.filter(status__in=self.PAID_STATUSES)
+
+        total_compradores = compras_qs.values('user_id').distinct().count()
+        total_tickets = compras_qs.aggregate(
+            t=Coalesce(Sum('quantity'), 0),
+        )['t']
+
+        try:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+            )
+        except Exception:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+            )
+            aggs['comisiones'] = D('0')
+            aggs['ingresos_netos'] = aggs['ingresos_brutos']
+
+        # ── Ingresos por promociones (US570) ──────────────────────────────────
+        try:
+            from .models import EventPromotion
+            ingresos_promociones = (
+                EventPromotion.objects
+                .filter(status='active')
+                .aggregate(total=Coalesce(Sum('amount_paid'), D('0')))
+            )['total']
+        except Exception:
+            ingresos_promociones = D('0')
+
+        total_ingresos_plataforma = aggs['comisiones'] + ingresos_promociones
+
+        # ── Top 5 categorías por tickets vendidos ────────────────────────────
+        top_categorias_qs = (
+            compras_qs
+            .values('event__category__id', 'event__category__name')
+            .annotate(
+                tickets=Coalesce(Sum('quantity'), 0),
+                ingresos=Coalesce(Sum('total_price'), D('0')),
+            )
+            .order_by('-tickets')[:5]
+        )
+        top_categorias = [
+            {
+                'categoria_id': str(r['event__category__id']) if r['event__category__id'] else None,
+                'categoria_nombre': r['event__category__name'] or 'Sin categoría',
+                'tickets_vendidos': r['tickets'],
+                'ingresos': r['ingresos'],
+            }
+            for r in top_categorias_qs
+        ]
+
+        return Response({
+            'status': 'success',
+            'resumen_plataforma': {
+                'total_eventos': total_eventos,
+                'total_promotores_unicos': total_promotores,
+                'total_compradores_unicos': total_compradores,
+                'total_tickets_vendidos': total_tickets,
+            },
+            'financiero': {
+                'ingresos_brutos_plataforma': aggs['ingresos_brutos'],
+                'comisiones_plataforma': aggs['comisiones'],
+                'ingresos_netos_promotores': aggs['ingresos_netos'],
+                'ingresos_por_promociones': ingresos_promociones,
+                'total_ingresos_plataforma': total_ingresos_plataforma,
+            },
+            'top_categorias': top_categorias,
+        }, status=status.HTTP_200_OK)
+
+
+class SuperAdminPromotorRankingView(APIView):
+    """
+    US566 (US-32): Ranking de Promotores por ingresos generados.
+    GET /api/v1/superadmin/dashboard/promotores/?limit=10&ordering=-ingresos_brutos
+
+    Parámetros opcionales:
+      - limit    (int, default=10, máx=50): top N promotores
+      - ordering (str): -ingresos_brutos (default) | -tickets_vendidos | -total_eventos
+
+    Retorna por cada promotor:
+      promoter_id, total_eventos, tickets_vendidos, tasa_ocupacion_pct,
+      ingresos_brutos, comisiones, ingresos_netos.
+
+    Permisos: IsAuthenticated + IsSuperadmin.
+    """
+    permission_classes = [IsAuthenticated, IsSuperadmin]
+
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request):
+        from decimal import Decimal as D
+        from django.db.models import Sum, Count, OuterRef, Subquery
+        from django.db.models.functions import Coalesce
+
+        try:
+            limit = min(int(request.query_params.get('limit', 10)), 50)
+        except (ValueError, TypeError):
+            limit = 10
+
+        ordering_param = request.query_params.get('ordering', '-ingresos_brutos')
+
+        # Agrupamos Purchase por promoter_id (a través del evento)
+        try:
+            ranking_qs = (
+                Purchase.objects
+                .filter(status__in=self.PAID_STATUSES)
+                .values('event__promoter_id')
+                .annotate(
+                    tickets_vendidos=Coalesce(Sum('quantity'), 0),
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                    comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                    ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+                )
+            )
+        except Exception:
+            ranking_qs = (
+                Purchase.objects
+                .filter(status__in=self.PAID_STATUSES)
+                .values('event__promoter_id')
+                .annotate(
+                    tickets_vendidos=Coalesce(Sum('quantity'), 0),
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                )
+            )
+            # Añadir campos vacíos para mantener estructura consistente
+            for r in ranking_qs:
+                r['comisiones'] = D('0')
+                r['ingresos_netos'] = r['ingresos_brutos']
+
+        # Ordenación
+        VALID_ORDERINGS = {
+            '-ingresos_brutos': '-ingresos_brutos',
+            '-tickets_vendidos': '-tickets_vendidos',
+            'ingresos_brutos': 'ingresos_brutos',
+            'tickets_vendidos': 'tickets_vendidos',
+        }
+        ordering = VALID_ORDERINGS.get(ordering_param, '-ingresos_brutos')
+
+        ranking_list = list(ranking_qs.order_by(ordering)[:limit])
+
+        # Enriquecer con total_eventos por promotor
+        promotores_ids = [r['event__promoter_id'] for r in ranking_list]
+        eventos_por_promotor = dict(
+            Event.objects
+            .filter(promoter_id__in=promotores_ids)
+            .values('promoter_id')
+            .annotate(total=Count('id'))
+            .values_list('promoter_id', 'total')
+        )
+
+        # Capacidad total por promotor (para tasa de ocupación)
+        capacidad_por_promotor = dict(
+            Event.objects
+            .filter(promoter_id__in=promotores_ids)
+            .values('promoter_id')
+            .annotate(cap=Coalesce(Sum('capacity'), 0))
+            .values_list('promoter_id', 'cap')
+        )
+
+        resultados = []
+        for i, r in enumerate(ranking_list, start=1):
+            pid = r['event__promoter_id']
+            total_eventos = eventos_por_promotor.get(pid, 0)
+            capacidad_total = capacidad_por_promotor.get(pid, 0)
+            tickets = r['tickets_vendidos']
+            tasa_ocupacion = (
+                round(tickets / capacidad_total * 100, 1)
+                if capacidad_total else 0.0
+            )
+            resultados.append({
+                'posicion': i,
+                'promoter_id': str(pid),
+                'total_eventos': total_eventos,
+                'tickets_vendidos': tickets,
+                'tasa_ocupacion_pct': tasa_ocupacion,
+                'ingresos_brutos': r['ingresos_brutos'],
+                'comisiones': r.get('comisiones', D('0')),
+                'ingresos_netos': r.get('ingresos_netos', r['ingresos_brutos']),
+            })
+
+        return Response({
+            'status': 'success',
+            'limit': limit,
+            'total_promotores': len(resultados),
+            'ranking': resultados,
         }, status=status.HTTP_200_OK)
