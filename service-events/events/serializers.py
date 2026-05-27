@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Event, TicketType, UserFavorite, Notification, EventAuditLog
+from .models import Category, Event, TicketType, UserFavorite, Notification, EventAuditLog, PromoCode
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -296,3 +296,104 @@ class EventAuditLogSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = fields
+
+
+# ─── TIC-512/514 (US-30): Serializers de códigos de promoción ─────────────────
+
+class PromoCodeReadSerializer(serializers.ModelSerializer):
+    """
+    TIC-514: Lectura completa de un PromoCode (para el Promotor y validación pública).
+    Incluye estado de validez calculado.
+    """
+    event_name = serializers.CharField(source='event.name', read_only=True, default=None)
+    is_currently_valid = serializers.SerializerMethodField()
+    uses_remaining = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PromoCode
+        fields = [
+            'id',
+            'code',
+            'promoter_id',
+            'event',
+            'event_name',
+            'discount_type',
+            'discount_value',
+            'valid_from',
+            'valid_until',
+            'max_uses',
+            'times_used',
+            'uses_remaining',
+            'is_active',
+            'is_currently_valid',
+            'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_is_currently_valid(self, obj):
+        valid, _ = obj.is_valid_for(obj.event or self._get_any_event(obj))
+        return valid
+
+    def get_uses_remaining(self, obj):
+        if obj.max_uses is None:
+            return None  # ilimitado
+        return max(0, obj.max_uses - obj.times_used)
+
+    def _get_any_event(self, obj):
+        """Helper para is_valid_for cuando el code aplica a todos los eventos."""
+        class _FakeEvent:
+            id = None
+            promoter_id = obj.promoter_id
+        return _FakeEvent()
+
+
+class PromoCodeCreateSerializer(serializers.ModelSerializer):
+    """
+    TIC-514: Creación/actualización de un PromoCode por el Promotor.
+    promoter_id se inyecta desde la view (token JWT).
+    """
+    class Meta:
+        model = PromoCode
+        fields = [
+            'code',
+            'event',
+            'discount_type',
+            'discount_value',
+            'valid_from',
+            'valid_until',
+            'max_uses',
+            'is_active',
+        ]
+
+    def validate_code(self, value):
+        return value.upper().strip()
+
+    def validate_discount_value(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("El valor del descuento debe ser mayor a 0.")
+        return value
+
+    def validate(self, data):
+        discount_type = data.get('discount_type', 'porcentaje')
+        discount_value = data.get('discount_value')
+        if discount_type == 'porcentaje' and discount_value and discount_value > 100:
+            raise serializers.ValidationError(
+                {'discount_value': 'El porcentaje de descuento no puede superar 100%.'}
+            )
+        valid_from = data.get('valid_from')
+        valid_until = data.get('valid_until')
+        if valid_from and valid_until and valid_until <= valid_from:
+            raise serializers.ValidationError(
+                {'valid_until': 'La fecha de fin debe ser posterior a la fecha de inicio.'}
+            )
+        return data
+
+
+class PromoCodeValidateSerializer(serializers.Serializer):
+    """
+    TIC-514: Serializer para el endpoint de validación pública de un código
+    antes de confirmar la compra.
+    """
+    code = serializers.CharField(max_length=50)
+    event_id = serializers.UUIDField()
+    subtotal = serializers.DecimalField(max_digits=10, decimal_places=2)

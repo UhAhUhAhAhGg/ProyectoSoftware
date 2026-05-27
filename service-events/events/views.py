@@ -46,6 +46,7 @@ from .models import (
     Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat,
     UserBehavior, UserPreference, UserFavorite, Notification, NotificationPreference,
     RecommendationEngine, registrar_comportamiento, generar_notificaciones_match,
+    PromoCode,
 )
 from .serializers import (
     CategorySerializer,
@@ -864,7 +865,31 @@ class PurchaseView(APIView):
                 "error_code": "DUPLICATE_PURCHASE"
             }, status=status.HTTP_409_CONFLICT)
 
-        total_price = ticket.price * quantity
+        subtotal = ticket.price * quantity
+
+        # TIC-513 (US-30): Validar y aplicar código de promoción si se envió
+        promo_obj = None
+        discount_amount_dec = None
+        total_price = subtotal
+
+        promo_code_str = request.data.get('promo_code', '').strip().upper()
+        if promo_code_str:
+            try:
+                promo_obj = PromoCode.objects.get(code=promo_code_str)
+                valid, mensaje = promo_obj.is_valid_for(event)
+                if not valid:
+                    return Response(
+                        {"error": f"Código de promoción inválido: {mensaje}"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                discount_amount_dec = promo_obj.calcular_descuento(subtotal)
+                total_price = subtotal - discount_amount_dec
+            except PromoCode.DoesNotExist:
+                return Response(
+                    {"error": "Código de promoción no encontrado."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         # El timer empieza desde 'Seleccionar Asientos' (accessed_at en service-queue),
         # no desde la generación del QR. Fallback: ahora si no hay registro.
         start_time = _get_queue_access_time(str(event.id), str(user_id)) or timezone.now()
@@ -876,8 +901,16 @@ class PurchaseView(APIView):
             ticket_type=ticket,
             quantity=quantity,
             total_price=total_price,
-            status='pending'
+            promo_code=promo_obj,
+            discount_amount=discount_amount_dec,
+            status='pending',
         )
+
+        # Incrementar contador de usos del código de promoción
+        if promo_obj:
+            PromoCode.objects.filter(id=promo_obj.id).update(
+                times_used=models.F('times_used') + 1
+            )
         # Sobrescribir created_at para que SimularPagoView y PurchaseStatusView
         # (que calculan expires_at = created_at + timeout) usen el tiempo de admisión
         # a la cola en vez del tiempo de creación de la orden.
@@ -894,17 +927,23 @@ class PurchaseView(APIView):
         except Exception as e:
             print(f"Error generando QR de pago: {str(e)}")
 
+        response_data = {
+            "purchase_id": str(purchase.id),
+            "subtotal": float(subtotal),
+            "total": float(total_price),
+            "payment_qr": payment_qr_base64,
+            "expires_at": expires_at.isoformat(),
+            "event_name": event.name,
+            "ticket_type_name": ticket.name,
+        }
+        if promo_obj:
+            response_data["promo_code_applied"] = promo_obj.code
+            response_data["discount_amount"] = float(discount_amount_dec)
+
         return Response({
             "status": "pending",
             "message": "Orden de pago creada. Escanea el QR para completar el pago.",
-            "data": {
-                "purchase_id": str(purchase.id),
-                "total": float(total_price),
-                "payment_qr": payment_qr_base64,
-                "expires_at": expires_at.isoformat(),
-                "event_name": event.name,
-                "ticket_type_name": ticket.name,
-            }
+            "data": response_data,
         }, status=status.HTTP_201_CREATED)
 
 class SimularPagoView(APIView):
@@ -2883,4 +2922,152 @@ class EventAuditLogView(APIView):
             "evento_nombre": event.name,
             "total": logs.count(),
             "historial": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+
+# ─── TIC-514 (US-30): CRUD de códigos de promoción ────────────────────────────
+
+class PromoCodeListCreateView(APIView):
+    """
+    GET  /api/v1/promotor/promo-codes/   → lista códigos del Promotor autenticado
+    POST /api/v1/promotor/promo-codes/   → crea un nuevo código de promoción
+
+    Acceso: solo Promotor (IsPromotor). El promoter_id se toma del JWT.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    def get(self, request):
+        from .serializers import PromoCodeReadSerializer
+        promoter_id = request.user.id
+        codes = PromoCode.objects.filter(promoter_id=promoter_id).order_by('-created_at')
+        serializer = PromoCodeReadSerializer(codes, many=True)
+        return Response({
+            "status": "ok",
+            "total": codes.count(),
+            "results": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        from .serializers import PromoCodeCreateSerializer, PromoCodeReadSerializer
+        serializer = PromoCodeCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"status": "error", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verificar que el evento (si se envió) pertenece al promotor
+        event = serializer.validated_data.get('event')
+        if event and str(event.promoter_id) != str(request.user.id):
+            return Response(
+                {"status": "error", "detail": "El evento no pertenece a tu cuenta."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        code = serializer.save(promoter_id=request.user.id)
+        return Response(
+            {"status": "created", "promo_code": PromoCodeReadSerializer(code).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PromoCodeDetailView(APIView):
+    """
+    GET    /api/v1/promotor/promo-codes/{id}/  → detalle
+    PATCH  /api/v1/promotor/promo-codes/{id}/  → actualizar
+    DELETE /api/v1/promotor/promo-codes/{id}/  → desactivar (soft delete)
+
+    Acceso: solo el Promotor propietario del código.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    def _get_own_code(self, request, pk):
+        return get_object_or_404(PromoCode, id=pk, promoter_id=request.user.id)
+
+    def get(self, request, pk):
+        from .serializers import PromoCodeReadSerializer
+        code = self._get_own_code(request, pk)
+        return Response(PromoCodeReadSerializer(code).data)
+
+    def patch(self, request, pk):
+        from .serializers import PromoCodeCreateSerializer, PromoCodeReadSerializer
+        code = self._get_own_code(request, pk)
+        serializer = PromoCodeCreateSerializer(code, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(
+                {"status": "error", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Verificar que el nuevo evento (si cambió) sigue siendo del promotor
+        event = serializer.validated_data.get('event')
+        if event and str(event.promoter_id) != str(request.user.id):
+            return Response(
+                {"status": "error", "detail": "El evento no pertenece a tu cuenta."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        updated = serializer.save()
+        return Response(
+            {"status": "updated", "promo_code": PromoCodeReadSerializer(updated).data}
+        )
+
+    def delete(self, request, pk):
+        code = self._get_own_code(request, pk)
+        code.is_active = False
+        code.save(update_fields=['is_active'])
+        return Response({"status": "deactivated"}, status=status.HTTP_200_OK)
+
+
+class PromoCodeValidateView(APIView):
+    """
+    POST /api/v1/promo-codes/validate/
+
+    Endpoint público (solo autenticado) que valida un código antes de comprar.
+    El comprador envía: { code, event_id, subtotal }
+    Responde con el descuento calculado o el motivo de rechazo.
+
+    Acceso: cualquier usuario autenticado.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from .serializers import PromoCodeValidateSerializer
+        serializer = PromoCodeValidateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"status": "error", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        code_str = serializer.validated_data['code'].upper().strip()
+        event_id = serializer.validated_data['event_id']
+        subtotal = serializer.validated_data['subtotal']
+
+        try:
+            promo = PromoCode.objects.get(code=code_str)
+        except PromoCode.DoesNotExist:
+            return Response(
+                {"status": "invalid", "detail": "Código de promoción no encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        event = get_object_or_404(Event, id=event_id)
+        valid, mensaje = promo.is_valid_for(event)
+        if not valid:
+            return Response(
+                {"status": "invalid", "detail": mensaje},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        discount_amount = promo.calcular_descuento(subtotal)
+        final_price = subtotal - discount_amount
+
+        return Response({
+            "status": "valid",
+            "promo_code_id": str(promo.id),
+            "code": promo.code,
+            "discount_type": promo.discount_type,
+            "discount_value": str(promo.discount_value),
+            "discount_amount": str(discount_amount),
+            "subtotal": str(subtotal),
+            "final_price": str(final_price),
         }, status=status.HTTP_200_OK)

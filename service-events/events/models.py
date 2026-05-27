@@ -194,6 +194,23 @@ class Purchase(models.Model):
     quantity = models.PositiveIntegerField()
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
 
+    # TIC-513 (US-30): Código de promoción aplicado a esta compra
+    promo_code = models.ForeignKey(
+        'PromoCode',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='purchases',
+        help_text='Código de descuento aplicado en esta compra (si corresponde).',
+    )
+    discount_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Monto descontado en BOB. total_price ya incluye este descuento aplicado.',
+    )
+
     # Campos para entrada digital
     qr_code = models.TextField(null=True, blank=True)
     backup_code = models.CharField(max_length=20, unique=True, db_index=True, null=True, blank=True)
@@ -825,4 +842,145 @@ class EventAuditLog(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.admin_email} → {self.action} | {self.event_name} | {self.created_at:%Y-%m-%d}"
+        return f"{self.admin_email} → {self.action} | {self.event_name} | {self.created_at:%Y-%m-%d}"
+
+
+# ─── TIC-512 (US-30): Códigos de promoción y descuento ────────────────────────
+
+class PromoCode(models.Model):
+    """
+    TIC-512: Código de descuento creado por un Promotor para sus eventos.
+
+    Tipos de descuento:
+      - porcentaje : descuento = precio_unitario * (discount_value / 100) * quantity
+      - fijo       : descuento = discount_value (monto fijo por compra, no por entrada)
+
+    Alcance:
+      - event=None  → aplica a TODOS los eventos del promoter_id
+      - event=<obj> → aplica solo a ese evento
+
+    Reglas de uso:
+      - El código debe estar activo (is_active=True).
+      - La fecha actual debe estar en [valid_from, valid_until].
+      - times_used < max_uses (o max_uses is None para ilimitado).
+      - El evento de la compra debe coincidir con el alcance del código.
+    """
+
+    DISCOUNT_TYPE_CHOICES = [
+        ('porcentaje', 'Porcentaje de descuento'),
+        ('fijo', 'Monto fijo por compra'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # Texto del cupón que el comprador introduce
+    code = models.CharField(
+        max_length=50,
+        unique=True,
+        db_index=True,
+        help_text='Texto del cupón (ej. VERANO25). Único en todo el sistema.',
+    )
+    # Promotor propietario del código
+    promoter_id = models.UUIDField(
+        db_index=True,
+        help_text='UUID del Promotor que creó el código.',
+    )
+    # Evento al que aplica (null = todos los eventos del Promotor)
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='promo_codes',
+        help_text='Si se especifica, el código solo aplica a este evento.',
+    )
+
+    discount_type = models.CharField(
+        max_length=20,
+        choices=DISCOUNT_TYPE_CHOICES,
+        default='porcentaje',
+    )
+    # Para porcentaje: 25.00 = 25 %. Para fijo: monto en BOB.
+    discount_value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text='Valor del descuento. Para porcentaje: 0-100. Para fijo: monto en BOB.',
+    )
+
+    # Ventana de validez
+    valid_from = models.DateTimeField(
+        help_text='Fecha y hora desde la que el código es válido.',
+    )
+    valid_until = models.DateTimeField(
+        help_text='Fecha y hora hasta la que el código es válido.',
+    )
+
+    # Límite de usos
+    max_uses = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Número máximo de usos. null = ilimitado.',
+    )
+    times_used = models.PositiveIntegerField(
+        default=0,
+        help_text='Contador de usos (incrementa al confirmar cada compra).',
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text='Solo los códigos activos pueden ser aplicados.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Promo Code'
+        verbose_name_plural = 'Promo Codes'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['promoter_id', 'is_active'], name='promo_promoter_active_idx'),
+            models.Index(fields=['valid_from', 'valid_until'], name='promo_validity_idx'),
+        ]
+
+    def __str__(self):
+        scope = f"evento {self.event.name}" if self.event else "todos los eventos"
+        return f"{self.code} — {self.discount_value}{'%' if self.discount_type == 'porcentaje' else ' BOB'} ({scope})"
+
+    def is_valid_for(self, event, now=None):
+        """
+        Verifica si el código es aplicable a un evento dado en este momento.
+        :param event: instancia de Event sobre la que se quiere aplicar.
+        :param now: datetime; si None usa timezone.now().
+        :return: (bool, str) — (es_valido, mensaje_de_error_o_ok)
+        """
+        from django.utils import timezone as tz
+        now = now or tz.now()
+
+        if not self.is_active:
+            return False, "El código de promoción no está activo."
+        if now < self.valid_from:
+            return False, "El código de promoción aún no es válido."
+        if now > self.valid_until:
+            return False, "El código de promoción ha expirado."
+        if self.max_uses is not None and self.times_used >= self.max_uses:
+            return False, "El código de promoción ha alcanzado su límite de usos."
+        if self.event is not None and self.event_id != event.id:
+            return False, "El código de promoción no aplica a este evento."
+        if str(self.promoter_id) != str(event.promoter_id):
+            return False, "El código de promoción no aplica a este evento."
+        return True, "ok"
+
+    def calcular_descuento(self, subtotal):
+        """
+        Calcula el monto de descuento para un subtotal dado.
+        :param subtotal: Decimal — precio total antes del descuento (precio x cantidad).
+        :return: Decimal — monto de descuento en BOB, nunca mayor que subtotal.
+        """
+        from decimal import Decimal
+        base = Decimal(str(subtotal))
+        if self.discount_type == 'porcentaje':
+            desc = base * (Decimal(str(self.discount_value)) / Decimal('100'))
+        else:
+            desc = Decimal(str(self.discount_value))
+        # El descuento nunca puede superar el subtotal
+        return min(desc, base).quantize(Decimal('0.01'))

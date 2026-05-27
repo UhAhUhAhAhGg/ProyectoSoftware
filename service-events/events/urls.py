@@ -35,6 +35,10 @@ from .views import (
     AdminAuditLogView,           # GET /admin/audit-log-v2/
     # US26: Vista detalle audit por evento (Ariana)
     EventAuditLogView,           # GET /admin/events/{id}/audit-log-v2/
+    # TIC-514 (US-30): CRUD de códigos de promoción
+    PromoCodeListCreateView,     # GET/POST /promotor/promo-codes/
+    PromoCodeDetailView,         # GET/PATCH/DELETE /promotor/promo-codes/{id}/
+    PromoCodeValidateView,       # POST /promo-codes/validate/
 )
 
 app_name = 'events'
@@ -112,4 +116,10 @@ urlpatterns = [
     path('users/<uuid:user_id>/notifications/read-all/', UserNotificationReadAllView.as_view(), name='user-notifications-read-all'),
     path('users/<uuid:user_id>/notifications/<uuid:notif_id>/read/', UserNotificationReadView.as_view(), name='user-notification-read'),
     path('users/<uuid:user_id>/notification-preferences/', NotificationPreferenceView.as_view(), name='set-notification-preferences'),
+
+    # TIC-514 (US-30): Códigos de promoción del Promotor
+    path('promotor/promo-codes/', PromoCodeListCreateView.as_view(), name='promo-code-list'),
+    path('promotor/promo-codes/<uuid:pk>/', PromoCodeDetailView.as_view(), name='promo-code-detail'),
+    # Validación pública (cualquier usuario autenticado antes de comprar)
+    path('promo-codes/validate/', PromoCodeValidateView.as_view(), name='promo-code-validate'),
 ]
