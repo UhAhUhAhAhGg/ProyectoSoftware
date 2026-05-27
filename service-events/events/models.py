@@ -825,4 +825,162 @@ class EventAuditLog(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.admin_email} → {self.action} | {self.event_name} | {self.created_at:%Y-%m-%d}"
+        return f"{self.admin_email} → {self.action} | {self.event_name} | {self.created_at:%Y-%m-%d}"
+
+
+# ─── TIC-561/562 (US-34): Promoción de eventos destacados ─────────────────────
+
+class PromotionPlan(models.Model):
+    """
+    TIC-561: Planes de promoción que TicketGo vende a los Promotores.
+    Un plan define el precio, duración y nivel de visibilidad.
+
+    Niveles:
+      - basico  : aparece en sección "Destacados" (prioridad 3)
+      - premium : banner en página principal (prioridad 2)
+      - pro     : primer lugar en todos los listados (prioridad 1)
+    """
+
+    TIER_CHOICES = [
+        ('basico', 'Básico'),
+        ('premium', 'Premium'),
+        ('pro', 'Pro'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100, help_text='Nombre visible del plan (ej. "Plan Premium").')
+    tier = models.CharField(
+        max_length=20,
+        choices=TIER_CHOICES,
+        unique=True,
+        help_text='Nivel del plan. Determina la prioridad en listados.',
+    )
+    price_bob = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text='Precio del plan en BOB por período.',
+    )
+    duration_days = models.PositiveIntegerField(
+        help_text='Duración del plan en días (ej. 30 = un mes).',
+    )
+    # Prioridad numérica: 1 = más alto (Pro), 3 = más bajo (Básico)
+    priority = models.PositiveSmallIntegerField(
+        default=3,
+        help_text='Prioridad en la ordenación de eventos destacados (1=más alto).',
+    )
+    description = models.TextField(
+        help_text='Descripción de los beneficios del plan para el Promotor.',
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text='Solo los planes activos se ofrecen a los Promotores.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Promotion Plan'
+        verbose_name_plural = 'Promotion Plans'
+        ordering = ['priority']
+
+    def __str__(self):
+        return f"{self.name} ({self.get_tier_display()}) — BOB {self.price_bob} / {self.duration_days}d"
+
+
+class EventPromotion(models.Model):
+    """
+    TIC-562: Promoción activa de un evento bajo un plan de visibilidad.
+    Cada registro representa una compra de promoción por parte de un Promotor.
+
+    Estado:
+      - pending  : pago iniciado pero no confirmado
+      - active   : promoción vigente
+      - expired  : el período terminó
+      - cancelled: cancelada por el Promotor o el SuperAdmin
+    """
+
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente de pago'),
+        ('active', 'Activa'),
+        ('expired', 'Expirada'),
+        ('cancelled', 'Cancelada'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='promotions',
+        help_text='Evento que se promociona.',
+    )
+    plan = models.ForeignKey(
+        PromotionPlan,
+        on_delete=models.PROTECT,
+        related_name='event_promotions',
+        help_text='Plan de promoción contratado.',
+    )
+    promoter_id = models.UUIDField(
+        db_index=True,
+        help_text='UUID del Promotor que contrató la promoción.',
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        db_index=True,
+    )
+
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Fecha de inicio de la promoción (cuando se confirma el pago).',
+    )
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Fecha de expiración = started_at + plan.duration_days.',
+    )
+
+    # Snapshot del precio pagado (inmutable para historial financiero)
+    amount_paid = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text='Monto en BOB pagado por esta promoción (snapshot del precio del plan).',
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Event Promotion'
+        verbose_name_plural = 'Event Promotions'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['promoter_id', 'status'], name='evpromo_promoter_status_idx'),
+            models.Index(fields=['event', 'status'], name='evpromo_event_status_idx'),
+            models.Index(fields=['expires_at'], name='evpromo_expires_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.event.name} — {self.plan.name} [{self.get_status_display()}]"
+
+    def activate(self):
+        """
+        Confirma el pago y activa la promoción calculando expires_at.
+        Debe llamarse desde la view de confirmación de pago.
+        """
+        from django.utils import timezone as tz
+        from datetime import timedelta
+        now = tz.now()
+        self.status = 'active'
+        self.started_at = now
+        self.expires_at = now + timedelta(days=self.plan.duration_days)
+        self.save(update_fields=['status', 'started_at', 'expires_at'])
+
+    @property
+    def is_currently_active(self):
+        from django.utils import timezone as tz
+        return (
+            self.status == 'active' and
+            self.expires_at is not None and
+            self.expires_at > tz.now()
+        )

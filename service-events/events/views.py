@@ -46,6 +46,7 @@ from .models import (
     Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat,
     UserBehavior, UserPreference, UserFavorite, Notification, NotificationPreference,
     RecommendationEngine, registrar_comportamiento, generar_notificaciones_match,
+    PromotionPlan, EventPromotion,
 )
 from .serializers import (
     CategorySerializer,
@@ -2884,3 +2885,183 @@ class EventAuditLogView(APIView):
             "total": logs.count(),
             "historial": serializer.data,
         }, status=status.HTTP_200_OK)
+
+
+# ─── TIC-561/562 (US-34): Planes de promoción y eventos destacados ─────────────
+
+class PromotionPlanListView(APIView):
+    """
+    GET /api/v1/promotion-plans/
+
+    Lista todos los planes de promoción activos para que el Promotor elija.
+    Acceso: cualquier usuario autenticado (Promotor lo usa para ver precios).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .serializers import PromotionPlanSerializer
+        plans = PromotionPlan.objects.filter(is_active=True).order_by('priority')
+        serializer = PromotionPlanSerializer(plans, many=True)
+        return Response({"status": "ok", "plans": serializer.data})
+
+
+class EventPromoteView(APIView):
+    """
+    POST /api/v1/promotor/events/{event_id}/promote/
+
+    El Promotor contrata un plan de promoción para uno de sus eventos.
+    Crea una EventPromotion en estado 'pending' y la activa inmediatamente
+    (en producción esto esperaría confirmación de pago; aquí se simula).
+
+    Acceso: solo Promotor propietario del evento.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    def post(self, request, event_id):
+        from .serializers import EventPromotionCreateSerializer, EventPromotionReadSerializer
+
+        event = get_object_or_404(Event, id=event_id)
+        if str(event.promoter_id) != str(request.user.id):
+            return Response(
+                {"error": "No tienes permisos sobre este evento."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = EventPromotionCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"status": "error", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        plan = serializer.get_plan()
+
+        # Cancelar cualquier promoción activa previa para el mismo evento
+        EventPromotion.objects.filter(
+            event=event,
+            status='active',
+        ).update(status='cancelled')
+
+        promotion = EventPromotion.objects.create(
+            event=event,
+            plan=plan,
+            promoter_id=request.user.id,
+            amount_paid=plan.price_bob,
+            status='pending',
+        )
+        # Simular confirmación de pago inmediata (en producción: webhook)
+        promotion.activate()
+
+        return Response(
+            {
+                "status": "promoted",
+                "message": f"Evento '{event.name}' promocionado con plan {plan.name}.",
+                "promotion": EventPromotionReadSerializer(promotion).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class EventPromotionStatusView(APIView):
+    """
+    GET /api/v1/promotor/events/{event_id}/promotion/
+
+    El Promotor consulta el estado actual de la promoción de su evento.
+    Acceso: Promotor propietario del evento.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    def get(self, request, event_id):
+        from .serializers import EventPromotionReadSerializer
+        event = get_object_or_404(Event, id=event_id)
+        if str(event.promoter_id) != str(request.user.id):
+            return Response({"error": "No tienes permisos sobre este evento."}, status=403)
+
+        promotion = EventPromotion.objects.filter(
+            event=event,
+            status='active',
+        ).select_related('plan').first()
+
+        if not promotion:
+            return Response({"status": "no_promotion", "promotion": None})
+
+        return Response({
+            "status": "ok",
+            "promotion": EventPromotionReadSerializer(promotion).data,
+        })
+
+
+class FeaturedEventsView(APIView):
+    """
+    GET /api/v1/events/featured/
+
+    Lista pública de eventos actualmente promocionados, ordenados por prioridad
+    del plan (Pro > Premium > Básico) y luego por fecha del evento.
+    Acceso: público (AllowAny).
+    """
+    permission_classes = []  # Público
+
+    def get(self, request):
+        from django.utils import timezone as tz
+        from .serializers import EventSerializer
+
+        now = tz.now()
+        # IDs de eventos con promoción activa vigente
+        promoted_event_ids = EventPromotion.objects.filter(
+            status='active',
+            expires_at__gt=now,
+            event__status='published',
+        ).values_list('event_id', flat=True)
+
+        events = Event.objects.filter(
+            id__in=promoted_event_ids,
+            status='published',
+            event_date__gte=now.date(),
+        ).prefetch_related('promotions__plan').order_by('event_date')
+
+        # Ordenar por prioridad del plan activo (menor número = mayor prioridad)
+        def get_priority(event):
+            promo = event.promotions.filter(status='active', expires_at__gt=now).first()
+            return promo.plan.priority if promo else 999
+
+        events_list = sorted(events, key=get_priority)
+
+        serializer = EventSerializer(events_list, many=True, context={'request': request})
+        return Response({
+            "status": "ok",
+            "total": len(events_list),
+            "featured_events": serializer.data,
+        })
+
+
+class AdminPromotionListView(APIView):
+    """
+    GET /api/v1/admin/promotions/
+
+    El SuperAdmin ve todas las promociones para el dashboard de ingresos.
+    Filtros opcionales: ?status=active|expired|cancelled&promoter_id=<uuid>
+    Acceso: Admin con capability 'view_reports' o SuperAdmin.
+    """
+    permission_classes = [IsAuthenticated, HasAdminCapability('view_reports')]
+
+    def get(self, request):
+        from .serializers import EventPromotionReadSerializer
+        qs = EventPromotion.objects.select_related('event', 'plan').order_by('-created_at')
+
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        promoter_filter = request.query_params.get('promoter_id')
+        if promoter_filter:
+            qs = qs.filter(promoter_id=promoter_filter)
+
+        total_ingresos = sum(p.amount_paid for p in qs if p.status in ('active', 'expired'))
+
+        serializer = EventPromotionReadSerializer(qs, many=True)
+        return Response({
+            "status": "ok",
+            "total": qs.count(),
+            "total_ingresos_promociones_bob": str(total_ingresos),
+            "results": serializer.data,
+        })

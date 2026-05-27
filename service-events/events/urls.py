@@ -35,6 +35,12 @@ from .views import (
     AdminAuditLogView,           # GET /admin/audit-log-v2/
     # US26: Vista detalle audit por evento (Ariana)
     EventAuditLogView,           # GET /admin/events/{id}/audit-log-v2/
+    # TIC-561/562 (US-34): Planes de promoción y eventos destacados
+    PromotionPlanListView,        # GET /promotion-plans/
+    EventPromoteView,             # POST /promotor/events/{id}/promote/
+    EventPromotionStatusView,     # GET /promotor/events/{id}/promotion/
+    FeaturedEventsView,           # GET /events/featured/
+    AdminPromotionListView,       # GET /admin/promotions/
 )
 
 app_name = 'events'
@@ -112,4 +118,11 @@ urlpatterns = [
     path('users/<uuid:user_id>/notifications/read-all/', UserNotificationReadAllView.as_view(), name='user-notifications-read-all'),
     path('users/<uuid:user_id>/notifications/<uuid:notif_id>/read/', UserNotificationReadView.as_view(), name='user-notification-read'),
     path('users/<uuid:user_id>/notification-preferences/', NotificationPreferenceView.as_view(), name='set-notification-preferences'),
+
+    # TIC-561/562 (US-34): Planes de promoción y eventos destacados
+    path('promotion-plans/', PromotionPlanListView.as_view(), name='promotion-plan-list'),
+    path('promotor/events/<uuid:event_id>/promote/', EventPromoteView.as_view(), name='event-promote'),
+    path('promotor/events/<uuid:event_id>/promotion/', EventPromotionStatusView.as_view(), name='event-promotion-status'),
+    path('events/featured/', FeaturedEventsView.as_view(), name='events-featured'),
+    path('admin/promotions/', AdminPromotionListView.as_view(), name='admin-promotion-list'),
 ]

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Event, TicketType, UserFavorite, Notification, EventAuditLog
+from .models import Category, Event, TicketType, UserFavorite, Notification, EventAuditLog, PromotionPlan, EventPromotion
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -296,3 +296,77 @@ class EventAuditLogSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = fields
+
+
+# ─── TIC-561/562 (US-34): Serializers de planes de promoción ──────────────────
+
+class PromotionPlanSerializer(serializers.ModelSerializer):
+    """
+    TIC-561: Lectura de planes de promoción disponibles.
+    """
+    tier_display = serializers.CharField(source='get_tier_display', read_only=True)
+
+    class Meta:
+        model = PromotionPlan
+        fields = [
+            'id',
+            'name',
+            'tier',
+            'tier_display',
+            'price_bob',
+            'duration_days',
+            'priority',
+            'description',
+            'is_active',
+        ]
+        read_only_fields = fields
+
+
+class EventPromotionReadSerializer(serializers.ModelSerializer):
+    """
+    TIC-562: Lectura de una promoción activa de evento.
+    """
+    plan_name = serializers.CharField(source='plan.name', read_only=True)
+    plan_tier = serializers.CharField(source='plan.tier', read_only=True)
+    plan_priority = serializers.IntegerField(source='plan.priority', read_only=True)
+    event_name = serializers.CharField(source='event.name', read_only=True)
+    is_currently_active = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = EventPromotion
+        fields = [
+            'id',
+            'event',
+            'event_name',
+            'plan',
+            'plan_name',
+            'plan_tier',
+            'plan_priority',
+            'promoter_id',
+            'status',
+            'started_at',
+            'expires_at',
+            'amount_paid',
+            'is_currently_active',
+            'created_at',
+        ]
+        read_only_fields = fields
+
+
+class EventPromotionCreateSerializer(serializers.Serializer):
+    """
+    TIC-562: Contratación de una promoción por el Promotor.
+    El Promotor envía el plan que quiere activar.
+    """
+    plan_id = serializers.UUIDField(help_text='ID del plan de promoción a contratar.')
+
+    def validate_plan_id(self, value):
+        try:
+            plan = PromotionPlan.objects.get(id=value, is_active=True)
+        except PromotionPlan.DoesNotExist:
+            raise serializers.ValidationError("Plan de promoción no encontrado o no disponible.")
+        self._plan = plan
+        return value
+
+    def get_plan(self):
+        return self._plan
