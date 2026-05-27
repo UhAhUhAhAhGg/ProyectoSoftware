@@ -2884,3 +2884,298 @@ class EventAuditLogView(APIView):
             "total": logs.count(),
             "historial": serializer.data,
         }, status=status.HTTP_200_OK)
+
+
+# ─── US34 (US-29): Admin ve Dashboard del Promotor ───────────────────────────
+
+class AdminPromotorSummaryView(APIView):
+    """
+    US34 (US-29): El Administrador consulta el resumen financiero de cualquier Promotor.
+    GET /api/v1/admin/promotor/<promoter_id>/summary/
+
+    Replica la lógica de PromotorDashboardSummaryView (US27) pero:
+      - El promoter_id viene en la URL (no del token).
+      - Requiere HasAdminCapability('view_reports') en lugar de IsPromotor.
+      - Si no existen eventos para ese promoter_id, responde 404.
+
+    Permisos: IsAuthenticated + HasAdminCapability('view_reports').
+    """
+    permission_classes = [IsAuthenticated, HasAdminCapability('view_reports')]
+
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request, promoter_id):
+        from decimal import Decimal as D
+        from django.db.models import Sum
+        from django.db.models.functions import Coalesce
+
+        # ── Verificar que el promotor existe (tiene al menos un evento) ──────
+        eventos_qs = Event.objects.filter(promoter_id=promoter_id)
+        total_eventos = eventos_qs.count()
+        if total_eventos == 0:
+            return Response(
+                {'error': 'No se encontraron eventos para el promotor indicado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # ── Compras pagadas ──────────────────────────────────────────────────
+        compras_qs = Purchase.objects.filter(
+            event__promoter_id=promoter_id,
+            status__in=self.PAID_STATUSES,
+        )
+
+        total_tickets = compras_qs.aggregate(
+            total=Coalesce(Sum('quantity'), 0),
+        )['total']
+
+        try:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                comisiones_totales=Coalesce(Sum('commission_amount'), D('0')),
+                ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+            )
+        except Exception:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+            )
+            aggs['comisiones_totales'] = D('0')
+            aggs['ingresos_netos'] = aggs['ingresos_brutos']
+
+        total_capacidad = eventos_qs.aggregate(
+            cap=Coalesce(Sum('capacity'), 0),
+        )['cap']
+        tasa_ocupacion = (
+            round(total_tickets / total_capacidad * 100, 1)
+            if total_capacidad else 0.0
+        )
+
+        return Response({
+            'status': 'success',
+            'promoter_id': str(promoter_id),
+            'total_eventos': total_eventos,
+            'total_tickets_vendidos': total_tickets,
+            'tasa_ocupacion_pct': tasa_ocupacion,
+            'ingresos_brutos': aggs['ingresos_brutos'],
+            'comisiones_totales': aggs['comisiones_totales'],
+            'ingresos_netos': aggs['ingresos_netos'],
+        }, status=status.HTTP_200_OK)
+
+
+class AdminPromotorComparativaView(APIView):
+    """
+    US34 (US-29): El Administrador consulta la comparativa por evento de cualquier Promotor.
+    GET /api/v1/admin/promotor/<promoter_id>/comparativa/?limit=5&estado=<all|...>
+
+    Replica la lógica de PromotorDashboardComparativaView (US27) pero accesible al Admin.
+
+    Permisos: IsAuthenticated + HasAdminCapability('view_reports').
+    """
+    permission_classes = [IsAuthenticated, HasAdminCapability('view_reports')]
+
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request, promoter_id):
+        from decimal import Decimal as D
+        from django.db.models import Sum
+        from django.db.models.functions import Coalesce
+
+        try:
+            limit = min(int(request.query_params.get('limit', 5)), 20)
+        except (ValueError, TypeError):
+            limit = 5
+
+        estado_filtro = request.query_params.get('estado', 'all')
+
+        eventos_qs = Event.objects.filter(
+            promoter_id=promoter_id,
+        ).order_by('-event_date')
+
+        if estado_filtro != 'all':
+            eventos_qs = eventos_qs.filter(status=estado_filtro)
+
+        eventos = list(eventos_qs[:limit])
+
+        comparativa = []
+        for evento in eventos:
+            compras_qs = Purchase.objects.filter(
+                event=evento,
+                status__in=self.PAID_STATUSES,
+            )
+            tickets_vendidos = compras_qs.aggregate(
+                total=Coalesce(Sum('quantity'), 0),
+            )['total']
+
+            try:
+                fin = compras_qs.aggregate(
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                    comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                    ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+                )
+            except Exception:
+                fin = compras_qs.aggregate(
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                )
+                fin['comisiones'] = D('0')
+                fin['ingresos_netos'] = fin['ingresos_brutos']
+
+            ocupacion_pct = (
+                round(tickets_vendidos / evento.capacity * 100, 1)
+                if evento.capacity else 0.0
+            )
+
+            comparativa.append({
+                'evento_id': str(evento.id),
+                'evento_nombre': evento.name,
+                'fecha': str(evento.event_date),
+                'estado': evento.status,
+                'capacidad': evento.capacity,
+                'tickets_vendidos': tickets_vendidos,
+                'ocupacion_pct': ocupacion_pct,
+                'ingresos_brutos': fin['ingresos_brutos'],
+                'comisiones': fin['comisiones'],
+                'ingresos_netos': fin['ingresos_netos'],
+            })
+
+        return Response({
+            'status': 'success',
+            'promoter_id': str(promoter_id),
+            'limit': limit,
+            'total_eventos': len(comparativa),
+            'comparativa': comparativa,
+        }, status=status.HTTP_200_OK)
+
+
+class AdminEventFinancialReportView(APIView):
+    """
+    US34 (US-29): El Administrador consulta el reporte financiero detallado de un evento.
+    GET /api/v1/admin/events/<event_id>/financial/
+
+    Replica la lógica de EventFinancialReportView (US30) pero:
+      - No verifica ownership (el Admin puede ver cualquier evento).
+      - Requiere HasAdminCapability('view_reports').
+      - Incluye promoter_id en la respuesta para referencia del Admin.
+
+    Permisos: IsAuthenticated + HasAdminCapability('view_reports').
+    """
+    permission_classes = [IsAuthenticated, HasAdminCapability('view_reports')]
+
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request, event_id):
+        from decimal import Decimal as D
+        from django.db.models import Sum, Count
+        from django.db.models.functions import Coalesce
+
+        evento = get_object_or_404(Event, id=event_id)
+
+        # ── Compras pagadas ──────────────────────────────────────────────────
+        compras_qs = Purchase.objects.filter(
+            event=evento,
+            status__in=self.PAID_STATUSES,
+        )
+
+        total_tickets = compras_qs.aggregate(
+            total=Coalesce(Sum('quantity'), 0),
+        )['total']
+        total_compradores = compras_qs.values('user_id').distinct().count()
+
+        try:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+            )
+        except Exception:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+            )
+            aggs['comisiones'] = D('0')
+            aggs['ingresos_netos'] = aggs['ingresos_brutos']
+
+        ocupacion_pct = (
+            round(total_tickets / evento.capacity * 100, 1)
+            if evento.capacity else 0.0
+        )
+
+        # ── Desglose por tipo de ticket ──────────────────────────────────────
+        ticket_types = TicketType.objects.filter(event=evento)
+        desglose = []
+        for tt in ticket_types:
+            qs_tt = compras_qs.filter(ticket_type=tt)
+            tt_tickets = qs_tt.aggregate(
+                total=Coalesce(Sum('quantity'), 0),
+            )['total']
+
+            try:
+                tt_fin = qs_tt.aggregate(
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                    comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                    ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+                )
+            except Exception:
+                tt_fin = qs_tt.aggregate(
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                )
+                tt_fin['comisiones'] = D('0')
+                tt_fin['ingresos_netos'] = tt_fin['ingresos_brutos']
+
+            tt_ocupacion = (
+                round(tt_tickets / tt.max_capacity * 100, 1)
+                if tt.max_capacity else 0.0
+            )
+            desglose.append({
+                'ticket_type_id': str(tt.id),
+                'nombre': tt.name,
+                'zone_type': tt.zone_type,
+                'is_vip': tt.is_vip,
+                'precio_unitario': tt.price,
+                'max_capacity': tt.max_capacity,
+                'tickets_vendidos': tt_tickets,
+                'ocupacion_pct': tt_ocupacion,
+                'ingresos_brutos': tt_fin['ingresos_brutos'],
+                'comisiones': tt_fin['comisiones'],
+                'ingresos_netos': tt_fin['ingresos_netos'],
+            })
+
+        # ── Top 5 compradores ────────────────────────────────────────────────
+        top_compradores = (
+            compras_qs
+            .values('user_id')
+            .annotate(
+                gasto_total=Coalesce(Sum('total_price'), D('0')),
+                tickets_comprados=Coalesce(Sum('quantity'), 0),
+            )
+            .order_by('-gasto_total')[:5]
+        )
+
+        return Response({
+            'status': 'success',
+            'evento': {
+                'id': str(evento.id),
+                'nombre': evento.name,
+                'fecha': str(evento.event_date),
+                'hora': str(evento.event_time) if evento.event_time else None,
+                'location': evento.location,
+                'estado': evento.status,
+                'admin_status': evento.admin_status,
+                'capacidad': evento.capacity,
+                'promoter_id': str(evento.promoter_id),
+            },
+            'resumen_financiero': {
+                'total_tickets_vendidos': total_tickets,
+                'total_compradores': total_compradores,
+                'ocupacion_pct': ocupacion_pct,
+                'ingresos_brutos': aggs['ingresos_brutos'],
+                'comisiones': aggs['comisiones'],
+                'ingresos_netos': aggs['ingresos_netos'],
+            },
+            'desglose_por_tipo': desglose,
+            'top_compradores': [
+                {
+                    'user_id': str(c['user_id']),
+                    'gasto_total': c['gasto_total'],
+                    'tickets_comprados': c['tickets_comprados'],
+                }
+                for c in top_compradores
+            ],
+        }, status=status.HTTP_200_OK)

@@ -35,6 +35,10 @@ from .views import (
     AdminAuditLogView,           # GET /admin/audit-log-v2/
     # US26: Vista detalle audit por evento (Ariana)
     EventAuditLogView,           # GET /admin/events/{id}/audit-log-v2/
+    # US34 (US-29): Admin ve Dashboard del Promotor
+    AdminPromotorSummaryView,         # GET /admin/promotor/{id}/summary/
+    AdminPromotorComparativaView,     # GET /admin/promotor/{id}/comparativa/
+    AdminEventFinancialReportView,    # GET /admin/events/{id}/financial/
 )
 
 app_name = 'events'
@@ -112,4 +116,9 @@ urlpatterns = [
     path('users/<uuid:user_id>/notifications/read-all/', UserNotificationReadAllView.as_view(), name='user-notifications-read-all'),
     path('users/<uuid:user_id>/notifications/<uuid:notif_id>/read/', UserNotificationReadView.as_view(), name='user-notification-read'),
     path('users/<uuid:user_id>/notification-preferences/', NotificationPreferenceView.as_view(), name='set-notification-preferences'),
+
+    # US34 (US-29): Admin ve Dashboard del Promotor
+    path('admin/promotor/<uuid:promoter_id>/summary/', AdminPromotorSummaryView.as_view(), name='admin-promotor-summary'),
+    path('admin/promotor/<uuid:promoter_id>/comparativa/', AdminPromotorComparativaView.as_view(), name='admin-promotor-comparativa'),
+    path('admin/events/<uuid:event_id>/financial/', AdminEventFinancialReportView.as_view(), name='admin-event-financial'),
 ]
