@@ -2884,3 +2884,167 @@ class EventAuditLogView(APIView):
             "total": logs.count(),
             "historial": serializer.data,
         }, status=status.HTTP_200_OK)
+
+
+# ─── US33 (US-28): Lista de Compradores por Evento ───────────────────────────
+
+class EventBuyersListView(APIView):
+    """
+    US33 (US-28): Lista paginada de compradores de un evento.
+    GET /api/v1/promotor/events/<event_id>/buyers/
+
+    Solo el promotor dueño del evento puede acceder.
+
+    Parámetros opcionales (query string):
+      - status      (str): filtrar por estado de compra
+                           (active|used|pending|cancelled|expired|all)
+      - ticket_type_id (uuid): filtrar por tipo de ticket
+      - ordering    (str): campo de ordenación precedido de '-' para desc
+                           (created_at, total_price, quantity). Default: -created_at
+      - page        (int): número de página. Default: 1
+      - page_size   (int): resultados por página. Default: 20, máx: 100
+
+    Respuesta:
+      - resumen: total_compradores únicos, total_tickets, total_ingresos
+      - paginación: count, total_pages, page, page_size, next, previous
+      - results: lista de compras con user_id, purchase_id, ticket_type,
+                 quantity, total_price, discount_amount, status, created_at,
+                 backup_code
+
+    Nota: discount_amount disponible tras merge con US35.
+    Permisos: IsAuthenticated + IsPromotor.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    ALLOWED_ORDERINGS = {
+        'created_at': 'created_at',
+        '-created_at': '-created_at',
+        'total_price': 'total_price',
+        '-total_price': '-total_price',
+        'quantity': 'quantity',
+        '-quantity': '-quantity',
+    }
+
+    def get(self, request, event_id):
+        from decimal import Decimal as D
+        from django.db.models import Sum, Count
+        from django.db.models.functions import Coalesce
+        from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+
+        # ── Verificar evento y ownership ────────────────────────────────────
+        evento = get_object_or_404(Event, id=event_id)
+        if str(evento.promoter_id) != str(request.user.id):
+            return Response(
+                {'error': 'No tienes permisos. Solo el promotor dueño del evento puede acceder.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # ── Parámetros de query ──────────────────────────────────────────────
+        status_filtro = request.query_params.get('status', 'all')
+        ticket_type_id = request.query_params.get('ticket_type_id')
+        ordering_param = request.query_params.get('ordering', '-created_at')
+        ordering = self.ALLOWED_ORDERINGS.get(ordering_param, '-created_at')
+
+        try:
+            page_num = max(1, int(request.query_params.get('page', 1)))
+        except (ValueError, TypeError):
+            page_num = 1
+
+        try:
+            page_size = min(max(1, int(request.query_params.get('page_size', 20))), 100)
+        except (ValueError, TypeError):
+            page_size = 20
+
+        # ── Construcción del queryset ────────────────────────────────────────
+        compras_qs = Purchase.objects.filter(event=evento).select_related('ticket_type')
+
+        if status_filtro != 'all':
+            compras_qs = compras_qs.filter(status=status_filtro)
+
+        if ticket_type_id:
+            compras_qs = compras_qs.filter(ticket_type_id=ticket_type_id)
+
+        compras_qs = compras_qs.order_by(ordering)
+
+        # ── Resumen (antes de paginar) ───────────────────────────────────────
+        # Solo compras activas/usadas para el resumen financiero
+        compras_pagadas = compras_qs.filter(status__in=['active', 'used'])
+        compradores_unicos = compras_qs.values('user_id').distinct().count()
+        total_tickets = compras_pagadas.aggregate(
+            t=Coalesce(Sum('quantity'), 0)
+        )['t']
+        try:
+            total_ingresos = compras_pagadas.aggregate(
+                i=Coalesce(Sum('total_price'), D('0'))
+            )['i']
+        except Exception:
+            total_ingresos = D('0')
+
+        # ── Paginación ───────────────────────────────────────────────────────
+        paginator = Paginator(compras_qs, page_size)
+        total_count = compras_qs.count()
+        total_pages = paginator.num_pages
+
+        try:
+            page_obj = paginator.page(page_num)
+        except (EmptyPage, PageNotAnInteger):
+            page_obj = paginator.page(1)
+            page_num = 1
+
+        # ── Serializar resultados ────────────────────────────────────────────
+        results = []
+        for compra in page_obj.object_list:
+            tt = compra.ticket_type
+            entry = {
+                'purchase_id': str(compra.id),
+                'user_id': str(compra.user_id),
+                'ticket_type_id': str(tt.id) if tt else None,
+                'ticket_type_nombre': tt.name if tt else None,
+                'zone_type': tt.zone_type if tt else None,
+                'is_vip': tt.is_vip if tt else False,
+                'quantity': compra.quantity,
+                'total_price': compra.total_price,
+                'status': compra.status,
+                'created_at': compra.created_at.isoformat(),
+                'backup_code': compra.backup_code,
+                'used_at': compra.used_at.isoformat() if compra.used_at else None,
+            }
+            # Campos opcionales de US35 (discount) — presentes tras merge
+            if hasattr(compra, 'discount_amount'):
+                entry['discount_amount'] = compra.discount_amount
+            if hasattr(compra, 'promo_code_id') and compra.promo_code_id:
+                entry['promo_code'] = str(compra.promo_code_id)
+            results.append(entry)
+
+        # ── Construir URLs de paginación ─────────────────────────────────────
+        base_url = request.build_absolute_uri(request.path)
+
+        def _page_url(p):
+            params = request.query_params.copy()
+            params['page'] = p
+            params['page_size'] = page_size
+            return f"{base_url}?{'&'.join(f'{k}={v}' for k, v in params.items())}"
+
+        return Response({
+            'status': 'success',
+            'evento': {
+                'id': str(evento.id),
+                'nombre': evento.name,
+                'fecha': str(evento.event_date),
+                'capacidad': evento.capacity,
+            },
+            'resumen': {
+                'total_compradores_unicos': compradores_unicos,
+                'total_tickets_vendidos': total_tickets,
+                'total_ingresos': total_ingresos,
+            },
+            'paginacion': {
+                'count': total_count,
+                'total_pages': total_pages,
+                'page': page_num,
+                'page_size': page_size,
+                'next': _page_url(page_num + 1) if page_obj.has_next() else None,
+                'previous': _page_url(page_num - 1) if page_obj.has_previous() else None,
+            },
+            'results': results,
+        }, status=status.HTTP_200_OK)
