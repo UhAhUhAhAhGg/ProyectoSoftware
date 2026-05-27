@@ -2884,3 +2884,157 @@ class EventAuditLogView(APIView):
             "total": logs.count(),
             "historial": serializer.data,
         }, status=status.HTTP_200_OK)
+
+
+# ─── US30 (US-27): Reporte Financiero por Evento ─────────────────────────────
+
+class EventFinancialReportView(APIView):
+    """
+    US30 (US-27): Reporte financiero detallado de un evento específico.
+    GET /api/v1/promotor/events/<event_id>/financial/
+
+    Solo el promotor dueño del evento puede acceder.
+
+    Respuesta:
+      - info del evento (nombre, fecha, location, estado, capacidad)
+      - resumen_financiero: ingresos_brutos, comisiones, ingresos_netos,
+            total_tickets_vendidos, ocupacion_pct, total_compradores
+      - desglose_por_tipo: por cada TicketType:
+            nombre, zone_type, precio_unitario, max_capacity,
+            tickets_vendidos, ocupacion_pct,
+            ingresos_brutos, comisiones, ingresos_netos
+      - top_compradores: los 5 user_id que más gastaron en el evento
+
+    Permisos: IsAuthenticated + IsPromotor (+ verificación de ownership).
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request, event_id):
+        from decimal import Decimal as D
+        from django.db.models import Sum, Count, Q
+        from django.db.models.functions import Coalesce
+
+        # ── Verificar evento y ownership ────────────────────────────────────
+        evento = get_object_or_404(Event, id=event_id)
+        if str(evento.promoter_id) != str(request.user.id):
+            return Response(
+                {'error': 'No tienes permisos. Solo el promotor dueño del evento puede acceder.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # ── Compras pagadas del evento ───────────────────────────────────────
+        compras_qs = Purchase.objects.filter(
+            event=evento,
+            status__in=self.PAID_STATUSES,
+        )
+
+        total_tickets = compras_qs.aggregate(
+            total=Coalesce(Sum('quantity'), 0),
+        )['total']
+
+        total_compradores = compras_qs.values('user_id').distinct().count()
+
+        # Financiero global con fallback si US567 aún no está mergeado
+        try:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+            )
+        except Exception:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+            )
+            aggs['comisiones'] = D('0')
+            aggs['ingresos_netos'] = aggs['ingresos_brutos']
+
+        ocupacion_pct = (
+            round(total_tickets / evento.capacity * 100, 1)
+            if evento.capacity else 0.0
+        )
+
+        # ── Desglose por tipo de ticket ──────────────────────────────────────
+        ticket_types = TicketType.objects.filter(event=evento)
+        desglose = []
+        for tt in ticket_types:
+            qs_tt = compras_qs.filter(ticket_type=tt)
+            tt_tickets = qs_tt.aggregate(
+                total=Coalesce(Sum('quantity'), 0),
+            )['total']
+
+            try:
+                tt_fin = qs_tt.aggregate(
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                    comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                    ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+                )
+            except Exception:
+                tt_fin = qs_tt.aggregate(
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                )
+                tt_fin['comisiones'] = D('0')
+                tt_fin['ingresos_netos'] = tt_fin['ingresos_brutos']
+
+            tt_ocupacion = (
+                round(tt_tickets / tt.max_capacity * 100, 1)
+                if tt.max_capacity else 0.0
+            )
+
+            desglose.append({
+                'ticket_type_id': str(tt.id),
+                'nombre': tt.name,
+                'zone_type': tt.zone_type,
+                'is_vip': tt.is_vip,
+                'precio_unitario': tt.price,
+                'max_capacity': tt.max_capacity,
+                'tickets_vendidos': tt_tickets,
+                'ocupacion_pct': tt_ocupacion,
+                'ingresos_brutos': tt_fin['ingresos_brutos'],
+                'comisiones': tt_fin['comisiones'],
+                'ingresos_netos': tt_fin['ingresos_netos'],
+            })
+
+        # ── Top 5 compradores por gasto ──────────────────────────────────────
+        top_compradores = (
+            compras_qs
+            .values('user_id')
+            .annotate(
+                gasto_total=Coalesce(Sum('total_price'), D('0')),
+                tickets_comprados=Coalesce(Sum('quantity'), 0),
+            )
+            .order_by('-gasto_total')[:5]
+        )
+        top_list = [
+            {
+                'user_id': str(c['user_id']),
+                'gasto_total': c['gasto_total'],
+                'tickets_comprados': c['tickets_comprados'],
+            }
+            for c in top_compradores
+        ]
+
+        return Response({
+            'status': 'success',
+            'evento': {
+                'id': str(evento.id),
+                'nombre': evento.name,
+                'fecha': str(evento.event_date),
+                'hora': str(evento.event_time) if evento.event_time else None,
+                'location': evento.location,
+                'estado': evento.status,
+                'admin_status': evento.admin_status,
+                'capacidad': evento.capacity,
+            },
+            'resumen_financiero': {
+                'total_tickets_vendidos': total_tickets,
+                'total_compradores': total_compradores,
+                'ocupacion_pct': ocupacion_pct,
+                'ingresos_brutos': aggs['ingresos_brutos'],
+                'comisiones': aggs['comisiones'],
+                'ingresos_netos': aggs['ingresos_netos'],
+            },
+            'desglose_por_tipo': desglose,
+            'top_compradores': top_list,
+        }, status=status.HTTP_200_OK)
