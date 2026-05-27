@@ -2884,3 +2884,288 @@ class EventAuditLogView(APIView):
             "total": logs.count(),
             "historial": serializer.data,
         }, status=status.HTTP_200_OK)
+
+
+# ─── US36 (US-33): Exportar Reportes a CSV / PDF ─────────────────────────────
+
+def _build_buyers_rows(compras_qs):
+    """Helper: retorna (header, filas) para el reporte de compradores."""
+    header = [
+        'purchase_id', 'user_id', 'ticket_type', 'zone_type',
+        'quantity', 'total_price', 'status', 'created_at', 'backup_code',
+    ]
+    rows = []
+    for c in compras_qs.select_related('ticket_type'):
+        tt = c.ticket_type
+        rows.append([
+            str(c.id),
+            str(c.user_id),
+            tt.name if tt else '',
+            tt.zone_type if tt else '',
+            c.quantity,
+            str(c.total_price),
+            c.status,
+            c.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            c.backup_code or '',
+        ])
+    return header, rows
+
+
+def _csv_response(filename, header, rows):
+    """Genera un HttpResponse con Content-Type text/csv."""
+    import csv
+    from django.http import HttpResponse
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response.write('﻿')          # BOM UTF-8 para compatibilidad con Excel
+    writer = csv.writer(response)
+    writer.writerow(header)
+    writer.writerows(rows)
+    return response
+
+
+def _pdf_response(filename, title, subtitle, header, rows):
+    """
+    Genera un HttpResponse con Content-Type application/pdf usando ReportLab.
+    Crea un documento con título, subtítulo y tabla de datos.
+    """
+    import io
+    from django.http import HttpResponse
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=1.5 * cm,
+        leftMargin=1.5 * cm,
+        topMargin=2 * cm,
+        bottomMargin=2 * cm,
+    )
+
+    styles = getSampleStyleSheet()
+    elements = []
+
+    # Título y subtítulo
+    elements.append(Paragraph(title, styles['Title']))
+    elements.append(Spacer(1, 0.3 * cm))
+    elements.append(Paragraph(subtitle, styles['Normal']))
+    elements.append(Spacer(1, 0.6 * cm))
+
+    # Tabla
+    table_data = [header] + [[str(cell) for cell in row] for row in rows]
+    col_count = len(header)
+    available_width = landscape(A4)[0] - 3 * cm
+    col_width = available_width / col_count
+
+    table = Table(table_data, colWidths=[col_width] * col_count, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#EFF6FF')]),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#CBD5E1')),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(table)
+
+    doc.build(elements)
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response.write(pdf_bytes)
+    return response
+
+
+class ExportEventBuyersView(APIView):
+    """
+    US36 (US-33): Exportar lista de compradores de un evento.
+    GET /api/v1/promotor/events/<event_id>/buyers/export/?format=csv|pdf
+
+    Solo el promotor dueño del evento puede acceder.
+    Parámetros:
+      - format: 'csv' (default) o 'pdf'
+      - status: filtrar por estado (default: active,used)
+
+    Permisos: IsAuthenticated + IsPromotor.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    def get(self, request, event_id):
+        evento = get_object_or_404(Event, id=event_id)
+        if str(evento.promoter_id) != str(request.user.id):
+            return Response(
+                {'error': 'No tienes permisos sobre este evento.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        status_filtro = request.query_params.get('status', 'active,used')
+        status_list = [s.strip() for s in status_filtro.split(',') if s.strip()]
+        compras_qs = Purchase.objects.filter(event=evento, status__in=status_list)
+
+        fmt = request.query_params.get('format', 'csv').lower()
+        header, rows = _build_buyers_rows(compras_qs)
+        safe_name = evento.name.replace(' ', '_')[:30]
+
+        if fmt == 'pdf':
+            from django.utils import timezone as _tz
+            subtitle = (
+                f"Evento: {evento.name} | Fecha: {evento.event_date} | "
+                f"Generado: {_tz.now().strftime('%Y-%m-%d %H:%M')}"
+            )
+            return _pdf_response(
+                filename=f"compradores_{safe_name}.pdf",
+                title="Lista de Compradores",
+                subtitle=subtitle,
+                header=header,
+                rows=rows,
+            )
+
+        return _csv_response(f"compradores_{safe_name}.csv", header, rows)
+
+
+class ExportEventFinancialView(APIView):
+    """
+    US36 (US-33): Exportar reporte financiero de un evento.
+    GET /api/v1/promotor/events/<event_id>/financial/export/?format=csv|pdf
+
+    Exporta el desglose financiero por tipo de ticket del evento.
+    Solo el promotor dueño puede acceder.
+
+    Permisos: IsAuthenticated + IsPromotor.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request, event_id):
+        from decimal import Decimal as D
+        from django.db.models import Sum
+        from django.db.models.functions import Coalesce
+
+        evento = get_object_or_404(Event, id=event_id)
+        if str(evento.promoter_id) != str(request.user.id):
+            return Response(
+                {'error': 'No tienes permisos sobre este evento.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        compras_qs = Purchase.objects.filter(event=evento, status__in=self.PAID_STATUSES)
+
+        # Resumen global
+        total_tickets = compras_qs.aggregate(t=Coalesce(Sum('quantity'), 0))['t']
+        try:
+            aggs = compras_qs.aggregate(
+                ingresos=Coalesce(Sum('total_price'), D('0')),
+                comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                netos=Coalesce(Sum('net_amount'), D('0')),
+            )
+        except Exception:
+            aggs = compras_qs.aggregate(ingresos=Coalesce(Sum('total_price'), D('0')))
+            aggs.update({'comisiones': D('0'), 'netos': aggs['ingresos']})
+
+        # Desglose por ticket type
+        header = [
+            'Tipo Ticket', 'Zona', 'VIP', 'Precio Unit.',
+            'Capacidad', 'Vendidos', 'Ocupacion %',
+            'Ingresos Brutos', 'Comisiones', 'Ingresos Netos',
+        ]
+        rows = []
+        for tt in TicketType.objects.filter(event=evento):
+            qs_tt = compras_qs.filter(ticket_type=tt)
+            tt_tix = qs_tt.aggregate(t=Coalesce(Sum('quantity'), 0))['t']
+            try:
+                tt_fin = qs_tt.aggregate(
+                    ing=Coalesce(Sum('total_price'), D('0')),
+                    com=Coalesce(Sum('commission_amount'), D('0')),
+                    net=Coalesce(Sum('net_amount'), D('0')),
+                )
+            except Exception:
+                tt_fin = qs_tt.aggregate(ing=Coalesce(Sum('total_price'), D('0')))
+                tt_fin.update({'com': D('0'), 'net': tt_fin['ing']})
+
+            oc = round(tt_tix / tt.max_capacity * 100, 1) if tt.max_capacity else 0.0
+            rows.append([
+                tt.name, tt.zone_type, 'Sí' if tt.is_vip else 'No',
+                str(tt.price), tt.max_capacity, tt_tix, f"{oc}%",
+                str(tt_fin['ing']), str(tt_fin['com']), str(tt_fin['net']),
+            ])
+
+        # Fila de totales
+        rows.append([
+            'TOTAL', '', '', '',
+            evento.capacity, total_tickets,
+            f"{round(total_tickets/evento.capacity*100,1) if evento.capacity else 0}%",
+            str(aggs['ingresos']), str(aggs['comisiones']), str(aggs['netos']),
+        ])
+
+        fmt = request.query_params.get('format', 'csv').lower()
+        safe_name = evento.name.replace(' ', '_')[:30]
+
+        if fmt == 'pdf':
+            from django.utils import timezone as _tz
+            subtitle = (
+                f"Evento: {evento.name} | Fecha: {evento.event_date} | "
+                f"Generado: {_tz.now().strftime('%Y-%m-%d %H:%M')}"
+            )
+            return _pdf_response(
+                filename=f"financiero_{safe_name}.pdf",
+                title="Reporte Financiero por Evento",
+                subtitle=subtitle,
+                header=header,
+                rows=rows,
+            )
+
+        return _csv_response(f"financiero_{safe_name}.csv", header, rows)
+
+
+class AdminExportEventBuyersView(APIView):
+    """
+    US36 (US-33): El Admin exporta la lista de compradores de cualquier evento.
+    GET /api/v1/admin/events/<event_id>/buyers/export/?format=csv|pdf
+
+    Sin restricción de ownership — el Admin puede exportar cualquier evento.
+    Expone promoter_id en el nombre del archivo para identificación.
+
+    Permisos: IsAuthenticated + HasAdminCapability('view_reports').
+    """
+    permission_classes = [IsAuthenticated, HasAdminCapability('view_reports')]
+
+    def get(self, request, event_id):
+        evento = get_object_or_404(Event, id=event_id)
+        compras_qs = Purchase.objects.filter(
+            event=evento,
+            status__in=['active', 'used'],
+        )
+
+        fmt = request.query_params.get('format', 'csv').lower()
+        header, rows = _build_buyers_rows(compras_qs)
+        safe_name = evento.name.replace(' ', '_')[:30]
+
+        if fmt == 'pdf':
+            from django.utils import timezone as _tz
+            subtitle = (
+                f"Evento: {evento.name} | Promotor: {evento.promoter_id} | "
+                f"Fecha: {evento.event_date} | Generado: {_tz.now().strftime('%Y-%m-%d %H:%M')}"
+            )
+            return _pdf_response(
+                filename=f"admin_compradores_{safe_name}.pdf",
+                title="Lista de Compradores (Admin)",
+                subtitle=subtitle,
+                header=header,
+                rows=rows,
+            )
+
+        return _csv_response(f"admin_compradores_{safe_name}.csv", header, rows)

@@ -35,6 +35,10 @@ from .views import (
     AdminAuditLogView,           # GET /admin/audit-log-v2/
     # US26: Vista detalle audit por evento (Ariana)
     EventAuditLogView,           # GET /admin/events/{id}/audit-log-v2/
+    # US36 (US-33): Exportar Reportes a CSV / PDF
+    ExportEventBuyersView,       # GET /promotor/events/{id}/buyers/export/
+    ExportEventFinancialView,    # GET /promotor/events/{id}/financial/export/
+    AdminExportEventBuyersView,  # GET /admin/events/{id}/buyers/export/
 )
 
 app_name = 'events'
@@ -112,4 +116,9 @@ urlpatterns = [
     path('users/<uuid:user_id>/notifications/read-all/', UserNotificationReadAllView.as_view(), name='user-notifications-read-all'),
     path('users/<uuid:user_id>/notifications/<uuid:notif_id>/read/', UserNotificationReadView.as_view(), name='user-notification-read'),
     path('users/<uuid:user_id>/notification-preferences/', NotificationPreferenceView.as_view(), name='set-notification-preferences'),
+
+    # US36 (US-33): Exportar Reportes a CSV / PDF
+    path('promotor/events/<uuid:event_id>/buyers/export/', ExportEventBuyersView.as_view(), name='export-event-buyers'),
+    path('promotor/events/<uuid:event_id>/financial/export/', ExportEventFinancialView.as_view(), name='export-event-financial'),
+    path('admin/events/<uuid:event_id>/buyers/export/', AdminExportEventBuyersView.as_view(), name='admin-export-event-buyers'),
 ]
