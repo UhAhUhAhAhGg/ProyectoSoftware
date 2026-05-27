@@ -72,4 +72,4 @@ frontend/node_modules/
 
 # Turbopack cache (MUY IMPORTANTE)
 frontend/.next/cache/
-frontend/.next/dev/
+frontend/.next/dev/.playwright-mcp/

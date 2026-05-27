@@ -40,12 +40,13 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Event, EventAuditLog
 from .serializers import EventSerializer
-from .permissions import IsAdministrador, IsPromotor, IsComprador, IsAdminWithAudit, HasAdminCapability
-from .services import TicketGenerationService, send_ticket_email
+from .permissions import IsAdministrador, IsPromotor, IsComprador, IsAdminWithAudit, HasAdminCapability, IsSuperadmin
+from .services import TicketGenerationService, send_ticket_email, CommissionService
 from .models import (
     Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat,
     UserBehavior, UserPreference, UserFavorite, Notification, NotificationPreference,
     RecommendationEngine, registrar_comportamiento, generar_notificaciones_match,
+    PlatformCommission,
 )
 from .serializers import (
     CategorySerializer,
@@ -952,14 +953,10 @@ class SimularPagoView(APIView):
         purchase.qr_code = qr_code_base64
         purchase.save()
 
-        # NUEVO — registrar comportamiento de compra
-        registrar_comportamiento(
-            user_id=purchase.user_id,
-            event=purchase.event,
-            action_type='purchase'
-        )
+        # TIC-569 (US-31): Calcular y persistir comisión de plataforma
+        CommissionService.aplicar(purchase)
 
-        # NUEVO — registrar comportamiento de compra
+        # Registrar comportamiento de compra
         registrar_comportamiento(
             user_id=purchase.user_id,
             event=purchase.event,
@@ -2884,3 +2881,81 @@ class EventAuditLogView(APIView):
             "total": logs.count(),
             "historial": serializer.data,
         }, status=status.HTTP_200_OK)
+
+
+# ─── TIC-526 (US-31): Configuración de comisiones de la plataforma ────────────
+
+class PlatformCommissionCurrentView(APIView):
+    """
+    GET /api/v1/admin/platform/commission/current/
+
+    Devuelve la configuración de comisión activa vigente.
+    Acceso: Admin con capability 'system_config' O SuperAdmin (bypass).
+
+    Respuesta cuando hay comisión activa:
+        { "commission": { ...campos PlatformCommission... }, "configured": true }
+    Respuesta cuando no hay ninguna configurada:
+        { "commission": null, "configured": false }
+    """
+    permission_classes = [IsAuthenticated, HasAdminCapability('system_config')]
+
+    def get(self, request):
+        from .serializers import PlatformCommissionReadSerializer
+        comision = PlatformCommission.get_active()
+        if comision is None:
+            return Response(
+                {"commission": None, "configured": False},
+                status=status.HTTP_200_OK,
+            )
+        serializer = PlatformCommissionReadSerializer(comision)
+        return Response(
+            {"commission": serializer.data, "configured": True},
+            status=status.HTTP_200_OK,
+        )
+
+
+class PlatformCommissionCreateView(APIView):
+    """
+    POST /api/v1/admin/platform/commission/
+
+    Crea una nueva configuración de comisión y desactiva la anterior.
+    Acceso: Solo SuperAdmin (IsSuperadmin).
+
+    Body esperado (JSON):
+        {
+            "commission_type": "porcentaje" | "fijo" | "hibrido",
+            "percentage_value": 10.00,       // requerido si porcentaje o hibrido
+            "fixed_value": 5.00,             // requerido si fijo o hibrido
+            "valid_from": "2026-06-01T00:00:00Z",  // opcional, default=now
+            "notes": "Ajuste por acuerdo comercial Q2"  // opcional
+        }
+
+    Respuesta exitosa (201):
+        { "status": "created", "commission": { ...nueva config... } }
+    """
+    permission_classes = [IsAuthenticated, IsSuperadmin]
+
+    def post(self, request):
+        from .serializers import PlatformCommissionCreateSerializer, PlatformCommissionReadSerializer
+
+        serializer = PlatformCommissionCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"status": "error", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Desactivar todas las comisiones activas anteriores
+        PlatformCommission.objects.filter(is_active=True).update(is_active=False)
+
+        # Crear la nueva configuración
+        nueva = serializer.save(
+            created_by=request.user.id,
+            is_active=True,
+        )
+
+        read_serializer = PlatformCommissionReadSerializer(nueva)
+        return Response(
+            {"status": "created", "commission": read_serializer.data},
+            status=status.HTTP_201_CREATED,
+        )

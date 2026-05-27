@@ -14,7 +14,7 @@ Toda la documentación del proyecto está organizada por sprint. Si recién lleg
 | [sprint-2/](./sprint-2/) | HU-9 a HU-32: explorar, comprar, pago QR, perfil, historial, eliminación de cuenta |
 | [sprint-3/](./sprint-3/) | US11-US20: mapa de asientos, cola virtual, timeout de sesión, cron barrendero |
 | [sprint-4/](./sprint-4/) | US21-US26: recomendaciones, notificaciones, gestión de usuarios, SuperAdmin, edición de eventos por admin, auditoría |
-| [sprint-5/](./sprint-5/) | **Propuesta de cierre**: dashboard financiero, validación QR en puerta, códigos promo, evidencia RNF |
+| [sprint-5/](./sprint-5/) | **Plan de cierre**: módulo de Reportes y Finanzas completo + Marketing (comisiones de la plataforma, dashboards del promotor y del sistema, códigos de descuento, promoción pagada de eventos, exportación PDF/Excel) |
 
 ---
 
@@ -91,3 +91,23 @@ Referencias técnicas que no pertenecen a una HU específica.
 | US-24 — Panel SuperAdmin + permisos granulares | 🟢 Validada | [US24_permisos_granulares.md](./sprint-4/US24_permisos_granulares.md) |
 | US-25 — Edición / baja de eventos por admin | 🟢 Validada | [US25_admin_eventos.md](./sprint-4/US25_admin_eventos.md) |
 | US-26 — Auditoría unificada | 🟢 Validada | [US26_auditoria.md](./sprint-4/US26_auditoria.md) |
+
+---
+
+## 💰 sprint-5/ — Reportes, Finanzas y Marketing
+
+| US | Estado | Tema |
+|---|---|---|
+| US-31 — Configuración de Comisiones de la Plataforma | ⚪ Planificada | El SuperAdmin define el % de comisión del sistema (fundación del modelo de negocio) |
+| US-26 — Dashboard Financiero del Promotor | ⚪ Planificada | Panel general con ingresos brutos, comisiones y netos del Promotor |
+| US-27 — Reporte Financiero por Evento | ⚪ Planificada | Detalle de ingresos, comisiones, ocupación y meta de ventas por evento |
+| US-28 — Lista de Compradores por Evento | ⚪ Planificada | Tabla de asistentes con filtros y resumen del evento |
+| US-29 — Admin ve Dashboard del Promotor | ⚪ Planificada | Vista del administrador a los dashboards de promotores |
+| US-32 — Dashboard Financiero Global del Sistema | ⚪ Planificada | Vista del SuperAdmin con ingresos totales (comisiones + promociones pagadas) |
+| US-30 — Códigos de Promoción y Descuentos | ⚪ Planificada | Sistema de cupones para campañas comerciales del Promotor |
+| US-34 — Promoción de Eventos Destacados | ⚪ Planificada | Promotor paga planes para destacar su evento (segunda fuente de ingresos para la plataforma) |
+| US-33 — Exportar Reportes a PDF/Excel | ⚪ Planificada | Descarga profesional de reportes financieros |
+
+> 📋 Detalle completo en [PLAN_SPRINT5.md](./sprint-5/PLAN_SPRINT5.md)
+>
+> ⚠️ **Nota de numeración**: las US-26 de Sprint 4 (Auditoría) y Sprint 5 (Dashboard Financiero) comparten número por convención interna del equipo. El identificador definitivo es el TIC en Jira.

@@ -194,6 +194,22 @@ class Purchase(models.Model):
     quantity = models.PositiveIntegerField()
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
 
+    # TIC-569 (US-31): Comisión de plataforma calculada sobre esta compra
+    commission_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Comisión de la plataforma sobre esta compra (en BOB).',
+    )
+    net_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Monto neto para el promotor = total_price - commission_amount (en BOB).',
+    )
+
     # Campos para entrada digital
     qr_code = models.TextField(null=True, blank=True)
     backup_code = models.CharField(max_length=20, unique=True, db_index=True, null=True, blank=True)
@@ -825,4 +841,107 @@ class EventAuditLog(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.admin_email} → {self.action} | {self.event_name} | {self.created_at:%Y-%m-%d}"
+        return f"{self.admin_email} → {self.action} | {self.event_name} | {self.created_at:%Y-%m-%d}"
+
+
+# ─── TIC-526 (US-31): Configuración de comisiones de la plataforma ────────────
+
+class PlatformCommission(models.Model):
+    """
+    TIC-526: Configuración de comisiones de la plataforma TicketGo.
+    El SuperAdmin define el % y/o monto fijo que la plataforma cobra sobre
+    cada transacción. Solo debe existir un registro con is_active=True a la vez.
+
+    Lógica de cálculo:
+      - porcentaje : commission = base_amount * (percentage_value / 100)
+      - fijo       : commission = fixed_value (por compra, no por entrada)
+      - hibrido    : commission = porcentaje + fijo
+    base_amount es el total_price de la Purchase (precio ya descontado).
+    """
+
+    COMMISSION_TYPE_CHOICES = [
+        ('porcentaje', 'Porcentaje sobre precio final'),
+        ('fijo', 'Monto fijo por compra'),
+        ('hibrido', 'Porcentaje + monto fijo'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    commission_type = models.CharField(
+        max_length=20,
+        choices=COMMISSION_TYPE_CHOICES,
+        default='porcentaje',
+    )
+    # Porcentaje de comisión — ej.: 10.00 = 10 %
+    percentage_value = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Porcentaje de comisión (e.g. 10.00 = 10 %). Obligatorio si type es porcentaje o hibrido.',
+    )
+    # Monto fijo en BOB por compra
+    fixed_value = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Monto fijo en BOB por compra. Obligatorio si type es fijo o hibrido.',
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text='Solo el registro activo más reciente determina la comisión vigente.',
+    )
+    valid_from = models.DateTimeField(
+        default=timezone.now,
+        help_text='Fecha y hora desde la que esta comisión aplica.',
+    )
+    # UUID del SuperAdmin que creó la configuración
+    created_by = models.UUIDField(
+        help_text='UUID del SuperAdmin que definió esta comisión.',
+    )
+    notes = models.TextField(
+        null=True,
+        blank=True,
+        help_text='Notas internas sobre el motivo del cambio de comisión.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Platform Commission'
+        verbose_name_plural = 'Platform Commissions'
+        ordering = ['-valid_from']
+        indexes = [
+            models.Index(fields=['is_active'], name='pcomm_active_idx'),
+            models.Index(fields=['valid_from'], name='pcomm_valid_from_idx'),
+        ]
+
+    def __str__(self):
+        if self.commission_type == 'porcentaje':
+            return f"Comisión {self.percentage_value}% (desde {self.valid_from:%Y-%m-%d})"
+        if self.commission_type == 'fijo':
+            return f"Comisión fija BOB {self.fixed_value} (desde {self.valid_from:%Y-%m-%d})"
+        return f"Comisión híbrida {self.percentage_value}% + BOB {self.fixed_value} (desde {self.valid_from:%Y-%m-%d})"
+
+    @classmethod
+    def get_active(cls):
+        """
+        Retorna la comisión activa vigente o None si no hay ninguna configurada.
+        Si hay varias activas (error de datos), devuelve la más reciente.
+        """
+        return cls.objects.filter(is_active=True).order_by('-valid_from').first()
+
+    def calculate(self, base_amount):
+        """
+        Calcula el monto de comisión para un monto base dado.
+        :param base_amount: Decimal — total_price de la Purchase (ya con descuentos).
+        :return: Decimal — monto de comisión en BOB, redondeado a 2 decimales.
+        """
+        from decimal import Decimal
+        amount = Decimal('0.00')
+        if self.commission_type in ('porcentaje', 'hibrido') and self.percentage_value:
+            amount += base_amount * (self.percentage_value / Decimal('100'))
+        if self.commission_type in ('fijo', 'hibrido') and self.fixed_value:
+            amount += self.fixed_value
+        return amount.quantize(Decimal('0.01'))

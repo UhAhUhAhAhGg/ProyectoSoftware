@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Event, TicketType, UserFavorite, Notification, EventAuditLog
+from .models import Category, Event, TicketType, UserFavorite, Notification, EventAuditLog, PlatformCommission
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -296,3 +296,65 @@ class EventAuditLogSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = fields
+
+
+# ─── TIC-526 (US-31): Serializers de comisiones de la plataforma ──────────────
+
+class PlatformCommissionReadSerializer(serializers.ModelSerializer):
+    """
+    TIC-526: Serializer de solo lectura para la comisión activa.
+    Expone todos los campos para que el frontend pueda mostrar la config actual.
+    """
+    class Meta:
+        model = PlatformCommission
+        fields = [
+            'id',
+            'commission_type',
+            'percentage_value',
+            'fixed_value',
+            'is_active',
+            'valid_from',
+            'created_by',
+            'notes',
+            'created_at',
+        ]
+        read_only_fields = fields
+
+
+class PlatformCommissionCreateSerializer(serializers.ModelSerializer):
+    """
+    TIC-526: Serializer de escritura para crear una nueva configuración de comisión.
+    El SuperAdmin solo envía los campos de negocio; created_by se inyecta desde la view.
+    """
+    class Meta:
+        model = PlatformCommission
+        fields = [
+            'commission_type',
+            'percentage_value',
+            'fixed_value',
+            'valid_from',
+            'notes',
+        ]
+
+    def validate(self, data):
+        commission_type = data.get('commission_type', 'porcentaje')
+        pct = data.get('percentage_value')
+        fixed = data.get('fixed_value')
+
+        if commission_type in ('porcentaje', 'hibrido') and not pct:
+            raise serializers.ValidationError(
+                {'percentage_value': 'Este campo es obligatorio para el tipo seleccionado.'}
+            )
+        if commission_type in ('fijo', 'hibrido') and not fixed:
+            raise serializers.ValidationError(
+                {'fixed_value': 'Este campo es obligatorio para el tipo seleccionado.'}
+            )
+        if pct is not None and (pct < 0 or pct > 100):
+            raise serializers.ValidationError(
+                {'percentage_value': 'El porcentaje debe estar entre 0 y 100.'}
+            )
+        if fixed is not None and fixed < 0:
+            raise serializers.ValidationError(
+                {'fixed_value': 'El valor fijo no puede ser negativo.'}
+            )
+        return data
