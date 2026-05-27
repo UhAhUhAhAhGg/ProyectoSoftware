@@ -2884,3 +2884,179 @@ class EventAuditLogView(APIView):
             "total": logs.count(),
             "historial": serializer.data,
         }, status=status.HTTP_200_OK)
+
+
+# ─── US27 (US-26): Dashboard Financiero del Promotor ─────────────────────────
+
+class PromotorDashboardSummaryView(APIView):
+    """
+    US27 (US-26): Dashboard financiero resumido del Promotor autenticado.
+    GET /api/v1/promotor/dashboard/summary/
+
+    Retorna KPIs agregados sobre TODOS los eventos del promotor:
+      - total_eventos
+      - total_tickets_vendidos
+      - tasa_ocupacion_pct  (capacidad promedio utilizada)
+      - ingresos_brutos     (sum total_price de compras active/used)
+      - comisiones_totales  (sum commission_amount — disponible tras merge US567)
+      - ingresos_netos      (sum net_amount — disponible tras merge US567)
+
+    Permisos: IsAuthenticated + IsPromotor.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    # Compras que representan ingresos reales (pagadas y/o validadas)
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request):
+        from decimal import Decimal as D
+        from django.db.models import Sum, Q
+        from django.db.models.functions import Coalesce
+
+        promoter_id = request.user.id
+
+        # ── 1. Eventos del promotor ─────────────────────────────────────────
+        eventos_qs = Event.objects.filter(promoter_id=promoter_id)
+        total_eventos = eventos_qs.count()
+
+        # ── 2. Compras pagadas en esos eventos ──────────────────────────────
+        compras_qs = Purchase.objects.filter(
+            event__promoter_id=promoter_id,
+            status__in=self.PAID_STATUSES,
+        )
+
+        total_tickets = compras_qs.aggregate(
+            total=Coalesce(Sum('quantity'), 0),
+        )['total']
+
+        # Agregaciones financieras (con fallback si columnas de comisión aún
+        # no existen en este branch — se completan tras merge con US567).
+        try:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                comisiones_totales=Coalesce(Sum('commission_amount'), D('0')),
+                ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+            )
+        except Exception:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+            )
+            aggs['comisiones_totales'] = D('0')
+            aggs['ingresos_netos'] = aggs['ingresos_brutos']
+
+        # ── 3. Tasa de ocupación global ─────────────────────────────────────
+        total_capacidad = eventos_qs.aggregate(
+            cap=Coalesce(Sum('capacity'), 0),
+        )['cap']
+        tasa_ocupacion = (
+            round(total_tickets / total_capacidad * 100, 1)
+            if total_capacidad else 0.0
+        )
+
+        return Response({
+            'status': 'success',
+            'promoter_id': str(promoter_id),
+            'total_eventos': total_eventos,
+            'total_tickets_vendidos': total_tickets,
+            'tasa_ocupacion_pct': tasa_ocupacion,
+            'ingresos_brutos': aggs['ingresos_brutos'],
+            'comisiones_totales': aggs['comisiones_totales'],
+            'ingresos_netos': aggs['ingresos_netos'],
+        }, status=status.HTTP_200_OK)
+
+
+class PromotorDashboardComparativaView(APIView):
+    """
+    US27 (US-26): Comparativa financiera por evento del Promotor autenticado.
+    GET /api/v1/promotor/dashboard/comparativa/?limit=5&estado=<published|completed|all>
+
+    Parámetros opcionales:
+      - limit  (int, default=5, máx=20): cuántos eventos devolver
+      - estado (str, default='all'): filtrar por estado del evento
+
+    Por cada evento retorna:
+      evento_id, evento_nombre, fecha, estado, capacidad,
+      tickets_vendidos, ocupacion_pct,
+      ingresos_brutos, comisiones, ingresos_netos.
+
+    Permisos: IsAuthenticated + IsPromotor.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request):
+        from decimal import Decimal as D
+        from django.db.models import Sum
+        from django.db.models.functions import Coalesce
+
+        promoter_id = request.user.id
+
+        # ── Parámetros de query ──────────────────────────────────────────────
+        try:
+            limit = min(int(request.query_params.get('limit', 5)), 20)
+        except (ValueError, TypeError):
+            limit = 5
+
+        estado_filtro = request.query_params.get('estado', 'all')
+
+        # ── Eventos del promotor ─────────────────────────────────────────────
+        eventos_qs = Event.objects.filter(
+            promoter_id=promoter_id,
+        ).order_by('-event_date')
+
+        if estado_filtro != 'all':
+            eventos_qs = eventos_qs.filter(status=estado_filtro)
+
+        eventos = list(eventos_qs[:limit])
+
+        # ── Construir comparativa por evento ─────────────────────────────────
+        comparativa = []
+        for evento in eventos:
+            compras_qs = Purchase.objects.filter(
+                event=evento,
+                status__in=self.PAID_STATUSES,
+            )
+
+            tickets_vendidos = compras_qs.aggregate(
+                total=Coalesce(Sum('quantity'), 0),
+            )['total']
+
+            try:
+                fin = compras_qs.aggregate(
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                    comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                    ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+                )
+            except Exception:
+                fin = compras_qs.aggregate(
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                )
+                fin['comisiones'] = D('0')
+                fin['ingresos_netos'] = fin['ingresos_brutos']
+
+            ocupacion_pct = (
+                round(tickets_vendidos / evento.capacity * 100, 1)
+                if evento.capacity else 0.0
+            )
+
+            comparativa.append({
+                'evento_id': str(evento.id),
+                'evento_nombre': evento.name,
+                'fecha': str(evento.event_date),
+                'estado': evento.status,
+                'capacidad': evento.capacity,
+                'tickets_vendidos': tickets_vendidos,
+                'ocupacion_pct': ocupacion_pct,
+                'ingresos_brutos': fin['ingresos_brutos'],
+                'comisiones': fin['comisiones'],
+                'ingresos_netos': fin['ingresos_netos'],
+            })
+
+        return Response({
+            'status': 'success',
+            'promoter_id': str(promoter_id),
+            'limit': limit,
+            'total_eventos': len(comparativa),
+            'comparativa': comparativa,
+        }, status=status.HTTP_200_OK)
