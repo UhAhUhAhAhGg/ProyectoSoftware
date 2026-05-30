@@ -369,6 +369,28 @@ class EventViewSet(viewsets.ModelViewSet):
         tickets = TicketType.objects.filter(event=event)
         serializer = TicketTypeSerializer(tickets, many=True)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['get'], url_path='report')
+    def report(self, request, pk=None):
+        """
+        GET /events/{id}/report/
+        Reporte financiero básico para promotor.
+        """
+
+        event = self.get_object()
+
+        return Response({
+            "event_id": str(event.id),
+            "ingresos_por_tipo_entrada": [
+                {
+                    "tipo": "General",
+                    "ingresos": 0
+                }
+            ],
+            "ocupacion_porcentaje": 0,
+            "meta_ventas": 0,
+            "progreso_meta": 0
+        }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def publish(self, request, pk=None):
@@ -692,6 +714,9 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
             "message": "Error al validar los datos de la entrada.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+
+
+    
 
     def update(self, request, *args, **kwargs):
         """Editar tipo de entrada validando que no exceda la capacidad total del evento"""
@@ -2065,6 +2090,8 @@ class UserRecommendationsListView(generics.ListAPIView):
         # Capturamos el id del usuario desde la URL
         user_id = self.kwargs.get('user_id')
         return RecommendationEngine.get_recommendation_queryset(user_id)
+    
+    
 
 
 class NotificationPreferenceView(APIView):
