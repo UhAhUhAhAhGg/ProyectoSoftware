@@ -556,3 +556,39 @@ class MatchingService:
             return notif
         except Notification.DoesNotExist:
             return None
+        
+
+class EventReportService:
+
+    @staticmethod
+    def calcular_metricas(event):
+        """
+        Cálculo inicial de métricas para reportes de eventos.
+        """
+
+        tickets_vendidos = sum(
+            ticket.current_sold
+            for ticket in event.ticket_types.all()
+        )
+
+        capacidad_total = event.capacity or 0
+
+        ocupacion_porcentaje = (
+            (tickets_vendidos / capacidad_total) * 100
+            if capacidad_total > 0 else 0
+        )
+
+        meta_ventas = capacidad_total
+
+        progreso_meta = (
+            (tickets_vendidos / meta_ventas) * 100
+            if meta_ventas > 0 else 0
+        )
+
+        return {
+            "tickets_vendidos": tickets_vendidos,
+            "capacidad_total": capacidad_total,
+            "ocupacion_porcentaje": round(ocupacion_porcentaje, 2),
+            "meta_ventas": meta_ventas,
+            "progreso_meta": round(progreso_meta, 2),
+        }
