@@ -585,10 +585,21 @@ class EventReportService:
             if meta_ventas > 0 else 0
         )
 
+        
+        tickets_disponibles = max(
+            capacidad_total - tickets_vendidos,
+            0
+        )
+
+        
+        meta_alcanzada = progreso_meta >= 100
+
         return {
             "tickets_vendidos": tickets_vendidos,
             "capacidad_total": capacidad_total,
+            "tickets_disponibles": tickets_disponibles,
             "ocupacion_porcentaje": round(ocupacion_porcentaje, 2),
             "meta_ventas": meta_ventas,
             "progreso_meta": round(progreso_meta, 2),
+            "meta_alcanzada": meta_alcanzada,
         }
