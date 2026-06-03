@@ -122,4 +122,5 @@ urlpatterns = [
     path('promotor/promo-codes/<uuid:pk>/', PromoCodeDetailView.as_view(), name='promo-code-detail'),
     # Validación pública (cualquier usuario autenticado antes de comprar)
     path('promo-codes/validate/', PromoCodeValidateView.as_view(), name='promo-code-validate'),
+    path('orders/validate-code/', ValidateOrderCouponView.as_view(), name='validate-order-promocode'),
 ]

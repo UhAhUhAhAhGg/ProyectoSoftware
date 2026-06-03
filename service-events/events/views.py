@@ -35,6 +35,9 @@ from rest_framework import generics, pagination, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from .models import PromoCode, Event
+from .serializer import ValidateCodeSerializer
+from .permissions import IsComprador # O la clase que maneje permisos de checkout
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
@@ -3070,4 +3073,76 @@ class PromoCodeValidateView(APIView):
             "discount_amount": str(discount_amount),
             "subtotal": str(subtotal),
             "final_price": str(final_price),
+        }, status=status.HTTP_200_OK)
+class ValidateOrderCouponView(APIView):
+    """
+    TIC-300: POST /orders/validate-code
+    Valida un código de descuento usando las reglas de negocio de PromoCode
+    y retorna el monto descontado junto al precio final.
+    """
+    permission_classes = [IsComprador]
+
+    def post(self, request):
+        serializer = ValidateCodeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        code_str = serializer.validated_data['code'].strip().upper()
+        event_id = serializer.validated_data['event_id']
+        base_price = serializer.validated_data['base_price']
+
+        # 1. Obtener el evento asociado
+        try:
+            event = Event.objects.get(id=event_id)
+        except Event.DoesNotExist:
+            return Response(
+                {"valid": False, "error": "El evento especificado no existe."},
+                status=status.HTTP_444_NOT_FOUND if hasattr(status, 'HTTP_444_NOT_FOUND') else 404
+            )
+
+        # 2. Buscar si el código promocional existe en el sistema
+        try:
+            promo_code = PromoCode.objects.get(code=code_str)
+        except PromoCode.DoesNotExist:
+            return Response(
+                {"valid": False, "error": "El código de promoción no existe."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 3. EJECUTAR VALIDACIÓN NATIVA DEL MODELO (Expiración, max_uses, times_used, event match)
+        # Tu modelo ya tiene la función 'validar_codigo(event)' incorporada
+        is_valid, message = promo_code.validar_codigo(event)
+        if not is_valid:
+            return Response(
+                {"valid": False, "error": message},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 4. CALCULAR DESCUENTO NATIVO DEL MODELO
+        # Tu modelo ya tiene 'calcular_descuento(subtotal)' que maneja porcentaje y monto fijo
+        from decimal import Decimal
+        try:
+            monto_descuento_decimal = promo_code.calcular_descuento(Decimal(str(base_price)))
+            monto_descontado = float(monto_descuento_decimal)
+        except Exception:
+            # Fallback matemático clásico si hay problemas con los tipos de datos decimales
+            if promo_code.discount_type == 'porcentaje':
+                monto_descontado = base_price * (float(promo_code.discount_value) / 100.0)
+            else:
+                monto_descontado = float(promo_code.discount_value)
+
+        # Asegurar que el descuento no exceda el precio base de la entrada
+        if monto_descontado > base_price:
+            monto_descontado = base_price
+
+        precio_final = base_price - monto_descontado
+
+        # 5. RETORNAR RESULTADOS
+        return Response({
+            "valid": True,
+            "code": promo_code.code,
+            "discount_type": promo_code.discount_type,
+            "discount_value": float(promo_code.discount_value),
+            "monto_descontado": round(monto_descontado, 2),
+            "precio_final": round(precio_final, 2)
         }, status=status.HTTP_200_OK)
