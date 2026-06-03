@@ -397,3 +397,14 @@ class PromoCodeValidateSerializer(serializers.Serializer):
     code = serializers.CharField(max_length=50)
     event_id = serializers.UUIDField()
     subtotal = serializers.DecimalField(max_digits=10, decimal_places=2)
+# ==============================================================================
+# SERIALIZERS DE CÓDIGOS DE PROMOCIÓN (TIC-300)
+# ==============================================================================
+
+class ValidateCodeSerializer(serializers.Serializer):
+    """
+    TIC-300: Recibe los datos para validar un código promocional en el checkout.
+    """
+    code = serializers.CharField(required=True, max_length=50)
+    event_id = serializers.UUIDField(required=True)
+    base_price = serializers.FloatField(required=True)

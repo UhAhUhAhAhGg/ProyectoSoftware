@@ -32,6 +32,9 @@ from django.db.models import Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, pagination, permissions, status, viewsets
+from decimal import Decimal
+from django.utils import timezone
+from .models import PromoCode, Event
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -784,9 +787,8 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
 class PurchaseView(APIView):
     """
     POST /api/v1/purchase/
-    Inicia el proceso de compra: crea una Purchase con status='pending' y devuelve
-    un QR de pago (contiene el purchase_id) con 15 minutos de expiración.
-    Si el evento supera el umbral, redirige a la fila virtual.
+    Inicia el proceso de compra: calcula descuentos (TIC-301), crea una Purchase 
+    con status='pending' y calcula la comisión sobre el precio final.
     """
     permission_classes = [IsAuthenticated]
 
@@ -794,6 +796,9 @@ class PurchaseView(APIView):
         user_id = request.user.id
         event_id = request.data.get("event_id")
         ticket_type_id = request.data.get("ticket_type_id")
+        
+        # NUEVO (TIC-301): Capturar el código promocional enviado desde el frontend
+        promo_code_str = request.data.get("promo_code", "").strip().upper()
 
         try:
             quantity = int(request.data.get("quantity", 1))
@@ -805,124 +810,110 @@ class PurchaseView(APIView):
 
         event = get_object_or_404(Event, id=event_id)
         ticket = get_object_or_404(TicketType, id=ticket_type_id)
+
         # 1. Calculamos el total de entradas vendidas actualmente
         total_sold = sum(t.current_sold for t in event.ticket_types.all())
 
         # 2. Evaluamos si el evento tiene la fila activa Y superó el umbral
         if event.waitlist_active and (total_sold + quantity) >= event.waitlist_threshold:
-            
             with transaction.atomic():
-                # Verificamos si el usuario ya está en la fila
                 waitlist_entry = Waitlist.objects.filter(event=event, user_id=user_id).first()
-                
                 if not waitlist_entry:
-                    # Buscamos la última posición asignada para darle la siguiente
                     last_position = Waitlist.objects.filter(event=event).aggregate(Max('position'))['position__max'] or 0
-                    
                     waitlist_entry = Waitlist.objects.create(
-                        event=event,
-                        user_id=user_id,
-                        position=last_position + 1,
-                        status='waiting' # Estado "en_cola" según el ticket
+                        event=event, user_id=user_id, position=last_position + 1, status='waiting'
                     )
-                    
                     mensaje = "El evento ha superado el umbral de capacidad simultánea. Has sido colocado en la fila virtual."
                     status_code = status.HTTP_202_ACCEPTED
                 else:
                     mensaje = "Ya te encuentras en la fila virtual para este evento."
                     status_code = status.HTTP_200_OK
-
-            return Response({
-                "status": "queue",
-                "message": mensaje,
-                "data": {
-                    "event_id": str(event.id),
-                    "queue_position": waitlist_entry.position,
-                    "queue_status": waitlist_entry.status
-                }
-            }, status=status_code)
-        # --- FIN LÓGICA DE FILA VIRTUAL ---
+                return Response({
+                    "status": "queue",
+                    "message": mensaje,
+                    "data": {
+                        "event_id": str(event.id),
+                        "queue_position": waitlist_entry.position,
+                        "queue_status": waitlist_entry.status
+                    }
+                }, status=status_code)
 
         # Validaciones estándar de compra
         if event.status == 'cancelled':
             return Response({"error": "No puedes comprar entradas para un evento cancelado"}, status=status.HTTP_400_BAD_REQUEST)
-
         if event.status != 'published':
             return Response({"error": "El evento no esta disponible para compra"}, status=status.HTTP_400_BAD_REQUEST)
-
         if ticket.status != 'active':
             return Response({"error": "Este tipo de entrada no esta disponible"}, status=status.HTTP_400_BAD_REQUEST)
-
         if ticket.available_capacity < quantity:
             return Response({"error": "No hay suficientes entradas disponibles"}, status=status.HTTP_400_BAD_REQUEST)
 
         existing_purchase = Purchase.objects.filter(
-            user_id=user_id,
-            event=event,
-            status__in=['active', 'pending']
+            user_id=user_id, event=event, status__in=['active', 'pending']
         ).exists()
-
         if existing_purchase:
             return Response({
                 "error": "Ya tienes una entrada para este evento. Revisa tu historial de compras.",
                 "error_code": "DUPLICATE_PURCHASE"
             }, status=status.HTTP_409_CONFLICT)
 
-        subtotal = ticket.price * quantity
+        # ── MATEMÁTICA FINANCIERA Y DESCUENTOS (TIC-301) ──────────────────────
+        from decimal import Decimal
+        from .models import PromoCode
 
-        # TIC-513 (US-30): Validar y aplicar código de promoción si se envió
-        promo_obj = None
-        discount_amount_dec = None
-        total_price = subtotal
+        base_price_total = Decimal(str(ticket.price)) * quantity
+        discount_amount = Decimal("0.00")
+        precio_final = base_price_total
+        promo_code_obj = None
 
-        promo_code_str = request.data.get('promo_code', '').strip().upper()
+        # Si el usuario mandó un código, lo validamos e implementamos
         if promo_code_str:
             try:
-                promo_obj = PromoCode.objects.get(code=promo_code_str)
-                valid, mensaje = promo_obj.is_valid_for(event)
-                if not valid:
-                    return Response(
-                        {"error": f"Código de promoción inválido: {mensaje}"},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                discount_amount_dec = promo_obj.calcular_descuento(subtotal)
-                total_price = subtotal - discount_amount_dec
+                promo_code_obj = PromoCode.objects.get(code=promo_code_str)
+                is_valid, _ = promo_code_obj.validar_codigo(event)
+                
+                if is_valid:
+                    # Calculamos el descuento usando la función nativa de tu modelo
+                    discount_amount = promo_code_obj.calcular_descuento(base_price_total)
+                    precio_final = base_price_total - discount_amount
+                    
+                    if precio_final < 0:
+                        precio_final = Decimal("0.00")
+                        discount_amount = base_price_total
+                else:
+                    return Response({"error": "El código promocional ingresado no cumple con las condiciones."}, status=status.HTTP_400_BAD_REQUEST)
             except PromoCode.DoesNotExist:
-                return Response(
-                    {"error": "Código de promoción no encontrado."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+                return Response({"error": "El código promocional ingresado no existe."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # El timer empieza desde 'Seleccionar Asientos' (accessed_at en service-queue),
-        # no desde la generación del QR. Fallback: ahora si no hay registro.
+        #  CALCULO DE LA COMISIÓN SOBRE EL PRECIO FINAL (CON DESCUENTO)
+        # Supongamos un 10% fijo de comisión. Ajusta al porcentaje oficial de tu app.
+        PORCENTAJE_COMISION = Decimal("0.10")
+        comision_calculada = precio_final * PORCENTAJE_COMISION
+
+        # El timer empieza desde 'Seleccionar Asientos' (accessed_at en service-queue)
         start_time = _get_queue_access_time(str(event.id), str(user_id)) or timezone.now()
         expires_at = start_time + timedelta(minutes=event.payment_timeout_minutes)
 
+        # REGISTRAMOS TODOS LOS CAMPOS EXIGIDOS POR LA SUBTAREA
         purchase = Purchase.objects.create(
             user_id=user_id,
             event=event,
             ticket_type=ticket,
             quantity=quantity,
-            total_price=total_price,
-            promo_code=promo_obj,
-            discount_amount=discount_amount_dec,
-            status='pending',
+            total_price=float(precio_final),              # Guardamos el precio con descuento
+            comision=float(comision_calculada),          # Comisión sobre el valor final real
+            promo_code_id=promo_code_obj.id if promo_code_obj else None, # ID del código promocional
+            discount_amount=float(discount_amount),       # Monto que se le restó
+            status='pending'
         )
 
-        # Incrementar contador de usos del código de promoción
-        if promo_obj:
-            PromoCode.objects.filter(id=promo_obj.id).update(
-                times_used=models.F('times_used') + 1
-            )
-        # Sobrescribir created_at para que SimularPagoView y PurchaseStatusView
-        # (que calculan expires_at = created_at + timeout) usen el tiempo de admisión
-        # a la cola en vez del tiempo de creación de la orden.
+        # Sobrescribir created_at para el sincronismo con colas
         Purchase.objects.filter(id=purchase.id).update(created_at=start_time)
         purchase.refresh_from_db()
 
         payment_qr_base64 = None
         try:
-            qr_content = f"TICKETPAY:{purchase.id}:{float(total_price)}"
+            qr_content = f"TICKETPAY:{purchase.id}:{float(precio_final)}"
             qr = qrcode.make(qr_content)
             buffer = io.BytesIO()
             qr.save(buffer, 'PNG')
@@ -930,23 +921,18 @@ class PurchaseView(APIView):
         except Exception as e:
             print(f"Error generando QR de pago: {str(e)}")
 
-        response_data = {
-            "purchase_id": str(purchase.id),
-            "subtotal": float(subtotal),
-            "total": float(total_price),
-            "payment_qr": payment_qr_base64,
-            "expires_at": expires_at.isoformat(),
-            "event_name": event.name,
-            "ticket_type_name": ticket.name,
-        }
-        if promo_obj:
-            response_data["promo_code_applied"] = promo_obj.code
-            response_data["discount_amount"] = float(discount_amount_dec)
-
         return Response({
             "status": "pending",
             "message": "Orden de pago creada. Escanea el QR para completar el pago.",
-            "data": response_data,
+            "data": {
+                "purchase_id": str(purchase.id),
+                "total": float(precio_final),
+                "payment_qr": payment_qr_base64,
+                "expires_at": expires_at.isoformat(),
+                "event_name": event.name,
+                "ticket_type_name": ticket.name,
+                "descuento_aplicado": float(discount_amount)
+            }
         }, status=status.HTTP_201_CREATED)
 
 class SimularPagoView(APIView):
