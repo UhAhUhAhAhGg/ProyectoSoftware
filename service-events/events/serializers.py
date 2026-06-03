@@ -310,3 +310,10 @@ class DashboardSummarySerializer(serializers.Serializer):
     total_sistema = serializers.FloatField(read_only=True)
     tickets_vendidos = serializers.IntegerField(read_only=True)
     promotores_activos = serializers.IntegerField(read_only=True)
+class TopPromotorSerializer(serializers.Serializer):
+    """
+    TIC-201: Estructura para el top de promotores que generan más ingresos.
+    """
+    promotor_id = serializers.UUIDField(read_only=True)
+    total_generado = serializers.FloatField(read_only=True)
+    eventos_publicados = serializers.IntegerField(read_only=True)

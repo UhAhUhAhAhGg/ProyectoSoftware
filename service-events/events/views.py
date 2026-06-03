@@ -32,6 +32,7 @@ from .serializer import DashboardSummarySerializer
 from django.db.models import Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from .serializer import TopPromotorSerializer # Importamos el nuevo serializer
 from rest_framework import generics, pagination, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
@@ -3145,3 +3146,44 @@ class SuperAdminDashboardSummaryView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+class SuperAdminTopPromotorsView(APIView):
+    """
+    TIC-201: GET /admin/dashboard/top-promotors
+    Retorna el TOP 10 de promotores con mayor recaudación por comisiones en el sistema.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        # 1. SEGURIDAD: Solo SuperAdmin o Administradores autorizados por JWT
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        is_superuser = payload.get('is_superuser', False)
+        user_role = payload.get('role', '')
+
+        if not is_superuser and user_role != 'Administrador':
+            return Response(
+                {"error": "Acceso denegado. Privilegios administrativos requeridos."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            # 2. CONSULTA OPTIMIZADA (GROUP BY & SUM)
+            # Agrupamos los Tickets a través de la relación con el Evento usando su promotor_id
+            top_promotores = (
+                Ticket.objects.values('event__promotor_id') # Agrupa por ID de promotor
+                .annotate(
+                    promotor_id=models.F('event__promotor_id'),
+                    total_generado=Sum('comision'), # Suma las comisiones de sus entradas vendidas
+                    eventos_publicados=Count('event_id', distinct=True) # Cuántos eventos distintos ha vendido
+                )
+                .order_by('-total_generado')[:10] # Orden descendente y limita al TOP 10
+            )
+
+            # 3. SERIALIZAR Y RESPONDER
+            serializer = TopPromotorSerializer(top_promotores, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {"error": f"Error al calcular el ranking de promotores: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

@@ -119,4 +119,7 @@ urlpatterns = [
     # US566 (US-32): Dashboard Financiero Global del Sistema (SuperAdmin)
     path('superadmin/dashboard/global/', SuperAdminGlobalDashboardView.as_view(), name='superadmin-dashboard-global'),
     path('superadmin/dashboard/promotores/', SuperAdminPromotorRankingView.as_view(), name='superadmin-dashboard-promotores'),
+    path('admin/dashboard/top-promotors/', 
+     SuperAdminTopPromotorsView.as_view(), 
+     name='superadmin-dashboard-top-promotors'),
 ]
