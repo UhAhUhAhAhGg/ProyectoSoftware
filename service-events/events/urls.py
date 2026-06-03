@@ -117,4 +117,12 @@ urlpatterns = [
 
     # US33 (US-28): Lista de Compradores por Evento
     path('promotor/events/<uuid:event_id>/buyers/', EventBuyersListView.as_view(), name='event-buyers-list'),
+
+    #US33 (US-28): Endpoint para obtener lista de compradores por evento (TIC-422)
+    path('promotor/events/<uuid:event_id>/buyers/summary/', 
+     PromotorEventBuyersSummaryView.as_view(), 
+     name='promotor-event-buyers-summary'),
+     path('promotor/events/<uuid:event_id>/buyers/', 
+     PromotorEventBuyersListView.as_view(), 
+     name='promotor-event-buyers-list'),
 ]

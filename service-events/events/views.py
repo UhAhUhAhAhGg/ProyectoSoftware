@@ -37,6 +37,9 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db.models import Q
+from rest_framework.generics import ListAPIView
+from .models import Event, Ticket
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Event, EventAuditLog
 from .serializers import EventSerializer
@@ -3048,3 +3051,88 @@ class EventBuyersListView(APIView):
             },
             'results': results,
         }, status=status.HTTP_200_OK)
+# ==============================================================================
+# HISTORIA DE USUARIO: REPORTES DE PROMOTOR (TIC-150)
+# ==============================================================================
+
+class PromotorEventBuyersSummaryView(APIView):
+    """
+    TIC-150: GET /promotor/events/{event_id}/buyers/summary
+    Retorna las métricas clave de recaudación, compradores únicos y entradas vendidas.
+    """
+    # Usamos tu permiso basado en JWT que ya tienes importado en el archivo
+    permission_classes = [IsPromotor]
+
+    def get(self, request, event_id):
+        # 1. Extraer el ID del promotor desde el payload del JWT (siguiendo tu estándar)
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        promotor_id = payload.get('user_id')
+
+        # 2. Validación de propiedad: Verificar que el evento pertenezca al promotor logueado
+        try:
+            event = Event.objects.get(id=event_id, promotor_id=promotor_id)
+        except Event.DoesNotExist:
+            return Response(
+                {"error": "Evento no encontrado o no tienes autorización sobre él."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 3. Agregación optimizada en la Base de Datos
+        # NOTA: Si tu modelo de ventas se llama 'Attendee', cámbialo aquí. 
+        # Si se llama 'Ticket', se queda tal cual.
+        from .models import Ticket 
+        
+        metrics = Ticket.objects.filter(event_id=event_id).aggregate(
+            total_entradas=Count('id'),
+            total_compradores=Count('user_id', distinct=True),
+            total_recaudado=Sum('price')
+        )
+
+        # 4. Respuesta estructurada limpia
+        return Response({
+            "event_id": event_id,
+            "event_name": event.name,
+            "total_recaudado": metrics['total_recaudado'] or 0.0,
+            "total_compradores": metrics['total_compradores'] or 0,
+            "total_entradas": metrics['total_entradas'] or 0
+        }, status=status.HTTP_200_OK)
+    
+class PromotorEventBuyersListView(ListAPIView):
+    """
+    TIC-151: GET /promotor/events/{event_id}/buyers/
+    Retorna la lista de compradores de un evento específico con soporte para 
+    búsqueda case-insensitive (Q() + icontains) sobre email y nombre completo.
+    """
+    permission_classes = [IsPromotor]
+    # Aquí puedes usar tu serializador de tickets/compradores existente
+    # serializer_class = TicketSerializer 
+
+    def get_queryset(self):
+        event_id = self.kwargs.get('event_id')
+        
+        # 1. Extraer el ID del promotor desde el JWT para validar propiedad
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        promotor_id = payload.get('user_id')
+
+        # 2. Seguridad: Verificar que el evento exista y pertenezca a este promotor
+        if not Event.objects.filter(id=event_id, promotor_id=promotor_id).exists():
+            return Ticket.objects.none() # Devuelve queryset vacío si no es dueño o no existe
+
+        # 3. Obtener el parámetro de búsqueda del frontend (?search=...)
+        search_query = self.request.query_params.get('search', '').strip()
+        
+        # Base del queryset para el evento
+        queryset = Ticket.objects.filter(event_id=event_id)
+
+        # 4. APLICAR BÚSQUEDA DINÁMICA CON Q() E ICONTAINS
+        if search_query:
+            # NOTA DE ADAPTACIÓN: 
+            # Si en tu modelo de la BD local los campos se llaman directamente 'buyer_email' 
+            # y 'buyer_name', cambia los strings de abajo. 
+            # Si usas relaciones directas, se queda como pide la subtarea:
+            queryset = queryset.filter(
+                Q(user__email__icontains=search_query) | 
+                Q(user__profile__full_name__icontains=search_query)
+            )
+
+        return queryset.order_by('-id')
