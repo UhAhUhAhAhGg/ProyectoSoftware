@@ -317,3 +317,10 @@ class TopPromotorSerializer(serializers.Serializer):
     promotor_id = serializers.UUIDField(read_only=True)
     total_generado = serializers.FloatField(read_only=True)
     eventos_publicados = serializers.IntegerField(read_only=True)
+
+class DashboardEvolutionSerializer(serializers.Serializer):
+    """
+    TIC-202: Estructura para la evolución temporal de ingresos mensuales.
+    """
+    mes = serializers.CharField(read_only=True)  # Formato: "YYYY-MM"
+    ingresos_comisiones = serializers.FloatField(read_only=True)

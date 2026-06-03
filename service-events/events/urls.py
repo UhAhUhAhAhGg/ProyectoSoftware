@@ -122,4 +122,7 @@ urlpatterns = [
     path('admin/dashboard/top-promotors/', 
      SuperAdminTopPromotorsView.as_view(), 
      name='superadmin-dashboard-top-promotors'),
+     path('admin/dashboard/evolution/', 
+     SuperAdminDashboardEvolutionView.as_view(), 
+     name='superadmin-dashboard-evolution'),
 ]

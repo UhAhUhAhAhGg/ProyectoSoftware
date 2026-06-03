@@ -30,6 +30,10 @@ from django.conf import settings as django_settings
 from django.db import transaction, IntegrityError
 from .serializer import DashboardSummarySerializer
 from django.db.models import Max
+
+from django.db.models.functions import TruncMonth
+from django.db.models import Sum
+from .serializer import DashboardEvolutionSerializer
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .serializer import TopPromotorSerializer # Importamos el nuevo serializer
@@ -3185,5 +3189,53 @@ class SuperAdminTopPromotorsView(APIView):
         except Exception as e:
             return Response(
                 {"error": f"Error al calcular el ranking de promotores: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+class SuperAdminDashboardEvolutionView(APIView):
+    """
+    TIC-202: GET /admin/dashboard/evolution
+    Retorna los ingresos por comisiones agrupados por mes para análisis de tendencias.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        # 1. SEGURIDAD: Control de acceso estricto por JWT
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        is_superuser = payload.get('is_superuser', False)
+        user_role = payload.get('role', '')
+
+        if not is_superuser and user_role != 'Administrador':
+            return Response(
+                {"error": "Acceso denegado. Se requieren privilegios de SuperAdmin."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            # 2. AGREGACIÓN TEMPORAL POR MES
+            # Truncamos la fecha 'created_at' al primer día del mes para agruparlos
+            evolucion_ingresos = (
+                Ticket.objects.annotate(month=TruncMonth('created_at'))
+                .values('month') # Agrupamos por el mes truncado
+                .annotate(ingresos_comisiones=Sum('comision')) # Sumamos comisiones del mes
+                .order_by('month') # Orden cronológico (antiguo a reciente)
+            )
+
+            # 3. FORMATEAR LA SALIDA PARA EL FRONTEND
+            # Convertimos el objeto datetime resultante a un string legible "YYYY-MM"
+            data_formateada = []
+            for registro in evolucion_ingresos:
+                if registro['month']:
+                    data_formateada.append({
+                        "mes": registro['month'].strftime('%Y-%m'),
+                        "ingresos_comisiones": float(registro['ingresos_comisiones'] or 0.0)
+                    })
+
+            # 4. RESPONDER
+            serializer = DashboardEvolutionSerializer(data_formateada, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {"error": f"Error al calcular la evolución temporal: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
