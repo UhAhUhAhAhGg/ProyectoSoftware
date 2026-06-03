@@ -28,6 +28,7 @@ import requests as http_requests
 from datetime import timedelta
 from django.conf import settings as django_settings
 from django.db import transaction, IntegrityError
+from .serializer import DashboardSummarySerializer
 from django.db.models import Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -3107,3 +3108,40 @@ class SuperAdminPromotorRankingView(APIView):
             'total_promotores': len(resultados),
             'ranking': resultados,
         }, status=status.HTTP_200_OK)
+class SuperAdminDashboardSummaryView(APIView):
+    """
+    TIC-200: GET /admin/dashboard/summary
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        is_superuser = payload.get('is_superuser', False)
+        user_role = payload.get('role', '')
+
+        if not is_superuser and user_role != 'Administrador':
+            return Response(
+                {"error": "Acceso denegado. Se requieren privilegios de SuperAdmin."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            # (Aquí va la lógica de agregaciones Sum y Count que pusimos en el paso anterior)
+            ticket_metrics = Ticket.objects.aggregate(total_tickets=Count('id'), total_comisiones=Sum('comision'))
+            promo_metrics = Event.objects.filter(is_featured=True).aggregate(total_promo=Sum('promotion_fee'))
+            promotores_cnt = Event.objects.filter(status='published').values('promotor_id').distinct().count()
+
+            raw_data = {
+                "ingresos_comisiones": float(ticket_metrics['total_comisiones'] or 0.0),
+                "ingresos_promociones": float(promo_metrics['total_promo'] or 0.0),
+                "total_sistema": float(ticket_metrics['total_comisiones'] or 0.0) + float(promo_metrics['total_promo'] or 0.0),
+                "tickets_vendidos": ticket_metrics['total_tickets'] or 0,
+                "promotores_activos": promotores_cnt
+            }
+
+            # 🚀 Pasamos los datos por el serializador para formatear correctamente la salida
+            serializer = DashboardSummarySerializer(raw_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

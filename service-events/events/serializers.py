@@ -296,3 +296,17 @@ class EventAuditLogSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = fields
+# ==============================================================================
+# SERIALIZERS DE DASHBOARD Y ANALÍTICA (TIC-200)
+# ==============================================================================
+
+class DashboardSummarySerializer(serializers.Serializer):
+    """
+    TIC-200: Estructura de salida para el Dashboard Financiero Global.
+    Garantiza que todos los datos numéricos mantengan el tipo de dato correcto.
+    """
+    ingresos_comisiones = serializers.FloatField(read_only=True)
+    ingresos_promociones = serializers.FloatField(read_only=True)
+    total_sistema = serializers.FloatField(read_only=True)
+    tickets_vendidos = serializers.IntegerField(read_only=True)
+    promotores_activos = serializers.IntegerField(read_only=True)
