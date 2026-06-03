@@ -29,6 +29,9 @@ from datetime import timedelta
 from django.conf import settings as django_settings
 from django.db import transaction, IntegrityError
 from django.db.models import Max
+from django.db.models import Sum, Count
+from .models import PromoCode, Purchase
+from .serializer import PromoCodeStatsSerializer
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, pagination, permissions, status, viewsets
@@ -3132,3 +3135,51 @@ class ValidateOrderCouponView(APIView):
             "monto_descontado": round(monto_descontado, 2),
             "precio_final": round(precio_final, 2)
         }, status=status.HTTP_200_OK)
+class PromotorPromoCodeStatsView(APIView):
+    """
+    TIC-302: GET /promotor/promo-codes/{id}/stats
+    Retorna métricas de rendimiento y uso de un código promocional para su creador.
+    """
+    permission_classes = [IsPromotor]
+
+    def get(self, request, id):
+        # 1. Seguridad: Extraer el ID del promotor desde el payload de tu JWT
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        promotor_id = payload.get('user_id')
+
+        # 2. Obtener el código promocional validando propiedad intelectual
+        try:
+            # Buscamos por id físico (UUID) y verificamos que coincida el promotor
+            promo_code = PromoCode.objects.get(id=id, promoter_id=promotor_id)
+        except PromoCode.DoesNotExist:
+            return Response(
+                {"error": "Código promocional no encontrado o no tienes autorización sobre él."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 3. Calcular la analítica (Filtrando compras que NO estén canceladas o expiradas)
+        # Consideramos 'active' o 'completed' como estados válidos de uso real
+        purchases_queryset = Purchase.objects.filter(
+            promo_code_id=promo_code.id,
+            status__in=['active', 'completed'] 
+        )
+
+        metrics = purchases_queryset.aggregate(
+            total_descontado_sum=Sum('discount_amount'),
+            real_used_count=Count('id')
+        )
+
+        # 4. Obtener los últimos usos (por ejemplo, los últimos 5 para un feed rápido)
+        ultimos_usos_qs = purchases_queryset.order_by('-created_at')[:5]
+
+        # 5. Estructurar la respuesta
+        raw_data = {
+            "code": promo_code.code,
+            # Usamos el conteo en BD o el campo de contingencia times_used de tu modelo
+            "used_count": metrics['real_used_count'] or promo_code.times_used,
+            "total_descontado": float(metrics['total_descontado_sum'] or 0.0),
+            "ultimos_usos": ultimos_usos_qs
+        }
+
+        serializer = PromoCodeStatsSerializer(raw_data)
+        return Response(serializer.data, status=status.HTTP_200_OK)

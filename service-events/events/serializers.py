@@ -408,3 +408,23 @@ class ValidateCodeSerializer(serializers.Serializer):
     code = serializers.CharField(required=True, max_length=50)
     event_id = serializers.UUIDField(required=True)
     base_price = serializers.FloatField(required=True)
+
+    # ==============================================================================
+# SERIALIZERS DE ESTADÍSTICAS DE CÓDIGOS PROMOCIONALES (TIC-302)
+# ==============================================================================
+
+class PromoCodeUsageLogSerializer(serializers.Serializer):
+    """Estructura simplificada para el historial reciente de uso."""
+    purchase_id = serializers.UUIDField(source='id', read_only=True)
+    user_id = serializers.IntegerField(read_only=True)
+    monto_descontado = serializers.FloatField(source='discount_amount', read_only=True)
+    precio_pagado = serializers.FloatField(source='total_price', read_only=True)
+    fecha_uso = serializers.DateTimeField(source='created_at', read_only=True)
+
+
+class PromoCodeStatsSerializer(serializers.Serializer):
+    """Estructura global de métricas del código de descuento."""
+    code = serializers.CharField(read_only=True)
+    used_count = serializers.IntegerField(read_only=True)
+    total_descontado = serializers.FloatField(read_only=True)
+    ultimos_usos = PromoCodeUsageLogSerializer(many=True, read_only=True)
