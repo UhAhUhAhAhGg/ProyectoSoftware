@@ -28,6 +28,9 @@ import requests as http_requests
 from datetime import timedelta
 from django.conf import settings as django_settings
 from django.db import transaction, IntegrityError
+from rest_framework.generics import ListAPIView
+from .models import PromotionPlan
+from .serializer import PromotionPlanSerializer # Asegúrate de que apunte a tu archivo de serializers
 from django.db.models import Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -3065,3 +3068,15 @@ class AdminPromotionListView(APIView):
             "total_ingresos_promociones_bob": str(total_ingresos),
             "results": serializer.data,
         })
+class PromotorPromotionPlanListView(ListAPIView):
+    """
+    TIC-400: GET /promotor/promotion-plans
+    Retorna la lista de todos los planes de promoción que están activos en el sistema.
+    """
+    # Usamos tu clase de permisos que valida el payload del JWT para Promotores
+    permission_classes = [IsPromotor]
+    serializer_class = PromotionPlanSerializer
+
+    def get_queryset(self):
+        # Filtramos estrictamente por el campo 'is_active' del modelo real
+        return PromotionPlan.objects.filter(is_active=True)

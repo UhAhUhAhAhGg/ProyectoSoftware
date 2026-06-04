@@ -370,3 +370,7 @@ class EventPromotionCreateSerializer(serializers.Serializer):
 
     def get_plan(self):
         return self._plan
+class PromotionPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PromotionPlan
+        fields = ['id', 'name', 'description', 'price', 'duration_days', 'is_active', 'tier', 'priority', 'created_at']

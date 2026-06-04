@@ -125,4 +125,7 @@ urlpatterns = [
     path('promotor/events/<uuid:event_id>/promotion/', EventPromotionStatusView.as_view(), name='event-promotion-status'),
     path('events/featured/', FeaturedEventsView.as_view(), name='events-featured'),
     path('admin/promotions/', AdminPromotionListView.as_view(), name='admin-promotion-list'),
+    path('promotor/promotion-plans/', 
+     PromotorPromotionPlanListView.as_view(), 
+     name='promotor-promotion-plans-list'),
 ]

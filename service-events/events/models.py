@@ -194,6 +194,23 @@ class Purchase(models.Model):
     quantity = models.PositiveIntegerField()
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
 
+    # TIC-513 (US-30): Código de promoción aplicado a esta compra
+    promo_code = models.ForeignKey(
+        'PromoCode',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='purchases',
+        help_text='Código de descuento aplicado en esta compra (si corresponde).',
+    )
+    discount_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Monto descontado en BOB. total_price ya incluye este descuento aplicado.',
+    )
+
     # Campos para entrada digital
     qr_code = models.TextField(null=True, blank=True)
     backup_code = models.CharField(max_length=20, unique=True, db_index=True, null=True, blank=True)
@@ -828,159 +845,142 @@ class EventAuditLog(models.Model):
         return f"{self.admin_email} → {self.action} | {self.event_name} | {self.created_at:%Y-%m-%d}"
 
 
-# ─── TIC-561/562 (US-34): Promoción de eventos destacados ─────────────────────
+# ─── TIC-512 (US-30): Códigos de promoción y descuento ────────────────────────
 
-class PromotionPlan(models.Model):
+class PromoCode(models.Model):
     """
-    TIC-561: Planes de promoción que TicketGo vende a los Promotores.
-    Un plan define el precio, duración y nivel de visibilidad.
+    TIC-512: Código de descuento creado por un Promotor para sus eventos.
 
-    Niveles:
-      - basico  : aparece en sección "Destacados" (prioridad 3)
-      - premium : banner en página principal (prioridad 2)
-      - pro     : primer lugar en todos los listados (prioridad 1)
+    Tipos de descuento:
+      - porcentaje : descuento = precio_unitario * (discount_value / 100) * quantity
+      - fijo       : descuento = discount_value (monto fijo por compra, no por entrada)
+
+    Alcance:
+      - event=None  → aplica a TODOS los eventos del promoter_id
+      - event=<obj> → aplica solo a ese evento
+
+    Reglas de uso:
+      - El código debe estar activo (is_active=True).
+      - La fecha actual debe estar en [valid_from, valid_until].
+      - times_used < max_uses (o max_uses is None para ilimitado).
+      - El evento de la compra debe coincidir con el alcance del código.
     """
 
-    TIER_CHOICES = [
-        ('basico', 'Básico'),
-        ('premium', 'Premium'),
-        ('pro', 'Pro'),
+    DISCOUNT_TYPE_CHOICES = [
+        ('porcentaje', 'Porcentaje de descuento'),
+        ('fijo', 'Monto fijo por compra'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=100, help_text='Nombre visible del plan (ej. "Plan Premium").')
-    tier = models.CharField(
-        max_length=20,
-        choices=TIER_CHOICES,
+
+    # Texto del cupón que el comprador introduce
+    code = models.CharField(
+        max_length=50,
         unique=True,
-        help_text='Nivel del plan. Determina la prioridad en listados.',
+        db_index=True,
+        help_text='Texto del cupón (ej. VERANO25). Único en todo el sistema.',
     )
-    price_bob = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        help_text='Precio del plan en BOB por período.',
+    # Promotor propietario del código
+    promoter_id = models.UUIDField(
+        db_index=True,
+        help_text='UUID del Promotor que creó el código.',
     )
-    duration_days = models.PositiveIntegerField(
-        help_text='Duración del plan en días (ej. 30 = un mes).',
-    )
-    # Prioridad numérica: 1 = más alto (Pro), 3 = más bajo (Básico)
-    priority = models.PositiveSmallIntegerField(
-        default=3,
-        help_text='Prioridad en la ordenación de eventos destacados (1=más alto).',
-    )
-    description = models.TextField(
-        help_text='Descripción de los beneficios del plan para el Promotor.',
-    )
-    is_active = models.BooleanField(
-        default=True,
-        help_text='Solo los planes activos se ofrecen a los Promotores.',
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = 'Promotion Plan'
-        verbose_name_plural = 'Promotion Plans'
-        ordering = ['priority']
-
-    def __str__(self):
-        return f"{self.name} ({self.get_tier_display()}) — BOB {self.price_bob} / {self.duration_days}d"
-
-
-class EventPromotion(models.Model):
-    """
-    TIC-562: Promoción activa de un evento bajo un plan de visibilidad.
-    Cada registro representa una compra de promoción por parte de un Promotor.
-
-    Estado:
-      - pending  : pago iniciado pero no confirmado
-      - active   : promoción vigente
-      - expired  : el período terminó
-      - cancelled: cancelada por el Promotor o el SuperAdmin
-    """
-
-    STATUS_CHOICES = [
-        ('pending', 'Pendiente de pago'),
-        ('active', 'Activa'),
-        ('expired', 'Expirada'),
-        ('cancelled', 'Cancelada'),
-    ]
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # Evento al que aplica (null = todos los eventos del Promotor)
     event = models.ForeignKey(
         Event,
         on_delete=models.CASCADE,
-        related_name='promotions',
-        help_text='Evento que se promociona.',
-    )
-    plan = models.ForeignKey(
-        PromotionPlan,
-        on_delete=models.PROTECT,
-        related_name='event_promotions',
-        help_text='Plan de promoción contratado.',
-    )
-    promoter_id = models.UUIDField(
-        db_index=True,
-        help_text='UUID del Promotor que contrató la promoción.',
+        null=True,
+        blank=True,
+        related_name='promo_codes',
+        help_text='Si se especifica, el código solo aplica a este evento.',
     )
 
-    status = models.CharField(
+    discount_type = models.CharField(
         max_length=20,
-        choices=STATUS_CHOICES,
-        default='pending',
-        db_index=True,
+        choices=DISCOUNT_TYPE_CHOICES,
+        default='porcentaje',
     )
-
-    started_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text='Fecha de inicio de la promoción (cuando se confirma el pago).',
-    )
-    expires_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text='Fecha de expiración = started_at + plan.duration_days.',
-    )
-
-    # Snapshot del precio pagado (inmutable para historial financiero)
-    amount_paid = models.DecimalField(
+    # Para porcentaje: 25.00 = 25 %. Para fijo: monto en BOB.
+    discount_value = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        help_text='Monto en BOB pagado por esta promoción (snapshot del precio del plan).',
+        help_text='Valor del descuento. Para porcentaje: 0-100. Para fijo: monto en BOB.',
     )
 
+    # Ventana de validez
+    valid_from = models.DateTimeField(
+        help_text='Fecha y hora desde la que el código es válido.',
+    )
+    valid_until = models.DateTimeField(
+        help_text='Fecha y hora hasta la que el código es válido.',
+    )
+
+    # Límite de usos
+    max_uses = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Número máximo de usos. null = ilimitado.',
+    )
+    times_used = models.PositiveIntegerField(
+        default=0,
+        help_text='Contador de usos (incrementa al confirmar cada compra).',
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text='Solo los códigos activos pueden ser aplicados.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = 'Event Promotion'
-        verbose_name_plural = 'Event Promotions'
+        verbose_name = 'Promo Code'
+        verbose_name_plural = 'Promo Codes'
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['promoter_id', 'status'], name='evpromo_promoter_status_idx'),
-            models.Index(fields=['event', 'status'], name='evpromo_event_status_idx'),
-            models.Index(fields=['expires_at'], name='evpromo_expires_idx'),
+            models.Index(fields=['promoter_id', 'is_active'], name='promo_promoter_active_idx'),
+            models.Index(fields=['valid_from', 'valid_until'], name='promo_validity_idx'),
         ]
 
     def __str__(self):
-        return f"{self.event.name} — {self.plan.name} [{self.get_status_display()}]"
+        scope = f"evento {self.event.name}" if self.event else "todos los eventos"
+        return f"{self.code} — {self.discount_value}{'%' if self.discount_type == 'porcentaje' else ' BOB'} ({scope})"
 
-    def activate(self):
+    def is_valid_for(self, event, now=None):
         """
-        Confirma el pago y activa la promoción calculando expires_at.
-        Debe llamarse desde la view de confirmación de pago.
+        Verifica si el código es aplicable a un evento dado en este momento.
+        :param event: instancia de Event sobre la que se quiere aplicar.
+        :param now: datetime; si None usa timezone.now().
+        :return: (bool, str) — (es_valido, mensaje_de_error_o_ok)
         """
         from django.utils import timezone as tz
-        from datetime import timedelta
-        now = tz.now()
-        self.status = 'active'
-        self.started_at = now
-        self.expires_at = now + timedelta(days=self.plan.duration_days)
-        self.save(update_fields=['status', 'started_at', 'expires_at'])
+        now = now or tz.now()
 
-    @property
-    def is_currently_active(self):
-        from django.utils import timezone as tz
-        return (
-            self.status == 'active' and
-            self.expires_at is not None and
-            self.expires_at > tz.now()
-        )
+        if not self.is_active:
+            return False, "El código de promoción no está activo."
+        if now < self.valid_from:
+            return False, "El código de promoción aún no es válido."
+        if now > self.valid_until:
+            return False, "El código de promoción ha expirado."
+        if self.max_uses is not None and self.times_used >= self.max_uses:
+            return False, "El código de promoción ha alcanzado su límite de usos."
+        if self.event is not None and self.event_id != event.id:
+            return False, "El código de promoción no aplica a este evento."
+        if str(self.promoter_id) != str(event.promoter_id):
+            return False, "El código de promoción no aplica a este evento."
+        return True, "ok"
+
+    def calcular_descuento(self, subtotal):
+        """
+        Calcula el monto de descuento para un subtotal dado.
+        :param subtotal: Decimal — precio total antes del descuento (precio x cantidad).
+        :return: Decimal — monto de descuento en BOB, nunca mayor que subtotal.
+        """
+        from decimal import Decimal
+        base = Decimal(str(subtotal))
+        if self.discount_type == 'porcentaje':
+            desc = base * (Decimal(str(self.discount_value)) / Decimal('100'))
+        else:
+            desc = Decimal(str(self.discount_value))
+        # El descuento nunca puede superar el subtotal
+        return min(desc, base).quantize(Decimal('0.01'))
