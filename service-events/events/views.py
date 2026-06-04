@@ -3163,3 +3163,63 @@ class PromotorPurchasePromotionView(APIView):
         }
 
         return Response(response_data, status=status.HTTP_201_CREATED)
+
+# ==============================================================================
+# CONFIRMACIÓN DE PAGO DE PROMOCIÓN (TIC-402)
+# ==============================================================================
+from .models import Event, EventPromotion
+from .serializer import EventPromotionSerializer
+
+class PromotorConfirmPromotionPaymentView(APIView):
+    """
+    TIC-402: POST /promotor/events/{id}/promote/confirm-payment
+    Simula/Confirma el pago del código QR y activa la promoción del evento
+    utilizando la lógica interna del modelo.
+    """
+    permission_classes = [IsPromotor]
+
+    def post(self, request, id):
+        # 1. Seguridad: Extraer el ID del promotor desde el payload de tu JWT
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        promotor_id = payload.get('user_id')
+
+        # 2. Buscar el evento y validar propiedad intelectual
+        event_obj = get_object_or_404(Event, id=id)
+        if str(event_obj.promoter_id) != str(promotor_id):
+            return Response(
+                {"error": "No tienes autorización sobre este evento para gestionar sus pagos."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # 3. Buscar la promoción en estado 'pending' asociada a este evento
+        try:
+            event_promotion = EventPromotion.objects.get(
+                event=event_obj,
+                status='pending',
+                promoter_id=promotor_id
+            )
+        except EventPromotion.DoesNotExist:
+            return Response(
+                {"error": "No se encontró ninguna promoción pendiente de pago para este evento."},
+                status=status.HTTP_444_NOT_FOUND if hasattr(status, 'HTTP_444_NOT_FOUND') else 404
+            )
+
+        # 4. 🚀 ACTIVACIÓN NATIVA DEL MODELO
+        # Llamamos al método nativo que tus compañeros crearon en modelsss.py
+        try:
+            with transaction.atomic():
+                event_promotion.activate()
+        except Exception as e:
+            return Response(
+                {"error": f"Error al procesar la activación en Base de Datos: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # 5. Responder con los datos actualizados de la promoción
+        output_serializer = EventPromotionSerializer(event_promotion)
+        
+        return Response({
+            "status": "success",
+            "message": f"¡Pago confirmado! La promoción para tu evento '{event_obj.name}' ha sido activada con éxito.",
+            "data": output_serializer.data
+        }, status=status.HTTP_200_OK)
