@@ -3080,3 +3080,86 @@ class PromotorPromotionPlanListView(ListAPIView):
     def get_queryset(self):
         # Filtramos estrictamente por el campo 'is_active' del modelo real
         return PromotionPlan.objects.filter(is_active=True)
+# ==============================================================================
+# CONTRATACIÓN DE PROMOCIÓN DE EVENTO (TIC-401)
+# ==============================================================================
+from .models import Event, PromotionPlan, EventPromotion
+from .serializer import EventPromotionCreateSerializer, EventPromotionSerializer
+
+class PromotorPurchasePromotionView(APIView):
+    """
+    TIC-401: POST /promotor/events/{id}/promote
+    Permite a un promotor contratar un plan de visibilidad para destacar su evento.
+    Crea un registro de EventPromotion con estado 'pending' e incluye el código QR para el pago.
+    """
+    permission_classes = [IsPromotor]
+
+    def post(self, request, id):
+        # 1. Seguridad: Extraer el ID del promotor desde el payload de tu JWT
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        promotor_id = payload.get('user_id')
+
+        # 2. Validar propiedad: Que el evento exista y le pertenezca a este promotor
+        event_obj = get_object_or_404(Event, id=id)
+        if str(event_obj.promoter_id) != str(promotor_id):
+            return Response(
+                {"error": "No tienes autorización sobre este evento para aplicar una promoción."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # 3. Validar los datos de entrada con el serializador nativo de tu equipo
+        serializer = EventPromotionCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        plan_id = serializer.validated_data['plan_id']
+        plan_obj = PromotionPlan.objects.get(id=plan_id)
+
+        # 4. Control de negocio: Evitar duplicar promociones activas para el mismo evento
+        promocion_activa = EventPromotion.objects.filter(
+            event=event_obj,
+            status='active'
+        ).exists()
+        if promocion_activa:
+            return Response(
+                {"error": "Este evento ya cuenta con una promoción destacada activa actualmente."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 5. Crear la promoción en estado 'pending' (como viene por defecto en el modelo)
+        # Congelamos el precio actual del plan en 'amount_paid' tal como exige tu modelo
+        event_promotion = EventPromotion.objects.create(
+            event=event_obj,
+            plan=plan_obj,
+            promoter_id=promotor_id,
+            amount_paid=plan_obj.price,
+            status='pending'
+        )
+
+        # 6. Generar el código QR de pago simulado para la pasarela de la plataforma
+        import qrcode
+        import io
+        import base64
+        payment_qr_base64 = None
+        try:
+            # Estructura del QR para procesar el pago comercial de TicketGo
+            qr_content = f"PROMO_PAY:{event_promotion.id}:{float(plan_obj.price)}"
+            qr = qrcode.make(qr_content)
+            buffer = io.BytesIO()
+            qr.save(buffer, 'PNG')
+            payment_qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+        except Exception as e:
+            # Logueamos el error pero no bloqueamos la respuesta al cliente
+            print(f"Error generando QR de pago para promoción: {str(e)}")
+
+        # 7. Responder usando el serializador detallado de salida de tus compañeros
+        output_serializer = EventPromotionSerializer(event_promotion)
+        
+        response_data = {
+            "status": "pending_payment",
+            "message": f"Contratación del plan '{plan_obj.name}' iniciada. Escanea el QR para pagar.",
+            "payment_qr": payment_qr_base64,
+            "promotion": output_serializer.data
+        }
+
+        return Response(response_data, status=status.HTTP_201_CREATED)
