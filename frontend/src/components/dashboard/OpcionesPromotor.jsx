@@ -80,6 +80,13 @@ function OpcionesPromotor() {
     { id: 'estadisticas', icono: '📊', titulo: 'Estadísticas', descripcion: 'Analiza el rendimiento de tus eventos', disabled: true },
     { id: 'pagos', icono: '💳', titulo: 'Pagos y Cobros', descripcion: 'Gestiona tus métodos de pago', disabled: true },
     { id: 'asistencia', icono: '✅', titulo: 'Control de Asistencia', descripcion: 'Registra asistentes a tus eventos', disabled: true },
+    {
+    id: 'compradores',
+    icono: '👥',
+    titulo: 'Compradores',
+    descripcion: 'Visualiza la lista de compradores de tus eventos',
+    disabled: true
+    },
   ];
 
   return (
