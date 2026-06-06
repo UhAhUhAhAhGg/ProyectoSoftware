@@ -8,6 +8,7 @@ import AdminUsuarios from '../components/dashboard/admin/AdminUsuarios';
 import AdminAuditoria from '../components/dashboard/admin/AdminAuditoria';
 import SuperAdminSolicitudes from '../components/dashboard/admin/SuperAdminSolicitudes';
 import SuperAdminCrearAdmin from '../components/dashboard/admin/SuperAdminCrearAdmin';
+import DashboardSistema from '../components/dashboard/admin/DashboardSistema';
 import './SuperAdminDashboard.css';
 
 function SuperAdminDashboard() {
@@ -47,6 +48,13 @@ function SuperAdminDashboard() {
   }
 
   const menuItems = [
+    {
+      path: '/superadmin/finanzas',
+      icon: '📊',
+      label: 'Dashboard Financiero',
+      section: 'dashboard-sistema',
+      badge: null,
+    },
     {
       path: '/superadmin/administradores',
       icon: '⚙️',
@@ -191,6 +199,11 @@ function SuperAdminDashboard() {
               {menuItems.find(item => item.section === activeSection)?.label}
             </span>
           </div>
+
+          {/* Section: Dashboard Financiero Global */}
+          {activeSection === 'dashboard-sistema' && (
+            <DashboardSistema />
+          )}
 
           {/* Section: Gestión de Administradores */}
           {activeSection === 'administradores' && (
