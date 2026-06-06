@@ -38,6 +38,10 @@ from .views import (
     # TIC-526 (US-31): Configuración de comisiones de la plataforma
     PlatformCommissionCurrentView,  # GET /admin/platform/commission/current/
     PlatformCommissionCreateView,   # POST /admin/platform/commission/
+    
+    # US27 (US-26): Dashboard Financiero del Promotor
+    PromotorDashboardSummaryView,    # GET /promotor/dashboard/summary/
+    PromotorDashboardComparativaView, # GET /promotor/dashboard/comparativa/
 )
 
 app_name = 'events'
@@ -119,4 +123,8 @@ urlpatterns = [
     # TIC-526 (US-31): Configuración de comisiones — Solo SuperAdmin
     path('admin/platform/commission/current/', PlatformCommissionCurrentView.as_view(), name='platform-commission-current'),
     path('admin/platform/commission/', PlatformCommissionCreateView.as_view(), name='platform-commission-create'),
+
+    # US27 (US-26): Dashboard Financiero del Promotor
+    path('promotor/dashboard/summary/', PromotorDashboardSummaryView.as_view(), name='promotor-dashboard-summary'),
+    path('promotor/dashboard/comparativa/', PromotorDashboardComparativaView.as_view(), name='promotor-dashboard-comparativa'),
 ]
