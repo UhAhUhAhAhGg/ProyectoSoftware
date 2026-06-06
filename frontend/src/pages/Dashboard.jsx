@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import { useNotifications } from '../context/NotificationContext';
 import OpcionesComprador from '../components/dashboard/OpcionesComprador';
 import OpcionesPromotor from '../components/dashboard/OpcionesPromotor';
+import DashboardPromotor from '../components/dashboard/DashboardPromotor';
 import './Dashboard.css';
 
 function Dashboard() {
@@ -297,7 +298,14 @@ function Dashboard() {
           </div>
 
           {isComprador && <OpcionesComprador />}
-          {isPromotor && <OpcionesPromotor />}
+          {isPromotor && (
+            <>
+              <OpcionesPromotor />
+              <div style={{ marginTop: 20 }}>
+                <DashboardPromotor />
+              </div>
+            </>
+          )}
         </div>
       </main>
 

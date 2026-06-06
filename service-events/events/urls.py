@@ -42,6 +42,8 @@ from .views import (
     # US27 (US-26): Dashboard Financiero del Promotor
     PromotorDashboardSummaryView,    # GET /promotor/dashboard/summary/
     PromotorDashboardComparativaView, # GET /promotor/dashboard/comparativa/
+    # US30 (US-27): Reporte Financiero por Evento
+    EventFinancialReportView,    # GET /promotor/events/{id}/financial/
 )
 
 app_name = 'events'
@@ -127,4 +129,6 @@ urlpatterns = [
     # US27 (US-26): Dashboard Financiero del Promotor
     path('promotor/dashboard/summary/', PromotorDashboardSummaryView.as_view(), name='promotor-dashboard-summary'),
     path('promotor/dashboard/comparativa/', PromotorDashboardComparativaView.as_view(), name='promotor-dashboard-comparativa'),
+    # US30 (US-27): Reporte Financiero por Evento
+    path('promotor/events/<uuid:event_id>/financial/', EventFinancialReportView.as_view(), name='event-financial-report'),
 ]
