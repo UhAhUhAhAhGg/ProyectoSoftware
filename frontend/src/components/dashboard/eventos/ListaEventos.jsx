@@ -283,6 +283,15 @@ function ListaEventos() {
                 >
                   ✏️
                 </Link>
+                {evento.estado === 'activo' && (
+                  <Link 
+                    to={`/dashboard/evento/${evento.id}/promocionar`} 
+                    className="btn-accion promocionar"
+                    title="Promocionar evento"
+                  >
+                    🚀
+                  </Link>
+                )}
                 {evento.estado === 'activo' ? (
                   <button 
                     className="btn-accion eliminar"
