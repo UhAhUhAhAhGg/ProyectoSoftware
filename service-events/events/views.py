@@ -60,7 +60,7 @@ from .serializers import (
 
 
 def _notify_queue_release(event_id: str, user_id: str):
-    """Notifica a service-queue que un usuario liberó su cupo (compra completa/cancelada/expirada)."""
+    """Notifica a service-queue que un usuario liber├│ su cupo (compra completa/cancelada/expirada)."""
     try:
         url = f"{django_settings.QUEUE_SERVICE_URL}/api/v1/internal/release-user/"
         http_requests.post(url, json={"event_id": event_id, "user_id": user_id}, timeout=3)
@@ -70,9 +70,9 @@ def _notify_queue_release(event_id: str, user_id: str):
 
 def _get_queue_access_time(event_id: str, user_id: str):
     """
-    Consulta service-queue para obtener cuándo el usuario fue admitido al evento.
+    Consulta service-queue para obtener cu├índo el usuario fue admitido al evento.
     Retorna un datetime o None. Permite que el timer del Purchase empiece desde
-    'Seleccionar Asientos' y no desde la generación del QR.
+    'Seleccionar Asientos' y no desde la generaci├│n del QR.
     """
     try:
         from django.utils.dateparse import parse_datetime
@@ -178,10 +178,10 @@ class EventViewSet(viewsets.ModelViewSet):
         return EventSerializer
 
     def retrieve(self, request, *args, **kwargs):
-        """GET /events/{id}/ — registra la visualización como comportamiento"""
+        """GET /events/{id}/ ÔÇö registra la visualizaci├│n como comportamiento"""
         instance = self.get_object()
 
-        # Registrar automáticamente la interacción 'view'
+        # Registrar autom├íticamente la interacci├│n 'view'
         registrar_comportamiento(
             user_id=request.user.id,
             event=instance,
@@ -192,10 +192,10 @@ class EventViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def retrieve(self, request, *args, **kwargs):
-        """GET /events/{id}/ — registra la visualización como comportamiento"""
+        """GET /events/{id}/ ÔÇö registra la visualizaci├│n como comportamiento"""
         instance = self.get_object()
 
-        # Registrar automáticamente la interacción 'view'
+        # Registrar autom├íticamente la interacci├│n 'view'
         registrar_comportamiento(
             user_id=request.user.id,
             event=instance,
@@ -279,12 +279,12 @@ class EventViewSet(viewsets.ModelViewSet):
         """
         HU: Asignar lugar y mostrar tiempo estimado de espera.
         GET /events/{id}/queue-status/
-        Calcula la posición en tiempo real y el promedio dinámico de espera (max 15 min).
+        Calcula la posici├│n en tiempo real y el promedio din├ímico de espera (max 15 min).
         """
         event = self.get_object()
         user_id = request.user.id
 
-        # 1. Verificar si el usuario realmente está en la fila
+        # 1. Verificar si el usuario realmente est├í en la fila
         waitlist_entry = Waitlist.objects.filter(event=event, user_id=user_id).first()
         
         if not waitlist_entry:
@@ -300,32 +300,32 @@ class EventViewSet(viewsets.ModelViewSet):
                 "data": {"queue_status": waitlist_entry.status}
             }, status=status.HTTP_200_OK)
 
-        # 2. Calcular cuántas personas están estrictamente delante de este usuario
+        # 2. Calcular cu├íntas personas est├ín estrictamente delante de este usuario
         people_ahead = Waitlist.objects.filter(
             event=event,
             status='waiting',
             position__lt=waitlist_entry.position
         ).count()
-        # Tomamos una muestra de las últimas 20 compras confirmadas del evento
+        # Tomamos una muestra de las ├║ltimas 20 compras confirmadas del evento
         recent_purchases = list(Purchase.objects.filter(
             event=event, 
             status='active'
         ).order_by('-created_at')[:20])
 
-        average_time_minutes = 5.0  # Tiempo por defecto si no hay data histórica suficiente
+        average_time_minutes = 5.0  # Tiempo por defecto si no hay data hist├│rica suficiente
 
         if len(recent_purchases) >= 2:
-            # Diferencia de tiempo entre la compra más reciente y la más antigua de la muestra
+            # Diferencia de tiempo entre la compra m├ís reciente y la m├ís antigua de la muestra
             newest_purchase = recent_purchases[0].created_at
             oldest_purchase = recent_purchases[-1].created_at
             
             time_diff_seconds = (newest_purchase - oldest_purchase).total_seconds()
             
             if time_diff_seconds > 0:
-                # Calculamos cuánto toma en promedio despachar 1 compra (en minutos)
+                # Calculamos cu├ínto toma en promedio despachar 1 compra (en minutos)
                 calc_average = (time_diff_seconds / 60.0) / len(recent_purchases)
                 
-                # Regla de Negocio: Mínimo 1 minuto, Máximo 15 minutos (por expiración del QR)
+                # Regla de Negocio: M├¡nimo 1 minuto, M├íximo 15 minutos (por expiraci├│n del QR)
                 average_time_minutes = min(max(calc_average, 1.0), 15.0)
 
         estimated_wait_time = int(people_ahead * average_time_minutes)
@@ -370,28 +370,6 @@ class EventViewSet(viewsets.ModelViewSet):
         tickets = TicketType.objects.filter(event=event)
         serializer = TicketTypeSerializer(tickets, many=True)
         return Response(serializer.data)
-    
-    @action(detail=True, methods=['get'], url_path='report')
-    def report(self, request, pk=None):
-        """
-        GET /events/{id}/report/
-        Reporte financiero básico para promotor.
-        """
-
-        event = self.get_object()
-
-        return Response({
-            "event_id": str(event.id),
-            "ingresos_por_tipo_entrada": [
-                {
-                    "tipo": "General",
-                    "ingresos": 0
-                }
-            ],
-            "ocupacion_porcentaje": 0,
-            "meta_ventas": 0,
-            "progreso_meta": 0
-        }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def publish(self, request, pk=None):
@@ -400,11 +378,11 @@ class EventViewSet(viewsets.ModelViewSet):
         event.status = 'published'
         event.save()
         
-        # NUEVO — disparar notificaciones de match en < 5 minutos
+        # NUEVO ÔÇö disparar notificaciones de match en < 5 minutos
         generar_notificaciones_match(event)
         
         
-        # NUEVO — disparar notificaciones de match en < 5 minutos
+        # NUEVO ÔÇö disparar notificaciones de match en < 5 minutos
         generar_notificaciones_match(event)
         
         return Response({'success': 'Event published'})
@@ -412,20 +390,20 @@ class EventViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get', 'put'], url_path='queue-config')
     def queue_config(self, request, pk=None):
         """
-        HU: Configurar umbral de usuarios simultáneos.
-        GET: Obtener la configuración actual.
-        PUT: Actualizar la configuración con validaciones estrictas.
+        HU: Configurar umbral de usuarios simult├íneos.
+        GET: Obtener la configuraci├│n actual.
+        PUT: Actualizar la configuraci├│n con validaciones estrictas.
         """
         event = self.get_object()
 
-        # 1. Seguridad base para ambos métodos
+        # 1. Seguridad base para ambos m├®todos
         if str(event.promoter_id) != str(request.user.id):
             return Response({
                 "status": "error",
                 "message": "No tienes permisos. Solo el promotor de este evento puede gestionar la fila virtual."
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # 2. Manejo de la petición GET (Lo que hicimos en la subtarea anterior)
+        # 2. Manejo de la petici├│n GET (Lo que hicimos en la subtarea anterior)
         if request.method == 'GET':
             return Response({
                 "status": "success",
@@ -434,47 +412,47 @@ class EventViewSet(viewsets.ModelViewSet):
                     "waitlist_threshold": event.waitlist_threshold,
                     "waitlist_active": event.waitlist_active,
                     "queue_timeout": event.queue_timeout,
-                    "event_capacity": event.capacity # Útil para que el Frontend valide también
+                    "event_capacity": event.capacity # ├Ütil para que el Frontend valide tambi├®n
                 }
             }, status=status.HTTP_200_OK)
 
-        # 3. Manejo de la petición PUT (La nueva subtarea de validación)
+        # 3. Manejo de la petici├│n PUT (La nueva subtarea de validaci├│n)
         elif request.method == 'PUT':
             threshold_input = request.data.get('waitlist_threshold')
             is_active_input = request.data.get('waitlist_active', event.waitlist_active)
             timeout_input = request.data.get('queue_timeout', event.queue_timeout)
 
-            # Validación A: Que el dato exista
+            # Validaci├│n A: Que el dato exista
             if threshold_input is None:
                 return Response({
                     "status": "error",
                     "message": "El campo 'waitlist_threshold' es obligatorio."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validación B: Que sea un número entero
+            # Validaci├│n B: Que sea un n├║mero entero
             try:
                 threshold = int(threshold_input)
             except ValueError:
                 return Response({
                     "status": "error",
-                    "message": "El umbral debe ser un número entero válido."
+                    "message": "El umbral debe ser un n├║mero entero v├ílido."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validación C: Entero positivo (> 0)
+            # Validaci├│n C: Entero positivo (> 0)
             if threshold <= 0:
                 return Response({
                     "status": "error",
-                    "message": "El umbral debe ser un número entero positivo mayor a cero."
+                    "message": "El umbral debe ser un n├║mero entero positivo mayor a cero."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validación D: <= capacidad del evento (El Core de tu ticket)
+            # Validaci├│n D: <= capacidad del evento (El Core de tu ticket)
             if threshold > event.capacity:
                 return Response({
                     "status": "error",
-                    "message": f"El umbral ({threshold}) no puede superar la capacidad máxima del evento ({event.capacity} personas)."
+                    "message": f"El umbral ({threshold}) no puede superar la capacidad m├íxima del evento ({event.capacity} personas)."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validación para queue_timeout
+            # Validaci├│n para queue_timeout
             try:
                 q_timeout = int(timeout_input)
                 if q_timeout <= 0:
@@ -485,7 +463,7 @@ class EventViewSet(viewsets.ModelViewSet):
             except ValueError:
                 return Response({
                     "status": "error",
-                    "message": "El tiempo de espera (timeout) debe ser un número entero válido."
+                    "message": "El tiempo de espera (timeout) debe ser un n├║mero entero v├ílido."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             # Manejo seguro del booleano para 'waitlist_active'
@@ -502,7 +480,7 @@ class EventViewSet(viewsets.ModelViewSet):
 
             return Response({
                 "status": "success",
-                "message": "Configuración de la fila virtual actualizada y validada correctamente.",
+                "message": "Configuraci├│n de la fila virtual actualizada y validada correctamente.",
                 "data": {
                     "waitlist_threshold": event.waitlist_threshold,
                     "waitlist_active": event.waitlist_active,
@@ -515,47 +493,47 @@ class EventViewSet(viewsets.ModelViewSet):
         """Cancelar un evento validando todas las condiciones de negocio"""
         event = self.get_object()
 
-        # CondiciÃ³n 1: Permisos (Solo el promotor dueÃ±o puede cancelar)
+        # Condici├â┬│n 1: Permisos (Solo el promotor due├â┬▒o puede cancelar)
         if str(event.promoter_id) != str(request.user.id):
             return Response({
                 "status": "error",
-                "message": "No tienes permisos. Solo el promotor que creÃ³ el evento puede cancelarlo."
+                "message": "No tienes permisos. Solo el promotor que cre├â┬│ el evento puede cancelarlo."
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # CondiciÃ³n 2: Estado del evento (Evitar doble cancelaciÃ³n)
+        # Condici├â┬│n 2: Estado del evento (Evitar doble cancelaci├â┬│n)
         if event.status in ['cancelled', 'completed']:
             return Response({
                 "status": "error",
-                "message": f"AcciÃ³n denegada. El evento ya se encuentra '{event.status}'."
+                "message": f"Acci├â┬│n denegada. El evento ya se encuentra '{event.status}'."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # CondiciÃ³n 3: Validar temporalidad (No cancelar eventos pasados)
+        # Condici├â┬│n 3: Validar temporalidad (No cancelar eventos pasados)
         if not event.is_upcoming:
             return Response({
                 "status": "error",
-                "message": "No se puede cancelar un evento cuya fecha ya pasÃ³ o estÃ¡ en curso."
+                "message": "No se puede cancelar un evento cuya fecha ya pas├â┬│ o est├â┬í en curso."
             }, status=status.HTTP_400_BAD_REQUEST)
 
         tickets = event.ticket_types.all()
         total_sold = sum(ticket.current_sold for ticket in tickets)
 
-        # Registrar metadata de cancelación (TIC-210/TIC-229)
+        # Registrar metadata de cancelaci├│n (TIC-210/TIC-229)
         event.status = 'cancelled'
         event.cancelled_at = timezone.now()
         event.cancelled_by = request.user.id
         event.cancellation_reason = request.data.get('cancellation_reason', '')
         event.save()
 
-        # Detenemos la comercialización desactivando los tickets
+        # Detenemos la comercializaci├│n desactivando los tickets
         for ticket in tickets:
             ticket.status = 'inactive'
             ticket.save()
 
         # Preparamos una respuesta inteligente basada en las ventas
         if total_sold > 0:
-            mensaje = f"Evento cancelado. ATENCIÓN: Se registraron {total_sold} entradas vendidas. Se debe notificar a los compradores y gestionar reembolsos."
+            mensaje = f"Evento cancelado. ATENCI├ôN: Se registraron {total_sold} entradas vendidas. Se debe notificar a los compradores y gestionar reembolsos."
         else:
-            mensaje = "Evento cancelado exitosamente. La comercialización fue detenida (0 entradas vendidas)."
+            mensaje = "Evento cancelado exitosamente. La comercializaci├│n fue detenida (0 entradas vendidas)."
 
         return Response({
             "status": "success",
@@ -575,9 +553,9 @@ class EventViewSet(viewsets.ModelViewSet):
         # Normalmente el banco te manda un token o firma en los headers.
         token_banco = request.headers.get('X-Bank-Secret')
         
-        # En producción, 'mi_secreto_super_seguro' debe estar en un archivo .env
+        # En producci├│n, 'mi_secreto_super_seguro' debe estar en un archivo .env
         if token_banco != 'mi_secreto_super_seguro': 
-            return Response({"error": "No autorizado. Firma inválida."}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"error": "No autorizado. Firma inv├ílida."}, status=status.HTTP_403_FORBIDDEN)
 
         # 2. Leer los datos que manda el banco
         order_id = request.data.get('order_id')
@@ -588,15 +566,15 @@ class EventViewSet(viewsets.ModelViewSet):
         except PaymentOrder.DoesNotExist:
             return Response({"error": "Orden no encontrada"}, status=status.HTTP_404_NOT_FOUND)
 
-        # 3. Idempotencia: ¿Qué pasa si el banco manda el mismo mensaje dos veces por error?
+        # 3. Idempotencia: ┬┐Qu├® pasa si el banco manda el mismo mensaje dos veces por error?
         if orden.status == 'paid':
             return Response({"mensaje": "Esta orden ya fue procesada y pagada anteriormente"}, status=status.HTTP_200_OK)
 
-        # 4. Validar si la orden ya expiró en nuestro sistema
+        # 4. Validar si la orden ya expir├│ en nuestro sistema
         if orden.is_expired:
             orden.status = 'expired'
             orden.save()
-            return Response({"error": "La orden ya expiró"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "La orden ya expir├│"}, status=status.HTTP_400_BAD_REQUEST)
 
         # 5. EL MOMENTO DE LA VERDAD: Procesar el pago exitoso
         if estado_transaccion == 'EXITOSO':
@@ -617,7 +595,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 # C) Generar la(s) entrada(s) real(es) para el usuario (TicketInstance)
                 entradas_generadas = []
                 for _ in range(orden.quantity):
-                    # Este es el QR que el usuario mostrará EN LA PUERTA del evento
+                    # Este es el QR que el usuario mostrar├í EN LA PUERTA del evento
                     qr_puerta = f"TICKETGO-{uuid.uuid4()}" 
                     codigo_emergencia = str(uuid.uuid4())[:8].upper() # Ej: 4A8F9B2C
 
@@ -636,7 +614,7 @@ class EventViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_200_OK)
 
         # Si el banco manda 'RECHAZADO' u otro estado
-        return Response({"error": "Transacción no exitosa"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Transacci├│n no exitosa"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 # US24: AdminEventoBajaView/ModificarView/AdminAuditLogView reemplazadas por AdminEventEditView, AdminEventDeactivateView y AdminAuditLogListView (TIC-406/407/421)
@@ -715,9 +693,6 @@ class TicketTypeViewSet(viewsets.ModelViewSet):
             "message": "Error al validar los datos de la entrada.",
             "details": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
-
-
-    
 
     def update(self, request, *args, **kwargs):
         """Editar tipo de entrada validando que no exceda la capacidad total del evento"""
@@ -807,7 +782,7 @@ class PurchaseView(APIView):
     """
     POST /api/v1/purchase/
     Inicia el proceso de compra: crea una Purchase con status='pending' y devuelve
-    un QR de pago (contiene el purchase_id) con 15 minutos de expiración.
+    un QR de pago (contiene el purchase_id) con 15 minutos de expiraci├│n.
     Si el evento supera el umbral, redirige a la fila virtual.
     """
     permission_classes = [IsAuthenticated]
@@ -830,25 +805,25 @@ class PurchaseView(APIView):
         # 1. Calculamos el total de entradas vendidas actualmente
         total_sold = sum(t.current_sold for t in event.ticket_types.all())
 
-        # 2. Evaluamos si el evento tiene la fila activa Y superó el umbral
+        # 2. Evaluamos si el evento tiene la fila activa Y super├│ el umbral
         if event.waitlist_active and (total_sold + quantity) >= event.waitlist_threshold:
             
             with transaction.atomic():
-                # Verificamos si el usuario ya está en la fila
+                # Verificamos si el usuario ya est├í en la fila
                 waitlist_entry = Waitlist.objects.filter(event=event, user_id=user_id).first()
                 
                 if not waitlist_entry:
-                    # Buscamos la última posición asignada para darle la siguiente
+                    # Buscamos la ├║ltima posici├│n asignada para darle la siguiente
                     last_position = Waitlist.objects.filter(event=event).aggregate(Max('position'))['position__max'] or 0
                     
                     waitlist_entry = Waitlist.objects.create(
                         event=event,
                         user_id=user_id,
                         position=last_position + 1,
-                        status='waiting' # Estado "en_cola" según el ticket
+                        status='waiting' # Estado "en_cola" seg├║n el ticket
                     )
                     
-                    mensaje = "El evento ha superado el umbral de capacidad simultánea. Has sido colocado en la fila virtual."
+                    mensaje = "El evento ha superado el umbral de capacidad simult├ínea. Has sido colocado en la fila virtual."
                     status_code = status.HTTP_202_ACCEPTED
                 else:
                     mensaje = "Ya te encuentras en la fila virtual para este evento."
@@ -863,9 +838,9 @@ class PurchaseView(APIView):
                     "queue_status": waitlist_entry.status
                 }
             }, status=status_code)
-        # --- FIN LÓGICA DE FILA VIRTUAL ---
+        # --- FIN L├ôGICA DE FILA VIRTUAL ---
 
-        # Validaciones estándar de compra
+        # Validaciones est├índar de compra
         if event.status == 'cancelled':
             return Response({"error": "No puedes comprar entradas para un evento cancelado"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -892,7 +867,7 @@ class PurchaseView(APIView):
 
         total_price = ticket.price * quantity
         # El timer empieza desde 'Seleccionar Asientos' (accessed_at en service-queue),
-        # no desde la generación del QR. Fallback: ahora si no hay registro.
+        # no desde la generaci├│n del QR. Fallback: ahora si no hay registro.
         start_time = _get_queue_access_time(str(event.id), str(user_id)) or timezone.now()
         expires_at = start_time + timedelta(minutes=event.payment_timeout_minutes)
 
@@ -905,8 +880,8 @@ class PurchaseView(APIView):
             status='pending'
         )
         # Sobrescribir created_at para que SimularPagoView y PurchaseStatusView
-        # (que calculan expires_at = created_at + timeout) usen el tiempo de admisión
-        # a la cola en vez del tiempo de creación de la orden.
+        # (que calculan expires_at = created_at + timeout) usen el tiempo de admisi├│n
+        # a la cola en vez del tiempo de creaci├│n de la orden.
         Purchase.objects.filter(id=purchase.id).update(created_at=start_time)
         purchase.refresh_from_db()
 
@@ -937,8 +912,8 @@ class SimularPagoView(APIView):
     """
     POST /api/v1/purchase/<purchase_id>/simular_pago/
     SOLO PARA DESARROLLO/TESTING.
-    Simula la confirmación de pago bancario, activa la compra y genera el QR/backup_code de la entrada.
-    En producción este endpoint no existiría; se reemplaza por un webhook del banco.
+    Simula la confirmaci├│n de pago bancario, activa la compra y genera el QR/backup_code de la entrada.
+    En producci├│n este endpoint no existir├¡a; se reemplaza por un webhook del banco.
     """
     permission_classes = [IsAuthenticated]
 
@@ -961,7 +936,7 @@ class SimularPagoView(APIView):
             purchase.status = 'cancelled'
             purchase.save()
             _notify_queue_release(str(purchase.event.id), str(purchase.user_id))
-            return Response({"error": "El tiempo de pago expiró. Genera una nueva orden."}, status=410)
+            return Response({"error": "El tiempo de pago expir├│. Genera una nueva orden."}, status=410)
 
         backup_code = secrets.token_hex(5).upper()
         qr_code_base64 = None
@@ -978,7 +953,7 @@ class SimularPagoView(APIView):
         purchase.qr_code = qr_code_base64
         purchase.save()
 
-        # TIC-569 (US-31): Calcular y persistir comisión de plataforma
+        # TIC-569 (US-31): Calcular y persistir comisi├│n de plataforma
         CommissionService.aplicar(purchase)
 
         # Registrar comportamiento de compra
@@ -1057,7 +1032,7 @@ class PurchaseStatusView(APIView):
             purchase.status = 'cancelled'
             purchase.save()
 
-            # Liberar asientos si la compra expiró por tiempo
+            # Liberar asientos si la compra expir├│ por tiempo
             Seat.objects.filter(
                 ticket_type=purchase.ticket_type,
                 reserved_by=purchase.user_id,
@@ -1084,8 +1059,8 @@ class PurchaseStatusView(APIView):
 
 class SeatConfigurationView(APIView):
     """
-    GET  /api/v1/events/<event_id>/seat-config/  — Devuelve zonas + disponibilidad
-    POST /api/v1/events/<event_id>/seat-config/  — Crea/reemplaza zonas del evento
+    GET  /api/v1/events/<event_id>/seat-config/  ÔÇö Devuelve zonas + disponibilidad
+    POST /api/v1/events/<event_id>/seat-config/  ÔÇö Crea/reemplaza zonas del evento
     """
     permission_classes = [IsAuthenticated]
 
@@ -1121,7 +1096,7 @@ class SeatConfigurationView(APIView):
         }, status=200)
 
     def post(self, request, event_id):
-        """Crea o reemplaza la configuración de zonas. Protege zonas con ventas."""
+        """Crea o reemplaza la configuraci├│n de zonas. Protege zonas con ventas."""
         event = get_object_or_404(Event, id=event_id)
 
         zones = request.data.get("zones", [])
@@ -1150,7 +1125,7 @@ class SeatConfigurationView(APIView):
 
         for i, z in enumerate(zones):
             if z.get("price", 0) <= 0:
-                errors.append(f"Zona[{i}] tiene precio inválido")
+                errors.append(f"Zona[{i}] tiene precio inv├ílido")
 
         total_capacity = sum([z.get("max_capacity", 0) for z in zones])
         if total_capacity > event.capacity:
@@ -1190,14 +1165,14 @@ class SeatConfigurationView(APIView):
 
         return Response({
             "status": "success",
-            "message": "Configuración de asientos guardada correctamente"
+            "message": "Configuraci├│n de asientos guardada correctamente"
         }, status=201)
 
 
 class ValidateTicketView(APIView):
     """
     Endpoint para validar entradas en la puerta del evento.
-    Acepta tanto cÃ³digo QR como cÃ³digo alfanumÃ©rico.
+    Acepta tanto c├â┬│digo QR como c├â┬│digo alfanum├â┬®rico.
     """
 
     permission_classes = [IsAuthenticated]
@@ -1208,7 +1183,7 @@ class ValidateTicketView(APIView):
         if not codigo:
             return Response({
                 "status": "error",
-                "message": "El cÃ³digo es requerido"
+                "message": "El c├â┬│digo es requerido"
             }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
@@ -1255,7 +1230,7 @@ class SeatListView(APIView):
     """
     GET /api/v1/seats/?ticket_type_id=<uuid>
     Devuelve todos los asientos de una zona con su estado actual.
-    Si la zona no tiene asientos generados aún, los genera automáticamente.
+    Si la zona no tiene asientos generados a├║n, los genera autom├íticamente.
     """
     permission_classes = [IsAuthenticated]
 
@@ -1270,7 +1245,7 @@ class SeatListView(APIView):
         ticket_type = get_object_or_404(TicketType, id=ticket_type_id)
 
         # Si no hay asientos generados y el TicketType tiene layout configurado,
-        # los generamos automáticamente (una sola vez).
+        # los generamos autom├íticamente (una sola vez).
         if not Seat.objects.filter(ticket_type=ticket_type).exists():
             if ticket_type.seat_rows and ticket_type.seats_per_row:
                 seats_to_create = []
@@ -1312,7 +1287,7 @@ class SeatListView(APIView):
 class SeatReserveView(APIView):
     """
     POST /api/v1/seats/<seat_id>/reserve/
-    Reserva un asiento de forma atómica (select_for_update evita doble reserva).
+    Reserva un asiento de forma at├│mica (select_for_update evita doble reserva).
     La reserva expira si no se confirma el pago (ver TIC-20 para el scheduler).
     """
     permission_classes = [IsAuthenticated]
@@ -1321,16 +1296,16 @@ class SeatReserveView(APIView):
         user_id = request.user.id
 
         with transaction.atomic():
-            # select_for_update: bloquea la fila mientras la transacción está activa
-            # garantizando que dos usuarios simultáneos no reserven el mismo asiento
+            # select_for_update: bloquea la fila mientras la transacci├│n est├í activa
+            # garantizando que dos usuarios simult├íneos no reserven el mismo asiento
             try:
                 seat = Seat.objects.select_for_update(nowait=True).get(id=seat_id)
             except Seat.DoesNotExist:
                 return Response({'error': 'Asiento no encontrado'}, status=404)
             except Exception:
-                # nowait=True lanza error si el registro está bloqueado
+                # nowait=True lanza error si el registro est├í bloqueado
                 return Response(
-                    {'error': 'El asiento está siendo reservado por otro usuario. Intenta de nuevo.'},
+                    {'error': 'El asiento est├í siendo reservado por otro usuario. Intenta de nuevo.'},
                     status=409
                 )
 
@@ -1338,19 +1313,19 @@ class SeatReserveView(APIView):
                 return Response({'error': 'Este asiento ya fue vendido.'}, status=409)
 
             if seat.status == 'reserved':
-                # Verificar si la reserva expiró (más de 15 min)
+                # Verificar si la reserva expir├│ (m├ís de 15 min)
                 if seat.reserved_at:
                     expiracion = seat.reserved_at + timedelta(minutes=15)
                     if timezone.now() < expiracion:
                         return Response(
-                            {'error': 'Este asiento ya está reservado. Intenta con otro.'},
+                            {'error': 'Este asiento ya est├í reservado. Intenta con otro.'},
                             status=409
                         )
                     # Reserva expirada: liberar y tomar
                 seat.status = 'available'
 
             if seat.status != 'available':
-                return Response({'error': 'El asiento no está disponible.'}, status=409)
+                return Response({'error': 'El asiento no est├í disponible.'}, status=409)
 
             seat.status = 'reserved'
             seat.reserved_at = timezone.now()
@@ -1374,7 +1349,7 @@ class SeatBulkReserveView(APIView):
     """
     POST /api/v1/seats/bulk-reserve/
     body: {"seat_ids": [uuid1, uuid2]}
-    Reserva múltiples asientos de forma atómica. Si uno falla, toda la transacción se revierte.
+    Reserva m├║ltiples asientos de forma at├│mica. Si uno falla, toda la transacci├│n se revierte.
     """
     permission_classes = [IsAuthenticated]
 
@@ -1386,14 +1361,14 @@ class SeatBulkReserveView(APIView):
             return Response({'error': 'se requiere una lista de seat_ids'}, status=400)
 
         with transaction.atomic():
-            # select_for_update bloquea todos los asientos de la lista de forma atómica
+            # select_for_update bloquea todos los asientos de la lista de forma at├│mica
             try:
-                # order_by('id') previene deadlocks al bloquear múltiples filas
+                # order_by('id') previene deadlocks al bloquear m├║ltiples filas
                 seats = Seat.objects.select_for_update(nowait=True).filter(id__in=seat_ids).order_by('id')
                 if len(seats) != len(seat_ids):
                     return Response({'error': 'Algunos asientos no fueron encontrados'}, status=404)
             except Exception:
-                return Response({'error': 'Algunos asientos están siendo reservados por otro usuario. Intenta de nuevo.'}, status=409)
+                return Response({'error': 'Algunos asientos est├ín siendo reservados por otro usuario. Intenta de nuevo.'}, status=409)
 
             for seat in seats:
                 if seat.status == 'sold':
@@ -1402,10 +1377,10 @@ class SeatBulkReserveView(APIView):
                     if seat.reserved_at:
                         expiracion = seat.reserved_at + timedelta(minutes=15)
                         if timezone.now() < expiracion:
-                            return Response({'error': f'El asiento {seat.seat_code} ya está reservado.'}, status=409)
-                    # Expiró, podemos tomarlo
+                            return Response({'error': f'El asiento {seat.seat_code} ya est├í reservado.'}, status=409)
+                    # Expir├│, podemos tomarlo
                 elif seat.status != 'available':
-                    return Response({'error': f'El asiento {seat.seat_code} no está disponible.'}, status=409)
+                    return Response({'error': f'El asiento {seat.seat_code} no est├í disponible.'}, status=409)
 
             now = timezone.now()
             for seat in seats:
@@ -1426,7 +1401,7 @@ class WaitlistView(APIView):
         user_id = request.user.id
 
         if Waitlist.objects.filter(event=event, user_id=user_id).exists():
-            return Response({"error": "Ya estás en la lista de espera"}, status=400)
+            return Response({"error": "Ya est├ís en la lista de espera"}, status=400)
 
         max_pos = Waitlist.objects.filter(event=event).aggregate(Max('position'))['position__max'] or 0
         entry = Waitlist.objects.create(
@@ -1437,12 +1412,12 @@ class WaitlistView(APIView):
         return Response({
             "status": "waitlist",
             "position": entry.position,
-            "message": f"Estás en la posición {entry.position} de la lista de espera."
+            "message": f"Est├ís en la posici├│n {entry.position} de la lista de espera."
         }, status=status.HTTP_201_CREATED)
 
 
 class LogoutView(APIView):
-    """Endpoint para cerrar sesión (blacklist token)."""
+    """Endpoint para cerrar sesi├│n (blacklist token)."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -1452,21 +1427,21 @@ class LogoutView(APIView):
                 token=token,
                 defaults={'expires_at': timezone.now() + timedelta(days=1)}
             )
-        return Response({"message": "Sesión cerrada correctamente"}, status=200)
+        return Response({"message": "Sesi├│n cerrada correctamente"}, status=200)
 
 
 class PurchaseHistoryView(APIView):
     """
     Endpoint para consultar historial de compras del usuario.
     
-    Parámetros de consulta soportados:
-      - page (int): Número de página (default: 1)
-      - page_size (int): Cantidad por página (default: 10, max: 100)
+    Par├ímetros de consulta soportados:
+      - page (int): N├║mero de p├ígina (default: 1)
+      - page_size (int): Cantidad por p├ígina (default: 10, max: 100)
       - status (str): Filtrar por estado (active, used, pending, cancelled)
-      - sortBy (str): Campo de ordenación (created_at, total_price, event_date, status)
-      - sortType (str): Dirección de orden (ASC o DESC, default: DESC)
-      - minPrice (decimal): Precio mínimo del total
-      - maxPrice (decimal): Precio máximo del total
+      - sortBy (str): Campo de ordenaci├│n (created_at, total_price, event_date, status)
+      - sortType (str): Direcci├│n de orden (ASC o DESC, default: DESC)
+      - minPrice (decimal): Precio m├¡nimo del total
+      - maxPrice (decimal): Precio m├íximo del total
     
     Ejemplo:
       GET /api/v1/purchases/history/?page=1&page_size=10&status=active&sortBy=total_price&sortType=ASC&minPrice=100
@@ -1485,17 +1460,17 @@ class PurchaseHistoryView(APIView):
         user_id = request.user.id
         qs = Purchase.objects.filter(user_id=user_id).select_related('event', 'ticket_type')
 
-        # ── Filtro por status ──
+        # ÔöÇÔöÇ Filtro por status ÔöÇÔöÇ
         status_filter = request.query_params.get('status')
         if status_filter and status_filter in ('active', 'used', 'pending', 'cancelled'):
             qs = qs.filter(status=status_filter)
 
-        # ── Filtro por evento ──
+        # ÔöÇÔöÇ Filtro por evento ÔöÇÔöÇ
         event_filter = request.query_params.get('event_id')
         if event_filter:
             qs = qs.filter(event_id=event_filter)
 
-        # ── Filtro por rango de precio ──
+        # ÔöÇÔöÇ Filtro por rango de precio ÔöÇÔöÇ
         min_price = request.query_params.get('minPrice')
         max_price = request.query_params.get('maxPrice')
         if min_price:
@@ -1509,7 +1484,7 @@ class PurchaseHistoryView(APIView):
             except ValueError:
                 pass
 
-        # ── Ordenación ──
+        # ÔöÇÔöÇ Ordenaci├│n ÔöÇÔöÇ
         sort_by = request.query_params.get('sortBy', 'created_at')
         sort_type = request.query_params.get('sortType', 'DESC').upper()
         db_field = self.ALLOWED_SORT_FIELDS.get(sort_by, 'created_at')
@@ -1518,7 +1493,7 @@ class PurchaseHistoryView(APIView):
         else:
             qs = qs.order_by(f'-{db_field}')
 
-        # ── Paginación ──
+        # ÔöÇÔöÇ Paginaci├│n ÔöÇÔöÇ
         page = int(request.query_params.get('page', 1))
         page_size = int(request.query_params.get('page_size', 10))
         page = max(1, page)
@@ -1589,7 +1564,7 @@ class PurchaseDetailView(APIView):
             "is_vip": purchase.ticket_type.is_vip,
             "quantity": purchase.quantity,
             "total_price": str(purchase.total_price),
-            # TIC-526/US-31: Campos de comisión
+            # TIC-526/US-31: Campos de comisi├│n
             "commission_percentage": str(purchase.commission_percentage) if purchase.commission_percentage else None,
             "commission_amount": str(purchase.commission_amount) if purchase.commission_amount else None,
             "net_amount": str(purchase.net_amount) if purchase.net_amount else None,
@@ -1635,8 +1610,8 @@ class PurchaseCancelView(APIView):
     Solo se puede cancelar si el estado es 'pending' y pertenece al usuario autenticado.
 
     Body (opcional):
-      { "keep_queue": true }  →  cancela la compra y libera asientos pero NO libera
-                                  el cupo en service-queue (útil para "volver atrás"
+      { "keep_queue": true }  ÔåÆ  cancela la compra y libera asientos pero NO libera
+                                  el cupo en service-queue (├║til para "volver atr├ís"
                                   y re-seleccionar asientos sin perder el turno).
     """
     permission_classes = [IsAuthenticated]
@@ -1702,7 +1677,7 @@ class SeatReleaseExpiredView(APIView):
             return Response({"error": f"Asiento {seat_id} no encontrado."}, status=404)
 
         if seat.status == 'available':
-            # Ya está disponible, idempotente
+            # Ya est├í disponible, idempotente
             return Response({"status": "ok", "message": "El asiento ya estaba disponible."}, status=200)
 
         # Registrar en audit log antes de liberar (TIC-339)
@@ -1733,8 +1708,8 @@ class SeatReleaseExpiredView(APIView):
 class QueueConfigView(APIView):
     """
     TIC-350, TIC-351, TIC-352: Panel de configuracion de cola para el Promotor.
-    GET  /api/v1/queue-config/<event_id>/  — obtener configuracion actual
-    POST /api/v1/queue-config/<event_id>/  — actualizar configuracion
+    GET  /api/v1/queue-config/<event_id>/  ÔÇö obtener configuracion actual
+    POST /api/v1/queue-config/<event_id>/  ÔÇö actualizar configuracion
 
     Solo el promotor dueno del evento puede configurar la cola.
     """
@@ -1770,14 +1745,14 @@ class QueueConfigView(APIView):
             serializer.save()
             event.refresh_from_db()  # asegurar valores actualizados
 
-            # Sincronizar con service-queue: convertir threshold (%) → max_concurrent_users (absoluto)
+            # Sincronizar con service-queue: convertir threshold (%) ÔåÆ max_concurrent_users (absoluto)
             threshold = event.waitlist_threshold
             capacity = event.capacity or 1
             max_concurrent = max(1, math.ceil(capacity * threshold / 100))
             payment_timeout = event.payment_timeout_minutes
 
             try:
-                # Endpoint interno: no autentica ni llama de vuelta → evita deadlock circular
+                # Endpoint interno: no autentica ni llama de vuelta ÔåÆ evita deadlock circular
                 queue_url = f"{django_settings.QUEUE_SERVICE_URL}/api/v1/internal/sync-queue-config/{event_id}/"
                 http_requests.post(
                     queue_url,
@@ -1789,7 +1764,7 @@ class QueueConfigView(APIView):
                     timeout=4,
                 )
             except Exception:
-                pass  # Falla silenciosa; la cola usará el valor previo
+                pass  # Falla silenciosa; la cola usar├í el valor previo
 
             return Response({
                 "status": "success",
@@ -1804,25 +1779,25 @@ class QueueConfigView(APIView):
         }, status=status.HTTP_400_BAD_REQUEST)
 class SuperAdminManageView(APIView):
     """
-    TIC-105 & TIC-106: Gestión integral de Administradores por SuperAdmin.
-    Permite modificar permisos y suspender cuentas con protección de jerarquía.
+    TIC-105 & TIC-106: Gesti├│n integral de Administradores por SuperAdmin.
+    Permite modificar permisos y suspender cuentas con protecci├│n de jerarqu├¡a.
     """
     permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
 
     def patch(self, request, user_id):
-        # 1. SEGURIDAD: Solo el SuperUser (Nivel Dios) puede entrar aquí
+        # 1. SEGURIDAD: Solo el SuperUser (Nivel Dios) puede entrar aqu├¡
         if not request.user.is_superuser:
             return Response(
                 {"error": "Acceso denegado. Se requieren privilegios de SuperAdmin."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # 2. VALIDACIÓN DE JERARQUÍA: Evitar que toquen a otro SuperAdmin
-        # (Aquí simulamos la comprobación, en real consultarías tu BD/Service-Profiles)
+        # 2. VALIDACI├ôN DE JERARQU├ìA: Evitar que toquen a otro SuperAdmin
+        # (Aqu├¡ simulamos la comprobaci├│n, en real consultar├¡as tu BD/Service-Profiles)
         target_is_superuser = False # <--- Consultar si el user_id es superusuario
         if target_is_superuser:
             return Response(
-                {"error": "Acción denegada: Un SuperAdmin no puede ser gestionado por este endpoint."},
+                {"error": "Acci├│n denegada: Un SuperAdmin no puede ser gestionado por este endpoint."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -1830,26 +1805,26 @@ class SuperAdminManageView(APIView):
         # Usamos el serializer para validar si vienen cambios de permisos
         serializer = AdminPermissionsSerializer(data=request.data, partial=True)
         
-        # Detectamos si la intención es SUSPENDER (TIC-106)
+        # Detectamos si la intenci├│n es SUSPENDER (TIC-106)
         is_suspend_action = request.data.get('suspend', False)
 
         try:
             acciones_realizadas = []
 
-            # --- Lógica de Suspensión ---
+            # --- L├│gica de Suspensi├│n ---
             if is_suspend_action:
-                # Aquí llamarías a la lógica de desactivar cuenta (is_active = False)
-                acciones_realizadas.append("Suspensión de cuenta")
+                # Aqu├¡ llamar├¡as a la l├│gica de desactivar cuenta (is_active = False)
+                acciones_realizadas.append("Suspensi├│n de cuenta")
                 log_admin_action(request, user_id, 'suspend', "Cuenta suspendida por SuperAdmin")
 
-            # --- Lógica de Permisos ---
+            # --- L├│gica de Permisos ---
             if serializer.is_valid() and serializer.validated_data:
-                # Aquí actualizarías los permisos en la base de datos
+                # Aqu├¡ actualizar├¡as los permisos en la base de datos
                 acciones_realizadas.append(f"Cambio de permisos: {list(serializer.validated_data.keys())}")
                 log_admin_action(request, user_id, 'update', f"Permisos modificados: {serializer.validated_data}")
 
             if not acciones_realizadas:
-                return Response({"message": "No se enviaron cambios válidos."}, status=400)
+                return Response({"message": "No se enviaron cambios v├ílidos."}, status=400)
 
             return Response({
                 "status": "success",
@@ -1861,7 +1836,7 @@ class SuperAdminManageView(APIView):
             return Response({"error": str(e)}, status=500)
     
 
-# ─── TIC-21/22: Favoritos, Notificaciones, Recomendaciones ───────────────────
+# ÔöÇÔöÇÔöÇ TIC-21/22: Favoritos, Notificaciones, Recomendaciones ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 class UserFavoritesView(APIView):
     """
@@ -1915,7 +1890,7 @@ class UserFavoriteToggleView(APIView):
         ).first()
 
         if favorito_existente:
-            # Ya era favorito → desmarcar
+            # Ya era favorito ÔåÆ desmarcar
             favorito_existente.delete()
             return Response({
                 "status": "removed",
@@ -1924,13 +1899,13 @@ class UserFavoriteToggleView(APIView):
             }, status=status.HTTP_200_OK)
 
         else:
-            # No era favorito → marcar
+            # No era favorito ÔåÆ marcar
             UserFavorite.objects.create(
                 user_id=user_id,
                 event=event
             )
 
-            # Registrar también como comportamiento de interés
+            # Registrar tambi├®n como comportamiento de inter├®s
             registrar_comportamiento(
                 user_id=user_id,
                 event=event,
@@ -1947,11 +1922,11 @@ class UserFavoriteToggleView(APIView):
 class UserNotificationsView(APIView):
     """
     GET /api/v1/users/{user_id}/notifications/
-    Lista todas las notificaciones del usuario (leídas y no leídas).
+    Lista todas las notificaciones del usuario (le├¡das y no le├¡das).
 
     Query params opcionales:
-      ?leida=false  → solo no leídas
-      ?leida=true   → solo leídas
+      ?leida=false  ÔåÆ solo no le├¡das
+      ?leida=true   ÔåÆ solo le├¡das
     """
     permission_classes = [IsAuthenticated]
 
@@ -1989,7 +1964,7 @@ class UserNotificationsView(APIView):
 class UserNotificationReadView(APIView):
     """
     PATCH /api/v1/users/{user_id}/notifications/{notif_id}/read/
-    Marca una notificación específica como leída.
+    Marca una notificaci├│n espec├¡fica como le├¡da.
     """
     permission_classes = [IsAuthenticated]
 
@@ -2010,7 +1985,7 @@ class UserNotificationReadView(APIView):
         if notificacion.leida:
             return Response({
                 "status": "info",
-                "message": "La notificación ya estaba marcada como leída.",
+                "message": "La notificaci├│n ya estaba marcada como le├¡da.",
             }, status=status.HTTP_200_OK)
 
         notificacion.leida = True
@@ -2022,15 +1997,15 @@ class UserNotificationReadView(APIView):
 
         return Response({
             "status": "success",
-            "message": "Notificación marcada como leída.",
+            "message": "Notificaci├│n marcada como le├¡da.",
             "data": serializer.data,
         }, status=status.HTTP_200_OK)
 
 class UserNotificationReadAllView(APIView):
     """
     PATCH /api/v1/users/{user_id}/notifications/read-all/
-    Marca TODAS las notificaciones no leídas del usuario como leídas.
-    Endpoint de utilidad para el botón 'Marcar todas como leídas'.
+    Marca TODAS las notificaciones no le├¡das del usuario como le├¡das.
+    Endpoint de utilidad para el bot├│n 'Marcar todas como le├¡das'.
     """
     permission_classes = [IsAuthenticated]
 
@@ -2050,13 +2025,13 @@ class UserNotificationReadAllView(APIView):
 
         return Response({
             "status": "success",
-            "message": f"{actualizadas} notificaciones marcadas como leídas.",
+            "message": f"{actualizadas} notificaciones marcadas como le├¡das.",
             "actualizadas": actualizadas,
         }, status=status.HTTP_200_OK)
 
 class UserRecommendationsAPIView(APIView):
     """
-    Endpoint para obtener eventos recomendados según comportamiento pasado.
+    Endpoint para obtener eventos recomendados seg├║n comportamiento pasado.
     """
     def get(self, request):
         user_id = request.query_params.get('user_id')
@@ -2074,7 +2049,7 @@ class UserRecommendationsAPIView(APIView):
 
 
 class StandardResultsSetPagination(pagination.PageNumberPagination):
-    page_size = 10  # Número de eventos por página
+    page_size = 10  # N├║mero de eventos por p├ígina
     page_size_query_param = 'page_size'
     max_page_size = 50
 
@@ -2091,14 +2066,12 @@ class UserRecommendationsListView(generics.ListAPIView):
         # Capturamos el id del usuario desde la URL
         user_id = self.kwargs.get('user_id')
         return RecommendationEngine.get_recommendation_queryset(user_id)
-    
-    
 
 
 class NotificationPreferenceView(APIView):
     """
     TIC-377: PUT /api/v1/users/{user_id}/notification-preferences/
-    Permite al usuario configurar qué categorías le generan notificaciones.
+    Permite al usuario configurar qu├® categor├¡as le generan notificaciones.
 
     Body esperado: { "preferences": [{"category_id": "<uuid>", "enabled": true/false}, ...] }
     """
@@ -2193,13 +2166,13 @@ class AdminUserCleanupView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# ─── TIC-25: Modificar/Dar de baja eventos (Admin) ───────────────────────────
+# ÔöÇÔöÇÔöÇ TIC-25: Modificar/Dar de baja eventos (Admin) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 class AdminEventEditView(APIView):
     """
     TIC-406: PATCH /admin/events/{id}/
     Permite a un administrador modificar cualquier campo de un evento
-    (nombre, fecha, capacidad, descripción, etc.) y registra la intervención.
+    (nombre, fecha, capacidad, descripci├│n, etc.) y registra la intervenci├│n.
 
     Acceso: Admin con capability 'manage_events' o SuperAdmin (bypass).
     """
@@ -2233,7 +2206,7 @@ class AdminEventEditView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Campos permitidos para edición por admin
+        # Campos permitidos para edici├│n por admin
         ALLOWED_FIELDS = [
             'name', 'description', 'event_date', 'event_time',
             'location', 'capacity', 'status', 'category',
@@ -2258,7 +2231,7 @@ class AdminEventEditView(APIView):
                         resolved = Category.objects.get(pk=new_value)
                     except (Category.DoesNotExist, ValueError, Exception):
                         return Response(
-                            {"status": "error", "message": f"Categoría no encontrada: {new_value}"},
+                            {"status": "error", "message": f"Categor├¡a no encontrada: {new_value}"},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
                 if str(old_value) != str(new_value):
@@ -2275,7 +2248,7 @@ class AdminEventEditView(APIView):
                     new_value = int(new_value)
                 except (TypeError, ValueError):
                     return Response(
-                        {"status": "error", "message": "La capacidad debe ser un número entero."},
+                        {"status": "error", "message": "La capacidad debe ser un n├║mero entero."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -2293,7 +2266,7 @@ class AdminEventEditView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        reason = request.data.get('admin_reason', 'Modificación administrativa')
+        reason = request.data.get('admin_reason', 'Modificaci├│n administrativa')
         event.admin_status = 'modified'
         event.admin_reason = reason
         event.save()
@@ -2364,7 +2337,7 @@ class AdminEventDeactivateView(APIView):
 
         if event.admin_status == 'deactivated':
             return Response(
-                {"status": "error", "message": "El evento ya está dado de baja."},
+                {"status": "error", "message": "El evento ya est├í dado de baja."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -2411,13 +2384,13 @@ class AdminEventDeactivateView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# ─── TIC-26: Auditoría de eventos ─────────────────────────────────────────────
+# ÔöÇÔöÇÔöÇ TIC-26: Auditor├¡a de eventos ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 class AdminAuditLogListView(APIView):
     """
     TIC-421: GET /admin/audit-log/
     Retorna el historial completo de intervenciones administrativas sobre eventos.
-    Soporta filtros (event_id, admin_id, action, date_from, date_to) y paginación.
+    Soporta filtros (event_id, admin_id, action, date_from, date_to) y paginaci├│n.
 
     Acceso: Admin con capability 'view_reports' o SuperAdmin (bypass).
     """
@@ -2438,7 +2411,7 @@ class AdminAuditLogListView(APIView):
         )
         if not es_admin:
             return Response(
-                {"status": "error", "message": "Permisos insuficientes para ver el log de auditoría."},
+                {"status": "error", "message": "Permisos insuficientes para ver el log de auditor├¡a."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -2462,7 +2435,7 @@ class AdminAuditLogListView(APIView):
         if date_to:
             qs = qs.filter(created_at__date__lte=date_to)
 
-        # Paginación simple
+        # Paginaci├│n simple
         try:
             page = int(request.query_params.get('page', 1))
             page_size = int(request.query_params.get('page_size', 20))
@@ -2502,7 +2475,7 @@ class AdminAuditLogListView(APIView):
 class EventAuditLogListView(generics.ListAPIView):
     """
     TIC-420: GET /admin/events/{event_id}/audit-log/
-    Historial completo de cambios de un evento específico, paginado y ordenado
+    Historial completo de cambios de un evento espec├¡fico, paginado y ordenado
     por fecha descendente.
 
     Acceso: Admin con capability 'view_reports' o SuperAdmin (bypass).
@@ -2524,7 +2497,7 @@ class EventAuditLogListView(generics.ListAPIView):
 class ExportAuditLogCSVView(APIView):
     """
     TIC-423: GET /admin/audit-log/export/
-    Genera y retorna un CSV con el historial completo de auditoría para uso externo.
+    Genera y retorna un CSV con el historial completo de auditor├¡a para uso externo.
 
     Acceso: Admin con capability 'view_reports' o SuperAdmin (bypass).
     """
@@ -2542,7 +2515,7 @@ class ExportAuditLogCSVView(APIView):
         writer = csv.writer(response)
         writer.writerow([
             'ID Log', 'Fecha', 'Evento', 'Admin Email',
-            'Acción', 'Razón', 'Estado Anterior', 'Estado Nuevo',
+            'Acci├│n', 'Raz├│n', 'Estado Anterior', 'Estado Nuevo',
         ])
 
         for log in queryset:
@@ -2560,7 +2533,7 @@ class ExportAuditLogCSVView(APIView):
         return response
 
 
-# ─── US23: Gestion administrativa de usuarios (Anghelo) ──────────────────────
+# ÔöÇÔöÇÔöÇ US23: Gestion administrativa de usuarios (Anghelo) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 class AdminUserDeleteView(APIView):
     """
@@ -2616,7 +2589,7 @@ class AdminUserDeleteView(APIView):
             )
 
 
-# ─── US24: Gestion administrativa de eventos (Ariana) ────────────────────────
+# ÔöÇÔöÇÔöÇ US24: Gestion administrativa de eventos (Ariana) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 class AdminEventoBajaView(APIView):
     """
@@ -2871,7 +2844,7 @@ class AdminAuditLogView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# ─── US26: Vista detalle por evento (Ariana) ─────────────────────────────────
+# ÔöÇÔöÇÔöÇ US26: Vista detalle por evento (Ariana) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 class EventAuditLogView(APIView):
     """
@@ -2914,16 +2887,16 @@ class EventAuditLogView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# ─── TIC-526 (US-31): Configuración de comisiones de la plataforma ────────────
+# ÔöÇÔöÇÔöÇ TIC-526 (US-31): Configuraci├│n de comisiones de la plataforma ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 class PlatformCommissionCurrentView(APIView):
     """
     GET /api/v1/admin/platform/commission/current/
 
-    Devuelve la configuración de comisión activa vigente.
+    Devuelve la configuraci├│n de comisi├│n activa vigente.
     Acceso: Solo SuperAdmin.
 
-    Respuesta cuando hay comisión activa:
+    Respuesta cuando hay comisi├│n activa:
         { "commission": { ...campos PlatformCommission... }, "configured": true }
     Respuesta cuando no hay ninguna configurada:
         { "commission": null, "configured": false }
@@ -2949,7 +2922,7 @@ class PlatformCommissionCreateView(APIView):
     """
     POST /api/v1/admin/platform/commission/
 
-    Crea una nueva configuración de comisión y desactiva la anterior.
+    Crea una nueva configuraci├│n de comisi├│n y desactiva la anterior.
     Acceso: Solo SuperAdmin (IsSuperadmin).
 
     Body esperado (JSON):
@@ -2979,7 +2952,7 @@ class PlatformCommissionCreateView(APIView):
         # Desactivar todas las comisiones activas anteriores
         PlatformCommission.objects.filter(is_active=True).update(is_active=False)
 
-        # Crear la nueva configuración
+        # Crear la nueva configuraci├│n
         nueva = serializer.save(
             created_by=request.user.id,
             is_active=True,
@@ -2990,7 +2963,7 @@ class PlatformCommissionCreateView(APIView):
             {"status": "created", "commission": read_serializer.data},
             status=status.HTTP_201_CREATED,
         )
-# ─── US27 (US-26): Dashboard Financiero del Promotor ─────────────────────────
+
 
 class PromotorDashboardSummaryView(APIView):
     """
@@ -3002,9 +2975,321 @@ class PromotorDashboardSummaryView(APIView):
       - total_tickets_vendidos
       - tasa_ocupacion_pct  (capacidad promedio utilizada)
       - ingresos_brutos     (sum total_price de compras active/used)
-      - comisiones_totales  (sum commission_amount — disponible tras merge US567)
-      - ingresos_netos      (sum net_amount — disponible tras merge US567)
-# ─── US36 (US-33): Exportar Reportes a CSV / PDF ─────────────────────────────
+      - comisiones_totales  (sum commission_amount ÔÇö disponible tras merge US567)
+      - ingresos_netos      (sum net_amount ÔÇö disponible tras merge US567)
+
+    Permisos: IsAuthenticated + IsPromotor.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    # Compras que representan ingresos reales (pagadas y/o validadas)
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request):
+        from decimal import Decimal as D
+        from django.db.models import Sum, Q
+        from django.db.models.functions import Coalesce
+
+        promoter_id = request.user.id
+
+        # ÔöÇÔöÇ 1. Eventos del promotor ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        eventos_qs = Event.objects.filter(promoter_id=promoter_id)
+        total_eventos = eventos_qs.count()
+
+        # ÔöÇÔöÇ 2. Compras pagadas en esos eventos ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        compras_qs = Purchase.objects.filter(
+            event__promoter_id=promoter_id,
+            status__in=self.PAID_STATUSES,
+        )
+
+        total_tickets = compras_qs.aggregate(
+            total=Coalesce(Sum('quantity'), 0),
+        )['total']
+
+        # Agregaciones financieras (con fallback si columnas de comisi├│n a├║n
+        # no existen en este branch ÔÇö se completan tras merge con US567).
+        try:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                comisiones_totales=Coalesce(Sum('commission_amount'), D('0')),
+                ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+            )
+        except Exception:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+            )
+            aggs['comisiones_totales'] = D('0')
+            aggs['ingresos_netos'] = aggs['ingresos_brutos']
+
+        # ÔöÇÔöÇ 3. Tasa de ocupaci├│n global ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        total_capacidad = eventos_qs.aggregate(
+            cap=Coalesce(Sum('capacity'), 0),
+        )['cap']
+        tasa_ocupacion = (
+            round(total_tickets / total_capacidad * 100, 1)
+            if total_capacidad else 0.0
+        )
+
+        return Response({
+            'status': 'success',
+            'promoter_id': str(promoter_id),
+            'total_eventos': total_eventos,
+            'total_tickets_vendidos': total_tickets,
+            'tasa_ocupacion_pct': tasa_ocupacion,
+            'ingresos_brutos': aggs['ingresos_brutos'],
+            'comisiones_totales': aggs['comisiones_totales'],
+            'ingresos_netos': aggs['ingresos_netos'],
+        }, status=status.HTTP_200_OK)
+
+
+class PromotorDashboardComparativaView(APIView):
+    """
+    US27 (US-26): Comparativa financiera por evento del Promotor autenticado.
+    GET /api/v1/promotor/dashboard/comparativa/?limit=5&estado=<published|completed|all>
+
+    Par├ímetros opcionales:
+      - limit  (int, default=5, m├íx=20): cu├íntos eventos devolver
+      - estado (str, default='all'): filtrar por estado del evento
+
+    Por cada evento retorna:
+      evento_id, evento_nombre, fecha, estado, capacidad,
+      tickets_vendidos, ocupacion_pct,
+      ingresos_brutos, comisiones, ingresos_netos.
+
+    Permisos: IsAuthenticated + IsPromotor.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request):
+        from decimal import Decimal as D
+        from django.db.models import Sum
+        from django.db.models.functions import Coalesce
+
+        promoter_id = request.user.id
+
+        # ÔöÇÔöÇ Par├ímetros de query ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        try:
+            limit = min(int(request.query_params.get('limit', 5)), 20)
+        except (ValueError, TypeError):
+            limit = 5
+
+        estado_filtro = request.query_params.get('estado', 'all')
+
+        # ÔöÇÔöÇ Eventos del promotor ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        eventos_qs = Event.objects.filter(
+            promoter_id=promoter_id,
+        ).order_by('-event_date')
+
+        if estado_filtro != 'all':
+            eventos_qs = eventos_qs.filter(status=estado_filtro)
+
+        eventos = list(eventos_qs[:limit])
+
+        # ÔöÇÔöÇ Construir comparativa por evento ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        comparativa = []
+        for evento in eventos:
+            compras_qs = Purchase.objects.filter(
+                event=evento,
+                status__in=self.PAID_STATUSES,
+            )
+
+            tickets_vendidos = compras_qs.aggregate(
+                total=Coalesce(Sum('quantity'), 0),
+            )['total']
+
+            try:
+                fin = compras_qs.aggregate(
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                    comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                    ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+                )
+            except Exception:
+                fin = compras_qs.aggregate(
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                )
+                fin['comisiones'] = D('0')
+                fin['ingresos_netos'] = fin['ingresos_brutos']
+
+            ocupacion_pct = (
+                round(tickets_vendidos / evento.capacity * 100, 1)
+                if evento.capacity else 0.0
+            )
+
+            comparativa.append({
+                'evento_id': str(evento.id),
+                'evento_nombre': evento.name,
+                'fecha': str(evento.event_date),
+                'estado': evento.status,
+                'capacidad': evento.capacity,
+                'tickets_vendidos': tickets_vendidos,
+                'ocupacion_pct': ocupacion_pct,
+                'ingresos_brutos': fin['ingresos_brutos'],
+                'comisiones': fin['comisiones'],
+                'ingresos_netos': fin['ingresos_netos'],
+            })
+
+        return Response({
+            'status': 'success',
+            'promoter_id': str(promoter_id),
+            'limit': limit,
+            'total_eventos': len(comparativa),
+            'comparativa': comparativa,
+        }, status=status.HTTP_200_OK)
+
+
+class EventFinancialReportView(APIView):
+    """
+    US30 (US-27): Reporte financiero detallado de un evento espec├¡fico.
+    GET /api/v1/promotor/events/<event_id>/financial/
+
+    Solo el promotor due├▒o del evento puede acceder.
+
+    Respuesta:
+      - info del evento (nombre, fecha, location, estado, capacidad)
+      - resumen_financiero: ingresos_brutos, comisiones, ingresos_netos,
+            total_tickets_vendidos, ocupacion_pct, total_compradores
+      - desglose_por_tipo: por cada TicketType:
+            nombre, zone_type, precio_unitario, max_capacity,
+            tickets_vendidos, ocupacion_pct,
+            ingresos_brutos, comisiones, ingresos_netos
+      - top_compradores: los 5 user_id que m├ís gastaron en el evento
+
+    Permisos: IsAuthenticated + IsPromotor (+ verificaci├│n de ownership).
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request, event_id):
+        from decimal import Decimal as D
+        from django.db.models import Sum, Count, Q
+        from django.db.models.functions import Coalesce
+
+        # ÔöÇÔöÇ Verificar evento y ownership ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        evento = get_object_or_404(Event, id=event_id)
+        if str(evento.promoter_id) != str(request.user.id):
+            return Response(
+                {'error': 'No tienes permisos. Solo el promotor due├▒o del evento puede acceder.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # ÔöÇÔöÇ Compras pagadas del evento ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        compras_qs = Purchase.objects.filter(
+            event=evento,
+            status__in=self.PAID_STATUSES,
+        )
+
+        total_tickets = compras_qs.aggregate(
+            total=Coalesce(Sum('quantity'), 0),
+        )['total']
+
+        total_compradores = compras_qs.values('user_id').distinct().count()
+
+        # Financiero global con fallback si US567 a├║n no est├í mergeado
+        try:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+            )
+        except Exception:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+            )
+            aggs['comisiones'] = D('0')
+            aggs['ingresos_netos'] = aggs['ingresos_brutos']
+
+        ocupacion_pct = (
+            round(total_tickets / evento.capacity * 100, 1)
+            if evento.capacity else 0.0
+        )
+
+        # ÔöÇÔöÇ Desglose por tipo de ticket ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        ticket_types = TicketType.objects.filter(event=evento)
+        desglose = []
+        for tt in ticket_types:
+            qs_tt = compras_qs.filter(ticket_type=tt)
+            tt_tickets = qs_tt.aggregate(
+                total=Coalesce(Sum('quantity'), 0),
+            )['total']
+
+            try:
+                tt_fin = qs_tt.aggregate(
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                    comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                    ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+                )
+            except Exception:
+                tt_fin = qs_tt.aggregate(
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                )
+                tt_fin['comisiones'] = D('0')
+                tt_fin['ingresos_netos'] = tt_fin['ingresos_brutos']
+
+            tt_ocupacion = (
+                round(tt_tickets / tt.max_capacity * 100, 1)
+                if tt.max_capacity else 0.0
+            )
+
+            desglose.append({
+                'ticket_type_id': str(tt.id),
+                'nombre': tt.name,
+                'zone_type': tt.zone_type,
+                'is_vip': tt.is_vip,
+                'precio_unitario': tt.price,
+                'max_capacity': tt.max_capacity,
+                'tickets_vendidos': tt_tickets,
+                'ocupacion_pct': tt_ocupacion,
+                'ingresos_brutos': tt_fin['ingresos_brutos'],
+                'comisiones': tt_fin['comisiones'],
+                'ingresos_netos': tt_fin['ingresos_netos'],
+            })
+
+        # ÔöÇÔöÇ Top 5 compradores por gasto ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        top_compradores = (
+            compras_qs
+            .values('user_id')
+            .annotate(
+                gasto_total=Coalesce(Sum('total_price'), D('0')),
+                tickets_comprados=Coalesce(Sum('quantity'), 0),
+            )
+            .order_by('-gasto_total')[:5]
+        )
+        top_list = [
+            {
+                'user_id': str(c['user_id']),
+                'gasto_total': c['gasto_total'],
+                'tickets_comprados': c['tickets_comprados'],
+            }
+            for c in top_compradores
+        ]
+
+        return Response({
+            'status': 'success',
+            'evento': {
+                'id': str(evento.id),
+                'nombre': evento.name,
+                'fecha': str(evento.event_date),
+                'hora': str(evento.event_time) if evento.event_time else None,
+                'location': evento.location,
+                'estado': evento.status,
+                'admin_status': evento.admin_status,
+                'capacidad': evento.capacity,
+            },
+            'resumen_financiero': {
+                'total_tickets_vendidos': total_tickets,
+                'total_compradores': total_compradores,
+                'ocupacion_pct': ocupacion_pct,
+                'ingresos_brutos': aggs['ingresos_brutos'],
+                'comisiones': aggs['comisiones'],
+                'ingresos_netos': aggs['ingresos_netos'],
+            },
+            'desglose_por_tipo': desglose,
+            'top_compradores': top_list,
+        }, status=status.HTTP_200_OK)
+
 
 def _build_buyers_rows(compras_qs):
     """Helper: retorna (header, filas) para el reporte de compradores."""
@@ -3036,7 +3321,7 @@ def _csv_response(filename, header, rows):
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
-    response.write('﻿')          # BOM UTF-8 para compatibilidad con Excel
+    response.write('´╗┐')          # BOM UTF-8 para compatibilidad con Excel
     writer = csv.writer(response)
     writer.writerow(header)
     writer.writerows(rows)
@@ -3046,7 +3331,7 @@ def _csv_response(filename, header, rows):
 def _pdf_response(filename, title, subtitle, header, rows):
     """
     Genera un HttpResponse con Content-Type application/pdf usando ReportLab.
-    Crea un documento con título, subtítulo y tabla de datos.
+    Crea un documento con t├¡tulo, subt├¡tulo y tabla de datos.
     """
     import io
     from django.http import HttpResponse
@@ -3069,7 +3354,7 @@ def _pdf_response(filename, title, subtitle, header, rows):
     styles = getSampleStyleSheet()
     elements = []
 
-    # Título y subtítulo
+    # T├¡tulo y subt├¡tulo
     elements.append(Paragraph(title, styles['Title']))
     elements.append(Spacer(1, 0.3 * cm))
     elements.append(Paragraph(subtitle, styles['Normal']))
@@ -3112,8 +3397,8 @@ class ExportEventBuyersView(APIView):
     US36 (US-33): Exportar lista de compradores de un evento.
     GET /api/v1/promotor/events/<event_id>/buyers/export/?format=csv|pdf
 
-    Solo el promotor dueño del evento puede acceder.
-    Parámetros:
+    Solo el promotor due├▒o del evento puede acceder.
+    Par├ímetros:
       - format: 'csv' (default) o 'pdf'
       - status: filtrar por estado (default: active,used)
 
@@ -3121,43 +3406,6 @@ class ExportEventBuyersView(APIView):
     """
     permission_classes = [IsAuthenticated, IsPromotor]
 
-    # Compras que representan ingresos reales (pagadas y/o validadas)
-    PAID_STATUSES = ['active', 'used']
-
-    def get(self, request):
-        from decimal import Decimal as D
-        from django.db.models import Sum, Q
-        from django.db.models.functions import Coalesce
-
-        promoter_id = request.user.id
-
-        # ── 1. Eventos del promotor ─────────────────────────────────────────
-        eventos_qs = Event.objects.filter(promoter_id=promoter_id)
-        total_eventos = eventos_qs.count()
-
-        # ── 2. Compras pagadas en esos eventos ──────────────────────────────
-        compras_qs = Purchase.objects.filter(
-            event__promoter_id=promoter_id,
-# ─── US30 (US-27): Reporte Financiero por Evento ─────────────────────────────
-
-class EventFinancialReportView(APIView):
-    """
-    US30 (US-27): Reporte financiero detallado de un evento específico.
-    GET /api/v1/promotor/events/<event_id>/financial/
-
-    Solo el promotor dueño del evento puede acceder.
-
-    Respuesta:
-      - info del evento (nombre, fecha, location, estado, capacidad)
-      - resumen_financiero: ingresos_brutos, comisiones, ingresos_netos,
-            total_tickets_vendidos, ocupacion_pct, total_compradores
-      - desglose_por_tipo: por cada TicketType:
-            nombre, zone_type, precio_unitario, max_capacity,
-            tickets_vendidos, ocupacion_pct,
-            ingresos_brutos, comisiones, ingresos_netos
-      - top_compradores: los 5 user_id que más gastaron en el evento
-
-    Permisos: IsAuthenticated + IsPromotor (+ verificación de ownership).
     def get(self, request, event_id):
         evento = get_object_or_404(Event, id=event_id)
         if str(evento.promoter_id) != str(request.user.id):
@@ -3197,7 +3445,7 @@ class ExportEventFinancialView(APIView):
     GET /api/v1/promotor/events/<event_id>/financial/export/?format=csv|pdf
 
     Exporta el desglose financiero por tipo de ticket del evento.
-    Solo el promotor dueño puede acceder.
+    Solo el promotor due├▒o puede acceder.
 
     Permisos: IsAuthenticated + IsPromotor.
     """
@@ -3207,246 +3455,6 @@ class ExportEventFinancialView(APIView):
 
     def get(self, request, event_id):
         from decimal import Decimal as D
-        from django.db.models import Sum, Count, Q
-        from django.db.models.functions import Coalesce
-
-        # ── Verificar evento y ownership ────────────────────────────────────
-        evento = get_object_or_404(Event, id=event_id)
-        if str(evento.promoter_id) != str(request.user.id):
-            return Response(
-                {'error': 'No tienes permisos. Solo el promotor dueño del evento puede acceder.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # ── Compras pagadas del evento ───────────────────────────────────────
-        compras_qs = Purchase.objects.filter(
-            event=evento,
-            status__in=self.PAID_STATUSES,
-        )
-
-        total_tickets = compras_qs.aggregate(
-            total=Coalesce(Sum('quantity'), 0),
-        )['total']
-
-        # Agregaciones financieras (con fallback si columnas de comisión aún
-        # no existen en este branch — se completan tras merge con US567).
-        try:
-            aggs = compras_qs.aggregate(
-                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
-                comisiones_totales=Coalesce(Sum('commission_amount'), D('0')),
-        total_compradores = compras_qs.values('user_id').distinct().count()
-
-        # Financiero global con fallback si US567 aún no está mergeado
-        try:
-            aggs = compras_qs.aggregate(
-                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
-                comisiones=Coalesce(Sum('commission_amount'), D('0')),
-                ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
-            )
-        except Exception:
-            aggs = compras_qs.aggregate(
-                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
-            )
-            aggs['comisiones_totales'] = D('0')
-            aggs['ingresos_netos'] = aggs['ingresos_brutos']
-
-        # ── 3. Tasa de ocupación global ─────────────────────────────────────
-        total_capacidad = eventos_qs.aggregate(
-            cap=Coalesce(Sum('capacity'), 0),
-        )['cap']
-        tasa_ocupacion = (
-            round(total_tickets / total_capacidad * 100, 1)
-            if total_capacidad else 0.0
-        )
-
-        return Response({
-            'status': 'success',
-            'promoter_id': str(promoter_id),
-            'total_eventos': total_eventos,
-            'total_tickets_vendidos': total_tickets,
-            'tasa_ocupacion_pct': tasa_ocupacion,
-            'ingresos_brutos': aggs['ingresos_brutos'],
-            'comisiones_totales': aggs['comisiones_totales'],
-            'ingresos_netos': aggs['ingresos_netos'],
-        }, status=status.HTTP_200_OK)
-
-
-class PromotorDashboardComparativaView(APIView):
-    """
-    US27 (US-26): Comparativa financiera por evento del Promotor autenticado.
-    GET /api/v1/promotor/dashboard/comparativa/?limit=5&estado=<published|completed|all>
-
-    Parámetros opcionales:
-      - limit  (int, default=5, máx=20): cuántos eventos devolver
-      - estado (str, default='all'): filtrar por estado del evento
-
-    Por cada evento retorna:
-      evento_id, evento_nombre, fecha, estado, capacidad,
-      tickets_vendidos, ocupacion_pct,
-      ingresos_brutos, comisiones, ingresos_netos.
-
-    Permisos: IsAuthenticated + IsPromotor.
-    """
-    permission_classes = [IsAuthenticated, IsPromotor]
-
-    PAID_STATUSES = ['active', 'used']
-
-    def get(self, request):
-        from decimal import Decimal as D
-        from django.db.models import Sum
-        from django.db.models.functions import Coalesce
-
-        promoter_id = request.user.id
-
-        # ── Parámetros de query ──────────────────────────────────────────────
-        try:
-            limit = min(int(request.query_params.get('limit', 5)), 20)
-        except (ValueError, TypeError):
-            limit = 5
-
-        estado_filtro = request.query_params.get('estado', 'all')
-
-        # ── Eventos del promotor ─────────────────────────────────────────────
-        eventos_qs = Event.objects.filter(
-            promoter_id=promoter_id,
-        ).order_by('-event_date')
-
-        if estado_filtro != 'all':
-            eventos_qs = eventos_qs.filter(status=estado_filtro)
-
-        eventos = list(eventos_qs[:limit])
-
-        # ── Construir comparativa por evento ─────────────────────────────────
-        comparativa = []
-        for evento in eventos:
-            compras_qs = Purchase.objects.filter(
-                event=evento,
-                status__in=self.PAID_STATUSES,
-            )
-
-            tickets_vendidos = compras_qs.aggregate(
-            aggs['comisiones'] = D('0')
-            aggs['ingresos_netos'] = aggs['ingresos_brutos']
-
-        ocupacion_pct = (
-            round(total_tickets / evento.capacity * 100, 1)
-            if evento.capacity else 0.0
-        )
-
-        # ── Desglose por tipo de ticket ──────────────────────────────────────
-        ticket_types = TicketType.objects.filter(event=evento)
-        desglose = []
-        for tt in ticket_types:
-            qs_tt = compras_qs.filter(ticket_type=tt)
-            tt_tickets = qs_tt.aggregate(
-                total=Coalesce(Sum('quantity'), 0),
-            )['total']
-
-            try:
-                fin = compras_qs.aggregate(
-                tt_fin = qs_tt.aggregate(
-                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
-                    comisiones=Coalesce(Sum('commission_amount'), D('0')),
-                    ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
-                )
-            except Exception:
-                fin = compras_qs.aggregate(
-                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
-                )
-                fin['comisiones'] = D('0')
-                fin['ingresos_netos'] = fin['ingresos_brutos']
-
-            ocupacion_pct = (
-                round(tickets_vendidos / evento.capacity * 100, 1)
-                if evento.capacity else 0.0
-            )
-
-            comparativa.append({
-                'evento_id': str(evento.id),
-                'evento_nombre': evento.name,
-                'fecha': str(evento.event_date),
-                'estado': evento.status,
-                'capacidad': evento.capacity,
-                'tickets_vendidos': tickets_vendidos,
-                'ocupacion_pct': ocupacion_pct,
-                'ingresos_brutos': fin['ingresos_brutos'],
-                'comisiones': fin['comisiones'],
-                'ingresos_netos': fin['ingresos_netos'],
-            })
-
-        return Response({
-            'status': 'success',
-            'promoter_id': str(promoter_id),
-            'limit': limit,
-            'total_eventos': len(comparativa),
-            'comparativa': comparativa,
-                tt_fin = qs_tt.aggregate(
-                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
-                )
-                tt_fin['comisiones'] = D('0')
-                tt_fin['ingresos_netos'] = tt_fin['ingresos_brutos']
-
-            tt_ocupacion = (
-                round(tt_tickets / tt.max_capacity * 100, 1)
-                if tt.max_capacity else 0.0
-            )
-
-            desglose.append({
-                'ticket_type_id': str(tt.id),
-                'nombre': tt.name,
-                'zone_type': tt.zone_type,
-                'is_vip': tt.is_vip,
-                'precio_unitario': tt.price,
-                'max_capacity': tt.max_capacity,
-                'tickets_vendidos': tt_tickets,
-                'ocupacion_pct': tt_ocupacion,
-                'ingresos_brutos': tt_fin['ingresos_brutos'],
-                'comisiones': tt_fin['comisiones'],
-                'ingresos_netos': tt_fin['ingresos_netos'],
-            })
-
-        # ── Top 5 compradores por gasto ──────────────────────────────────────
-        top_compradores = (
-            compras_qs
-            .values('user_id')
-            .annotate(
-                gasto_total=Coalesce(Sum('total_price'), D('0')),
-                tickets_comprados=Coalesce(Sum('quantity'), 0),
-            )
-            .order_by('-gasto_total')[:5]
-        )
-        top_list = [
-            {
-                'user_id': str(c['user_id']),
-                'gasto_total': c['gasto_total'],
-                'tickets_comprados': c['tickets_comprados'],
-            }
-            for c in top_compradores
-        ]
-
-        return Response({
-            'status': 'success',
-            'evento': {
-                'id': str(evento.id),
-                'nombre': evento.name,
-                'fecha': str(evento.event_date),
-                'hora': str(evento.event_time) if evento.event_time else None,
-                'location': evento.location,
-                'estado': evento.status,
-                'admin_status': evento.admin_status,
-                'capacidad': evento.capacity,
-            },
-            'resumen_financiero': {
-                'total_tickets_vendidos': total_tickets,
-                'total_compradores': total_compradores,
-                'ocupacion_pct': ocupacion_pct,
-                'ingresos_brutos': aggs['ingresos_brutos'],
-                'comisiones': aggs['comisiones'],
-                'ingresos_netos': aggs['ingresos_netos'],
-            },
-            'desglose_por_tipo': desglose,
-            'top_compradores': top_list,
-        }, status=status.HTTP_200_OK)
         from django.db.models import Sum
         from django.db.models.functions import Coalesce
 
@@ -3493,7 +3501,7 @@ class PromotorDashboardComparativaView(APIView):
 
             oc = round(tt_tix / tt.max_capacity * 100, 1) if tt.max_capacity else 0.0
             rows.append([
-                tt.name, tt.zone_type, 'Sí' if tt.is_vip else 'No',
+                tt.name, tt.zone_type, 'S├¡' if tt.is_vip else 'No',
                 str(tt.price), tt.max_capacity, tt_tix, f"{oc}%",
                 str(tt_fin['ing']), str(tt_fin['com']), str(tt_fin['net']),
             ])
@@ -3531,8 +3539,8 @@ class AdminExportEventBuyersView(APIView):
     US36 (US-33): El Admin exporta la lista de compradores de cualquier evento.
     GET /api/v1/admin/events/<event_id>/buyers/export/?format=csv|pdf
 
-    Sin restricción de ownership — el Admin puede exportar cualquier evento.
-    Expone promoter_id en el nombre del archivo para identificación.
+    Sin restricci├│n de ownership ÔÇö el Admin puede exportar cualquier evento.
+    Expone promoter_id en el nombre del archivo para identificaci├│n.
 
     Permisos: IsAuthenticated + HasAdminCapability('view_reports').
     """

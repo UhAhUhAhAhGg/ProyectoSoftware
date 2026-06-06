@@ -9,6 +9,7 @@ import AdminUsuarios from '../components/dashboard/admin/AdminUsuarios';
 import AdminAuditoria from '../components/dashboard/admin/AdminAuditoria';
 import SuperAdminSolicitudes from '../components/dashboard/admin/SuperAdminSolicitudes';
 import SuperAdminCrearAdmin from '../components/dashboard/admin/SuperAdminCrearAdmin';
+import SuperAdminComisiones from '../components/dashboard/admin/SuperAdminComisiones';
 import './SuperAdminDashboard.css';
 
 function SuperAdminDashboard() {
@@ -38,7 +39,7 @@ function SuperAdminDashboard() {
     }
   }, [isAuthenticated, user, router]);
 
-  if (!user) {
+  if (!mounted || !user) {
     return (
       <div className="admin-loading">
         <div className="spinner"></div>
@@ -74,6 +75,13 @@ function SuperAdminDashboard() {
       icon: '🔧',
       label: 'Configuración Global',
       section: 'configuracion',
+      badge: null,
+    },
+    {
+      path: '/superadmin/comisiones',
+      icon: '💸',
+      label: 'Comisiones',
+      section: 'comisiones',
       badge: null,
     },
   ];
@@ -309,6 +317,19 @@ function SuperAdminDashboard() {
               <div className="coming-soon">
                 <p>🔧 Próxima funcionalidad en desarrollo</p>
               </div>
+            </div>
+          )}
+
+          {/* Section: Comisiones */}
+          {activeSection === 'comisiones' && (
+            <div className="section-container">
+              <div className="section-header">
+                <h2>Comisiones de la Plataforma</h2>
+                <p className="section-description">
+                  Configura la comisión que cobra la plataforma por cada venta.
+                </p>
+              </div>
+              <SuperAdminComisiones />
             </div>
           )}
         </div>

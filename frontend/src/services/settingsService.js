@@ -5,7 +5,7 @@ const API_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:8000';
 export const settingsService = {
   getCommissionSettings: async () => {
     try {
-      const response = await api.get(`${API_URL}/api/v1/settings/commissions/`);
+      const response = await api.get(`${API_URL}/api/v1/admin/platform/commission/current/`);
       return response.data;
     } catch (error) {
       console.warn('No se pudieron obtener las configuraciones de comisiones:', error?.message);
@@ -15,7 +15,7 @@ export const settingsService = {
 
   updateCommissionSettings: async (payload) => {
     try {
-      const response = await api.post(`${API_URL}/api/v1/settings/commissions/`, payload);
+      const response = await api.post(`${API_URL}/api/v1/admin/platform/commission/`, payload);
       return response.data;
     } catch (error) {
       console.error('Error al actualizar comisiones:', error?.response?.data || error?.message);
