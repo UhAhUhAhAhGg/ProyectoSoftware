@@ -35,6 +35,9 @@ from .views import (
     AdminAuditLogView,           # GET /admin/audit-log-v2/
     # US26: Vista detalle audit por evento (Ariana)
     EventAuditLogView,           # GET /admin/events/{id}/audit-log-v2/
+    # TIC-526 (US-31): Configuración de comisiones de la plataforma
+    PlatformCommissionCurrentView,  # GET /admin/platform/commission/current/
+    PlatformCommissionCreateView,   # POST /admin/platform/commission/
 )
 
 app_name = 'events'
@@ -112,4 +115,8 @@ urlpatterns = [
     path('users/<uuid:user_id>/notifications/read-all/', UserNotificationReadAllView.as_view(), name='user-notifications-read-all'),
     path('users/<uuid:user_id>/notifications/<uuid:notif_id>/read/', UserNotificationReadView.as_view(), name='user-notification-read'),
     path('users/<uuid:user_id>/notification-preferences/', NotificationPreferenceView.as_view(), name='set-notification-preferences'),
+
+    # TIC-526 (US-31): Configuración de comisiones — Solo SuperAdmin
+    path('admin/platform/commission/current/', PlatformCommissionCurrentView.as_view(), name='platform-commission-current'),
+    path('admin/platform/commission/', PlatformCommissionCreateView.as_view(), name='platform-commission-create'),
 ]
