@@ -12,6 +12,7 @@ import AdminUsuarios from '../components/dashboard/admin/AdminUsuarios';
 import AdminEventos from '../components/dashboard/admin/AdminEventos';
 import AdminConfiguracion from '../components/dashboard/admin/AdminConfiguracion';
 import AdminAuditoria from '../components/dashboard/admin/AdminAuditoria';
+import DashboardPromotorAdmin from '../components/dashboard/admin/DashboardPromotorAdmin';
 
 // TIC-398/445: cada seccion del panel requiere una capability del admin.
 // SuperAdmin tiene bypass total en hasPermission().
@@ -22,6 +23,7 @@ const SECTION_PERMISSION = {
   eventos: 'manage_events',
   configuracion: 'system_config',
   auditoria: 'view_reports',
+  'dashboard-promotor': 'view_reports', // Dashboard financiero de promotor
 };
 
 function AdminDashboard() {
@@ -34,6 +36,7 @@ function AdminDashboard() {
   const [usuariosMenuOpen, setUsuariosMenuOpen] = useState(true);
   const [collapsed, setCollapsed] = useState(false); // Sidebar colapsado (solo iconos) en desktop
   const [mounted, setMounted] = useState(false);
+  const [selectedPromotorId, setSelectedPromotorId] = useState(null); // Para dashboard de promotor
 
   useEffect(() => {
     setMounted(true);
@@ -115,6 +118,7 @@ function AdminDashboard() {
     eventos: 'Gestión de Eventos',
     configuracion: 'Configuración Global',
     auditoria: 'Log de Auditoría',
+    'dashboard-promotor': 'Dashboard Financiero del Promotor',
   };
 
   return (
@@ -341,7 +345,17 @@ function AdminDashboard() {
         <div className="admin-content">
           {activeSection === 'home' && <AdminDashboardHome onNavigate={handleSelectSection} />}
           {activeSection === 'promotores' && (
-            canAccessSection('promotores') ? <AdminUsuarios module="promotores" /> : <SinPermisos cap="manage_users" />
+            canAccessSection('promotores') ? (
+              <AdminUsuarios 
+                module="promotores" 
+                onViewPromotorDashboard={(promotorId) => {
+                  setSelectedPromotorId(promotorId);
+                  setActiveSection('dashboard-promotor');
+                }}
+              />
+            ) : (
+              <SinPermisos cap="manage_users" />
+            )
           )}
           {activeSection === 'compradores' && (
             canAccessSection('compradores') ? <AdminUsuarios module="compradores" /> : <SinPermisos cap="manage_users" />
@@ -354,6 +368,17 @@ function AdminDashboard() {
           )}
           {activeSection === 'auditoria' && (
             canAccessSection('auditoria') ? <AdminAuditoria /> : <SinPermisos cap="view_reports" />
+          )}
+          {activeSection === 'dashboard-promotor' && selectedPromotorId && (
+            canAccessSection('dashboard-promotor') ? (
+              <DashboardPromotorAdmin
+                promotorId={selectedPromotorId}
+                readOnly={true}
+                onBack={() => setActiveSection('promotores')}
+              />
+            ) : (
+              <SinPermisos cap="view_reports" />
+            )
           )}
         </div>
       </main>
