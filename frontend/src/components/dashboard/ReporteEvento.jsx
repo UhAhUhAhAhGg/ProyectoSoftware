@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import PromotorService from '../../services/promotorService';
+import api from '../../services/api';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 import ProgressBar from '../common/ProgressBar';
 import './ReporteEvento.css';
@@ -26,6 +27,7 @@ const TicketTypeRow = ({ type }) => (
 const ReporteEvento = ({ eventId }) => {
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     if (!eventId) return;
@@ -57,6 +59,66 @@ const ReporteEvento = ({ eventId }) => {
   return (
     <div className="reporte-evento">
       <h2>Reporte financiero - {report?.name ?? report?.title ?? `Evento ${eventId}`}</h2>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <button
+          className="export-btn"
+          onClick={async () => {
+            try {
+              setIsExporting(true);
+              window.dispatchEvent(new Event('export:start'));
+              const res = await api.get(`/promotor/events/${eventId}/report/export?format=pdf`, { responseType: 'blob' });
+              const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/pdf' });
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `reporte_evento_${eventId}.pdf`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              window.URL.revokeObjectURL(url);
+            } catch (err) {
+              console.error('Export error', err);
+              try { window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'Error generando PDF' } })); } catch {};
+              alert('Error generando PDF: ' + (err?.message || '')); 
+            } finally {
+              setIsExporting(false);
+              window.dispatchEvent(new Event('export:end'));
+            }
+          }}
+        >
+          Exportar PDF
+        </button>
+
+        <button
+          className="export-btn"
+          onClick={async () => {
+            try {
+              setIsExporting(true);
+              window.dispatchEvent(new Event('export:start'));
+              const res = await api.get(`/promotor/events/${eventId}/report/export?format=excel`, { responseType: 'blob' });
+              const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `reporte_evento_${eventId}.xlsx`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              window.URL.revokeObjectURL(url);
+            } catch (err) {
+              console.error('Export error', err);
+              try { window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'Error generando Excel' } })); } catch {};
+              alert('Error generando Excel: ' + (err?.message || ''));
+            } finally {
+              setIsExporting(false);
+              window.dispatchEvent(new Event('export:end'));
+            }
+          }}
+        >
+          Exportar Excel
+        </button>
+      </div>
 
       <div className="metrics-row">
         <MetricCard label="Ingresos Brutos" value={`$ ${Number(gross).toLocaleString()}`} />

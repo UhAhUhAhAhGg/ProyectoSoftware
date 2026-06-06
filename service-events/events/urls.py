@@ -44,6 +44,10 @@ from .views import (
     PromotorDashboardComparativaView, # GET /promotor/dashboard/comparativa/
     # US30 (US-27): Reporte Financiero por Evento
     EventFinancialReportView,    # GET /promotor/events/{id}/financial/
+    # US36 (US-33): Exportar Reportes a CSV / PDF
+    ExportEventBuyersView,       # GET /promotor/events/{id}/buyers/export/
+    ExportEventFinancialView,    # GET /promotor/events/{id}/financial/export/
+    AdminExportEventBuyersView,  # GET /admin/events/{id}/buyers/export/
 )
 
 app_name = 'events'
@@ -131,4 +135,8 @@ urlpatterns = [
     path('promotor/dashboard/comparativa/', PromotorDashboardComparativaView.as_view(), name='promotor-dashboard-comparativa'),
     # US30 (US-27): Reporte Financiero por Evento
     path('promotor/events/<uuid:event_id>/financial/', EventFinancialReportView.as_view(), name='event-financial-report'),
+    # US36 (US-33): Exportar Reportes a CSV / PDF
+    path('promotor/events/<uuid:event_id>/buyers/export/', ExportEventBuyersView.as_view(), name='export-event-buyers'),
+    path('promotor/events/<uuid:event_id>/financial/export/', ExportEventFinancialView.as_view(), name='export-event-financial'),
+    path('admin/events/<uuid:event_id>/buyers/export/', AdminExportEventBuyersView.as_view(), name='admin-export-event-buyers'),
 ]

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import AdminTable from '../components/dashboard/admin/AdminTable';
+import api from '../services/api';
 import AdminUsuarios from '../components/dashboard/admin/AdminUsuarios';
 import AdminAuditoria from '../components/dashboard/admin/AdminAuditoria';
 import SuperAdminSolicitudes from '../components/dashboard/admin/SuperAdminSolicitudes';
@@ -178,6 +179,55 @@ function SuperAdminDashboard() {
                 <p className="user-name">{user.nombre}</p>
                 <p className="user-status">SuperAdmin</p>
               </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginLeft: 12 }}>
+              <button
+                className="export-btn"
+                onClick={async () => {
+                  try {
+                    window.dispatchEvent(new Event('export:start'));
+                    const res = await api.get(`/admin/dashboard/export?format=pdf`, { responseType: 'blob' });
+                    const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/pdf' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `dashboard_sistema.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                  } catch (err) {
+                    console.error('Export error', err);
+                    alert('Error exportando PDF: ' + (err?.message || ''));
+                  } finally {
+                    window.dispatchEvent(new Event('export:end'));
+                  }
+                }}
+              >Exportar PDF</button>
+
+              <button
+                className="export-btn"
+                onClick={async () => {
+                  try {
+                    window.dispatchEvent(new Event('export:start'));
+                    const res = await api.get(`/admin/dashboard/export?format=excel`, { responseType: 'blob' });
+                    const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `dashboard_sistema.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                  } catch (err) {
+                    console.error('Export error', err);
+                    alert('Error exportando Excel: ' + (err?.message || ''));
+                  } finally {
+                    window.dispatchEvent(new Event('export:end'));
+                  }
+                }}
+              >Exportar Excel</button>
             </div>
           </div>
         </header>
