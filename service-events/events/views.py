@@ -1564,6 +1564,10 @@ class PurchaseDetailView(APIView):
             "is_vip": purchase.ticket_type.is_vip,
             "quantity": purchase.quantity,
             "total_price": str(purchase.total_price),
+            # TIC-526/US-31: Campos de comisión
+            "commission_percentage": str(purchase.commission_percentage) if purchase.commission_percentage else None,
+            "commission_amount": str(purchase.commission_amount) if purchase.commission_amount else None,
+            "net_amount": str(purchase.net_amount) if purchase.net_amount else None,
             "status": purchase.status,
             "backup_code": purchase.backup_code,
             "qr_code": purchase.qr_code,
@@ -2890,14 +2894,14 @@ class PlatformCommissionCurrentView(APIView):
     GET /api/v1/admin/platform/commission/current/
 
     Devuelve la configuración de comisión activa vigente.
-    Acceso: Admin con capability 'system_config' O SuperAdmin (bypass).
+    Acceso: Solo SuperAdmin.
 
     Respuesta cuando hay comisión activa:
         { "commission": { ...campos PlatformCommission... }, "configured": true }
     Respuesta cuando no hay ninguna configurada:
         { "commission": null, "configured": false }
     """
-    permission_classes = [IsAuthenticated, HasAdminCapability('system_config')]
+    permission_classes = [IsAuthenticated, IsSuperadmin]
 
     def get(self, request):
         from .serializers import PlatformCommissionReadSerializer

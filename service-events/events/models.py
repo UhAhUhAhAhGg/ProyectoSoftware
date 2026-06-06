@@ -209,6 +209,13 @@ class Purchase(models.Model):
         blank=True,
         help_text='Monto neto para el promotor = total_price - commission_amount (en BOB).',
     )
+    commission_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Porcentaje de comisión aplicado en el momento de la compra (para histórico).',
+    )
 
     # Campos para entrada digital
     qr_code = models.TextField(null=True, blank=True)
@@ -944,4 +951,4 @@ class PlatformCommission(models.Model):
             amount += base_amount * (self.percentage_value / Decimal('100'))
         if self.commission_type in ('fijo', 'hibrido') and self.fixed_value:
             amount += self.fixed_value
-        return amount.quantize(Decimal('0.01'))
+        return amount.quantize(Decimal('0.01'))

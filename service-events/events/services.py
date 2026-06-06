@@ -593,11 +593,11 @@ class CommissionService:
     @classmethod
     def calcular(cls, total_price):
         """
-        Calcula commission_amount y net_amount para un monto dado.
+        Calcula commission_amount, net_amount y commission_percentage para un monto dado.
 
         :param total_price: Decimal — precio final pagado por el Comprador.
-        :return: (commission_amount: Decimal, net_amount: Decimal)
-                 Si no hay comisión activa, devuelve (0.00, total_price).
+        :return: (commission_amount: Decimal, net_amount: Decimal, commission_percentage: Decimal)
+                 Si no hay comisión activa, devuelve (0.00, total_price, 0.00).
         """
         comision = cls.get_active_commission()
         base = Decimal(str(total_price))
@@ -607,28 +607,32 @@ class CommissionService:
                 "[TIC-526] No hay comisión activa configurada. "
                 "Se registra commission_amount=0 y net_amount=total_price."
             )
-            return Decimal('0.00'), base
+            return Decimal('0.00'), base, Decimal('0.00')
 
         commission_amount = comision.calculate(base)
         net_amount = (base - commission_amount).quantize(Decimal('0.01'))
+        
+        # Guardar el porcentaje aplicado (solo si es porcentaje o híbrido)
+        commission_percentage = comision.percentage_value or Decimal('0.00')
 
         commission_logger.info(
             f"[TIC-526] Comisión aplicada: tipo={comision.commission_type} | "
-            f"base={base} | comision={commission_amount} | neto={net_amount}"
+            f"base={base} | comision={commission_amount} | neto={net_amount} | pct={commission_percentage}%"
         )
-        return commission_amount, net_amount
+        return commission_amount, net_amount, commission_percentage
 
     @classmethod
     def aplicar(cls, purchase):
         """
-        Calcula y persiste commission_amount y net_amount en el Purchase dado.
+        Calcula y persiste commission_amount, net_amount y commission_percentage en el Purchase dado.
         Debe invocarse justo antes de confirmar el estado 'active' de la compra.
 
         :param purchase: instancia de Purchase ya guardada (tiene id y total_price).
         :return: purchase actualizado.
         """
-        commission_amount, net_amount = cls.calcular(purchase.total_price)
+        commission_amount, net_amount, commission_percentage = cls.calcular(purchase.total_price)
         purchase.commission_amount = commission_amount
         purchase.net_amount = net_amount
-        purchase.save(update_fields=['commission_amount', 'net_amount'])
+        purchase.commission_percentage = commission_percentage
+        purchase.save(update_fields=['commission_amount', 'net_amount', 'commission_percentage'])
         return purchase
