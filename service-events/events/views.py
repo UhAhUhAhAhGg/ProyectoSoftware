@@ -159,6 +159,13 @@ class EventViewSet(viewsets.ModelViewSet):
         if location_param:
             queryset = queryset.filter(location__icontains=location_param)
 
+        # US570: priorizar eventos promocionados en el listado
+        if self.action == 'list':
+            try:
+                queryset = queryset.order_by('-is_promoted', '-event_date')
+            except Exception:
+                pass
+
         return queryset
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
