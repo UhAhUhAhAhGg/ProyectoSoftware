@@ -76,6 +76,13 @@ function OpcionesPromotor() {
   const herramientas = [
     { id: 'mis-eventos', icono: '📋', titulo: 'Mis Eventos', descripcion: 'Gestiona todos tus eventos', link: '/dashboard/mis-eventos' },
     { id: 'perfil', icono: '👤', titulo: 'Mi Perfil', descripcion: 'Edita tus datos personales', link: '/dashboard/perfil' },
+    {
+    id: 'codigos-descuento',
+    icono: '🎟️',
+    titulo: 'Códigos de Descuento',
+    descripcion: 'Gestiona promociones para tus eventos',
+    disabled: true
+    },
     { id: 'crear', icono: '➕', titulo: 'Crear evento', descripcion: 'Publica un nuevo evento', link: '/dashboard/crear-evento' },
     { id: 'estadisticas', icono: '📊', titulo: 'Estadísticas', descripcion: 'Analiza el rendimiento de tus eventos', disabled: true },
     { id: 'pagos', icono: '💳', titulo: 'Pagos y Cobros', descripcion: 'Gestiona tus métodos de pago', disabled: true },
@@ -154,6 +161,30 @@ function OpcionesPromotor() {
               </Link>
             )
           ))}
+        </div>
+      </div>
+
+            {/* US35 - Gestión de códigos de descuento */}
+      <div className="gestion-section">
+        <h3>Códigos de Descuento</h3>
+
+        <div className="evento-proximo-card">
+          <div className="evento-proximo-info">
+            <h4>PROMO2026</h4>
+            <p>💸 Descuento: 15%</p>
+            <p>📅 Expira: 31/12/2026</p>
+
+            <div className="evento-proximo-stats">
+              <span>🎟️ Máx. usos: 100</span>
+              <span>✅ Usados: 12</span>
+            </div>
+          </div>
+
+          <div className="evento-proximo-acciones">
+            <button className="btn-accion" disabled>
+              Crear Código
+            </button>
+          </div>
         </div>
       </div>
 

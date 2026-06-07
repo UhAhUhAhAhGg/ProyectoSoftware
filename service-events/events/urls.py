@@ -38,6 +38,13 @@ from .views import (
     # TIC-526 (US-31): Configuración de comisiones de la plataforma
     PlatformCommissionCurrentView,  # GET /admin/platform/commission/current/
     PlatformCommissionCreateView,   # POST /admin/platform/commission/
+
+    # TIC-514 (US-30): CRUD de códigos de promoción
+    PromoCodeListCreateView,     # GET/POST /promotor/promo-codes/
+    PromoCodeDetailView,         # GET/PATCH/DELETE /promotor/promo-codes/{id}/
+    PromoCodeValidateView,       # POST /promo-codes/validate/
+    ValidateOrderCouponView,
+    PromotorPromoCodeStatsView,
     
     # US27 (US-26): Dashboard Financiero del Promotor
     PromotorDashboardSummaryView,    # GET /promotor/dashboard/summary/
@@ -163,4 +170,14 @@ urlpatterns = [
     path('superadmin/dashboard/promotores/', SuperAdminPromotorRankingView.as_view(), name='superadmin-dashboard-promotores'),
     path('admin/dashboard/top-promotors/', SuperAdminTopPromotorsView.as_view(), name='superadmin-dashboard-top-promotors'),
     path('admin/dashboard/evolution/', SuperAdminDashboardEvolutionView.as_view(), name='superadmin-dashboard-evolution'),
+
+    # TIC-514 (US-30): Códigos de promoción del Promotor
+    path('promotor/promo-codes/', PromoCodeListCreateView.as_view(), name='promo-code-list'),
+    path('promotor/promo-codes/<uuid:pk>/', PromoCodeDetailView.as_view(), name='promo-code-detail'),
+    # Validación pública (cualquier usuario autenticado antes de comprar)
+    path('promo-codes/validate/', PromoCodeValidateView.as_view(), name='promo-code-validate'),
+    path('orders/validate-code/', ValidateOrderCouponView.as_view(), name='validate-order-promocode'),
+    path('promotor/promo-codes/<uuid:id>/stats/', 
+     PromotorPromoCodeStatsView.as_view(), 
+     name='promotor-promocode-stats'),
 ]

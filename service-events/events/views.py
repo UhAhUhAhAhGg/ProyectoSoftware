@@ -47,7 +47,7 @@ from .models import (
     Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat,
     UserBehavior, UserPreference, UserFavorite, Notification, NotificationPreference,
     RecommendationEngine, registrar_comportamiento, generar_notificaciones_match,
-    PlatformCommission,
+    PlatformCommission, PromoCode,
 )
 from .serializers import (
     CategorySerializer,
@@ -57,11 +57,15 @@ from .serializers import (
     TicketTypeSerializer,
     TicketTypeCreateSerializer,
     QueueConfigSerializer,
+    PromoCodeReadSerializer,
+    PromoCodeCreateSerializer,
+    PromoCodeStatsSerializer,
+    ValidateCodeSerializer,
 )
 
 
 def _notify_queue_release(event_id: str, user_id: str):
-    """Notifica a service-queue que un usuario liber├│ su cupo (compra completa/cancelada/expirada)."""
+    """Notifica a service-queue que un usuario liberâ”œâ”‚ su cupo (compra completa/cancelada/expirada)."""
     try:
         url = f"{django_settings.QUEUE_SERVICE_URL}/api/v1/internal/release-user/"
         http_requests.post(url, json={"event_id": event_id, "user_id": user_id}, timeout=3)
@@ -71,9 +75,9 @@ def _notify_queue_release(event_id: str, user_id: str):
 
 def _get_queue_access_time(event_id: str, user_id: str):
     """
-    Consulta service-queue para obtener cu├índo el usuario fue admitido al evento.
+    Consulta service-queue para obtener cuâ”œÃ­ndo el usuario fue admitido al evento.
     Retorna un datetime o None. Permite que el timer del Purchase empiece desde
-    'Seleccionar Asientos' y no desde la generaci├│n del QR.
+    'Seleccionar Asientos' y no desde la generaciâ”œâ”‚n del QR.
     """
     try:
         from django.utils.dateparse import parse_datetime
@@ -179,10 +183,10 @@ class EventViewSet(viewsets.ModelViewSet):
         return EventSerializer
 
     def retrieve(self, request, *args, **kwargs):
-        """GET /events/{id}/ ÔÇö registra la visualizaci├│n como comportamiento"""
+        """GET /events/{id}/ Ã”Ã‡Ã¶ registra la visualizaciâ”œâ”‚n como comportamiento"""
         instance = self.get_object()
 
-        # Registrar autom├íticamente la interacci├│n 'view'
+        # Registrar automâ”œÃ­ticamente la interacciâ”œâ”‚n 'view'
         registrar_comportamiento(
             user_id=request.user.id,
             event=instance,
@@ -193,10 +197,10 @@ class EventViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def retrieve(self, request, *args, **kwargs):
-        """GET /events/{id}/ ÔÇö registra la visualizaci├│n como comportamiento"""
+        """GET /events/{id}/ Ã”Ã‡Ã¶ registra la visualizaciâ”œâ”‚n como comportamiento"""
         instance = self.get_object()
 
-        # Registrar autom├íticamente la interacci├│n 'view'
+        # Registrar automâ”œÃ­ticamente la interacciâ”œâ”‚n 'view'
         registrar_comportamiento(
             user_id=request.user.id,
             event=instance,
@@ -280,12 +284,12 @@ class EventViewSet(viewsets.ModelViewSet):
         """
         HU: Asignar lugar y mostrar tiempo estimado de espera.
         GET /events/{id}/queue-status/
-        Calcula la posici├│n en tiempo real y el promedio din├ímico de espera (max 15 min).
+        Calcula la posiciâ”œâ”‚n en tiempo real y el promedio dinâ”œÃ­mico de espera (max 15 min).
         """
         event = self.get_object()
         user_id = request.user.id
 
-        # 1. Verificar si el usuario realmente est├í en la fila
+        # 1. Verificar si el usuario realmente estâ”œÃ­ en la fila
         waitlist_entry = Waitlist.objects.filter(event=event, user_id=user_id).first()
         
         if not waitlist_entry:
@@ -301,32 +305,32 @@ class EventViewSet(viewsets.ModelViewSet):
                 "data": {"queue_status": waitlist_entry.status}
             }, status=status.HTTP_200_OK)
 
-        # 2. Calcular cu├íntas personas est├ín estrictamente delante de este usuario
+        # 2. Calcular cuâ”œÃ­ntas personas estâ”œÃ­n estrictamente delante de este usuario
         people_ahead = Waitlist.objects.filter(
             event=event,
             status='waiting',
             position__lt=waitlist_entry.position
         ).count()
-        # Tomamos una muestra de las ├║ltimas 20 compras confirmadas del evento
+        # Tomamos una muestra de las â”œâ•‘ltimas 20 compras confirmadas del evento
         recent_purchases = list(Purchase.objects.filter(
             event=event, 
             status='active'
         ).order_by('-created_at')[:20])
 
-        average_time_minutes = 5.0  # Tiempo por defecto si no hay data hist├│rica suficiente
+        average_time_minutes = 5.0  # Tiempo por defecto si no hay data histâ”œâ”‚rica suficiente
 
         if len(recent_purchases) >= 2:
-            # Diferencia de tiempo entre la compra m├ís reciente y la m├ís antigua de la muestra
+            # Diferencia de tiempo entre la compra mâ”œÃ­s reciente y la mâ”œÃ­s antigua de la muestra
             newest_purchase = recent_purchases[0].created_at
             oldest_purchase = recent_purchases[-1].created_at
             
             time_diff_seconds = (newest_purchase - oldest_purchase).total_seconds()
             
             if time_diff_seconds > 0:
-                # Calculamos cu├ínto toma en promedio despachar 1 compra (en minutos)
+                # Calculamos cuâ”œÃ­nto toma en promedio despachar 1 compra (en minutos)
                 calc_average = (time_diff_seconds / 60.0) / len(recent_purchases)
                 
-                # Regla de Negocio: M├¡nimo 1 minuto, M├íximo 15 minutos (por expiraci├│n del QR)
+                # Regla de Negocio: Mâ”œÂ¡nimo 1 minuto, Mâ”œÃ­ximo 15 minutos (por expiraciâ”œâ”‚n del QR)
                 average_time_minutes = min(max(calc_average, 1.0), 15.0)
 
         estimated_wait_time = int(people_ahead * average_time_minutes)
@@ -379,11 +383,11 @@ class EventViewSet(viewsets.ModelViewSet):
         event.status = 'published'
         event.save()
         
-        # NUEVO ÔÇö disparar notificaciones de match en < 5 minutos
+        # NUEVO Ã”Ã‡Ã¶ disparar notificaciones de match en < 5 minutos
         generar_notificaciones_match(event)
         
         
-        # NUEVO ÔÇö disparar notificaciones de match en < 5 minutos
+        # NUEVO Ã”Ã‡Ã¶ disparar notificaciones de match en < 5 minutos
         generar_notificaciones_match(event)
         
         return Response({'success': 'Event published'})
@@ -391,20 +395,20 @@ class EventViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get', 'put'], url_path='queue-config')
     def queue_config(self, request, pk=None):
         """
-        HU: Configurar umbral de usuarios simult├íneos.
-        GET: Obtener la configuraci├│n actual.
-        PUT: Actualizar la configuraci├│n con validaciones estrictas.
+        HU: Configurar umbral de usuarios simultâ”œÃ­neos.
+        GET: Obtener la configuraciâ”œâ”‚n actual.
+        PUT: Actualizar la configuraciâ”œâ”‚n con validaciones estrictas.
         """
         event = self.get_object()
 
-        # 1. Seguridad base para ambos m├®todos
+        # 1. Seguridad base para ambos mâ”œÂ®todos
         if str(event.promoter_id) != str(request.user.id):
             return Response({
                 "status": "error",
                 "message": "No tienes permisos. Solo el promotor de este evento puede gestionar la fila virtual."
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # 2. Manejo de la petici├│n GET (Lo que hicimos en la subtarea anterior)
+        # 2. Manejo de la peticiâ”œâ”‚n GET (Lo que hicimos en la subtarea anterior)
         if request.method == 'GET':
             return Response({
                 "status": "success",
@@ -413,47 +417,47 @@ class EventViewSet(viewsets.ModelViewSet):
                     "waitlist_threshold": event.waitlist_threshold,
                     "waitlist_active": event.waitlist_active,
                     "queue_timeout": event.queue_timeout,
-                    "event_capacity": event.capacity # ├Ütil para que el Frontend valide tambi├®n
+                    "event_capacity": event.capacity # â”œÃœtil para que el Frontend valide tambiâ”œÂ®n
                 }
             }, status=status.HTTP_200_OK)
 
-        # 3. Manejo de la petici├│n PUT (La nueva subtarea de validaci├│n)
+        # 3. Manejo de la peticiâ”œâ”‚n PUT (La nueva subtarea de validaciâ”œâ”‚n)
         elif request.method == 'PUT':
             threshold_input = request.data.get('waitlist_threshold')
             is_active_input = request.data.get('waitlist_active', event.waitlist_active)
             timeout_input = request.data.get('queue_timeout', event.queue_timeout)
 
-            # Validaci├│n A: Que el dato exista
+            # Validaciâ”œâ”‚n A: Que el dato exista
             if threshold_input is None:
                 return Response({
                     "status": "error",
                     "message": "El campo 'waitlist_threshold' es obligatorio."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validaci├│n B: Que sea un n├║mero entero
+            # Validaciâ”œâ”‚n B: Que sea un nâ”œâ•‘mero entero
             try:
                 threshold = int(threshold_input)
             except ValueError:
                 return Response({
                     "status": "error",
-                    "message": "El umbral debe ser un n├║mero entero v├ílido."
+                    "message": "El umbral debe ser un nâ”œâ•‘mero entero vâ”œÃ­lido."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validaci├│n C: Entero positivo (> 0)
+            # Validaciâ”œâ”‚n C: Entero positivo (> 0)
             if threshold <= 0:
                 return Response({
                     "status": "error",
-                    "message": "El umbral debe ser un n├║mero entero positivo mayor a cero."
+                    "message": "El umbral debe ser un nâ”œâ•‘mero entero positivo mayor a cero."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validaci├│n D: <= capacidad del evento (El Core de tu ticket)
+            # Validaciâ”œâ”‚n D: <= capacidad del evento (El Core de tu ticket)
             if threshold > event.capacity:
                 return Response({
                     "status": "error",
-                    "message": f"El umbral ({threshold}) no puede superar la capacidad m├íxima del evento ({event.capacity} personas)."
+                    "message": f"El umbral ({threshold}) no puede superar la capacidad mâ”œÃ­xima del evento ({event.capacity} personas)."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validaci├│n para queue_timeout
+            # Validaciâ”œâ”‚n para queue_timeout
             try:
                 q_timeout = int(timeout_input)
                 if q_timeout <= 0:
@@ -464,7 +468,7 @@ class EventViewSet(viewsets.ModelViewSet):
             except ValueError:
                 return Response({
                     "status": "error",
-                    "message": "El tiempo de espera (timeout) debe ser un n├║mero entero v├ílido."
+                    "message": "El tiempo de espera (timeout) debe ser un nâ”œâ•‘mero entero vâ”œÃ­lido."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             # Manejo seguro del booleano para 'waitlist_active'
@@ -481,7 +485,7 @@ class EventViewSet(viewsets.ModelViewSet):
 
             return Response({
                 "status": "success",
-                "message": "Configuraci├│n de la fila virtual actualizada y validada correctamente.",
+                "message": "Configuraciâ”œâ”‚n de la fila virtual actualizada y validada correctamente.",
                 "data": {
                     "waitlist_threshold": event.waitlist_threshold,
                     "waitlist_active": event.waitlist_active,
@@ -494,47 +498,47 @@ class EventViewSet(viewsets.ModelViewSet):
         """Cancelar un evento validando todas las condiciones de negocio"""
         event = self.get_object()
 
-        # Condici├â┬│n 1: Permisos (Solo el promotor due├â┬▒o puede cancelar)
+        # Condiciâ”œÃ¢â”¬â”‚n 1: Permisos (Solo el promotor dueâ”œÃ¢â”¬â–’o puede cancelar)
         if str(event.promoter_id) != str(request.user.id):
             return Response({
                 "status": "error",
-                "message": "No tienes permisos. Solo el promotor que cre├â┬│ el evento puede cancelarlo."
+                "message": "No tienes permisos. Solo el promotor que creâ”œÃ¢â”¬â”‚ el evento puede cancelarlo."
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # Condici├â┬│n 2: Estado del evento (Evitar doble cancelaci├â┬│n)
+        # Condiciâ”œÃ¢â”¬â”‚n 2: Estado del evento (Evitar doble cancelaciâ”œÃ¢â”¬â”‚n)
         if event.status in ['cancelled', 'completed']:
             return Response({
                 "status": "error",
-                "message": f"Acci├â┬│n denegada. El evento ya se encuentra '{event.status}'."
+                "message": f"Acciâ”œÃ¢â”¬â”‚n denegada. El evento ya se encuentra '{event.status}'."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Condici├â┬│n 3: Validar temporalidad (No cancelar eventos pasados)
+        # Condiciâ”œÃ¢â”¬â”‚n 3: Validar temporalidad (No cancelar eventos pasados)
         if not event.is_upcoming:
             return Response({
                 "status": "error",
-                "message": "No se puede cancelar un evento cuya fecha ya pas├â┬│ o est├â┬í en curso."
+                "message": "No se puede cancelar un evento cuya fecha ya pasâ”œÃ¢â”¬â”‚ o estâ”œÃ¢â”¬Ã­ en curso."
             }, status=status.HTTP_400_BAD_REQUEST)
 
         tickets = event.ticket_types.all()
         total_sold = sum(ticket.current_sold for ticket in tickets)
 
-        # Registrar metadata de cancelaci├│n (TIC-210/TIC-229)
+        # Registrar metadata de cancelaciâ”œâ”‚n (TIC-210/TIC-229)
         event.status = 'cancelled'
         event.cancelled_at = timezone.now()
         event.cancelled_by = request.user.id
         event.cancellation_reason = request.data.get('cancellation_reason', '')
         event.save()
 
-        # Detenemos la comercializaci├│n desactivando los tickets
+        # Detenemos la comercializaciâ”œâ”‚n desactivando los tickets
         for ticket in tickets:
             ticket.status = 'inactive'
             ticket.save()
 
         # Preparamos una respuesta inteligente basada en las ventas
         if total_sold > 0:
-            mensaje = f"Evento cancelado. ATENCI├ôN: Se registraron {total_sold} entradas vendidas. Se debe notificar a los compradores y gestionar reembolsos."
+            mensaje = f"Evento cancelado. ATENCIâ”œÃ´N: Se registraron {total_sold} entradas vendidas. Se debe notificar a los compradores y gestionar reembolsos."
         else:
-            mensaje = "Evento cancelado exitosamente. La comercializaci├│n fue detenida (0 entradas vendidas)."
+            mensaje = "Evento cancelado exitosamente. La comercializaciâ”œâ”‚n fue detenida (0 entradas vendidas)."
 
         return Response({
             "status": "success",
@@ -554,9 +558,9 @@ class EventViewSet(viewsets.ModelViewSet):
         # Normalmente el banco te manda un token o firma en los headers.
         token_banco = request.headers.get('X-Bank-Secret')
         
-        # En producci├│n, 'mi_secreto_super_seguro' debe estar en un archivo .env
+        # En producciâ”œâ”‚n, 'mi_secreto_super_seguro' debe estar en un archivo .env
         if token_banco != 'mi_secreto_super_seguro': 
-            return Response({"error": "No autorizado. Firma inv├ílida."}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"error": "No autorizado. Firma invâ”œÃ­lida."}, status=status.HTTP_403_FORBIDDEN)
 
         # 2. Leer los datos que manda el banco
         order_id = request.data.get('order_id')
@@ -567,15 +571,15 @@ class EventViewSet(viewsets.ModelViewSet):
         except PaymentOrder.DoesNotExist:
             return Response({"error": "Orden no encontrada"}, status=status.HTTP_404_NOT_FOUND)
 
-        # 3. Idempotencia: ┬┐Qu├® pasa si el banco manda el mismo mensaje dos veces por error?
+        # 3. Idempotencia: â”¬â”Quâ”œÂ® pasa si el banco manda el mismo mensaje dos veces por error?
         if orden.status == 'paid':
             return Response({"mensaje": "Esta orden ya fue procesada y pagada anteriormente"}, status=status.HTTP_200_OK)
 
-        # 4. Validar si la orden ya expir├│ en nuestro sistema
+        # 4. Validar si la orden ya expirâ”œâ”‚ en nuestro sistema
         if orden.is_expired:
             orden.status = 'expired'
             orden.save()
-            return Response({"error": "La orden ya expir├│"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "La orden ya expirâ”œâ”‚"}, status=status.HTTP_400_BAD_REQUEST)
 
         # 5. EL MOMENTO DE LA VERDAD: Procesar el pago exitoso
         if estado_transaccion == 'EXITOSO':
@@ -596,7 +600,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 # C) Generar la(s) entrada(s) real(es) para el usuario (TicketInstance)
                 entradas_generadas = []
                 for _ in range(orden.quantity):
-                    # Este es el QR que el usuario mostrar├í EN LA PUERTA del evento
+                    # Este es el QR que el usuario mostrarâ”œÃ­ EN LA PUERTA del evento
                     qr_puerta = f"TICKETGO-{uuid.uuid4()}" 
                     codigo_emergencia = str(uuid.uuid4())[:8].upper() # Ej: 4A8F9B2C
 
@@ -615,7 +619,7 @@ class EventViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_200_OK)
 
         # Si el banco manda 'RECHAZADO' u otro estado
-        return Response({"error": "Transacci├│n no exitosa"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Transacciâ”œâ”‚n no exitosa"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 # US24: AdminEventoBajaView/ModificarView/AdminAuditLogView reemplazadas por AdminEventEditView, AdminEventDeactivateView y AdminAuditLogListView (TIC-406/407/421)
@@ -783,7 +787,7 @@ class PurchaseView(APIView):
     """
     POST /api/v1/purchase/
     Inicia el proceso de compra: crea una Purchase con status='pending' y devuelve
-    un QR de pago (contiene el purchase_id) con 15 minutos de expiraci├│n.
+    un QR de pago (contiene el purchase_id) con 15 minutos de expiraciâ”œâ”‚n.
     Si el evento supera el umbral, redirige a la fila virtual.
     """
     permission_classes = [IsAuthenticated]
@@ -806,25 +810,25 @@ class PurchaseView(APIView):
         # 1. Calculamos el total de entradas vendidas actualmente
         total_sold = sum(t.current_sold for t in event.ticket_types.all())
 
-        # 2. Evaluamos si el evento tiene la fila activa Y super├│ el umbral
+        # 2. Evaluamos si el evento tiene la fila activa Y superâ”œâ”‚ el umbral
         if event.waitlist_active and (total_sold + quantity) >= event.waitlist_threshold:
             
             with transaction.atomic():
-                # Verificamos si el usuario ya est├í en la fila
+                # Verificamos si el usuario ya estâ”œÃ­ en la fila
                 waitlist_entry = Waitlist.objects.filter(event=event, user_id=user_id).first()
                 
                 if not waitlist_entry:
-                    # Buscamos la ├║ltima posici├│n asignada para darle la siguiente
+                    # Buscamos la â”œâ•‘ltima posiciâ”œâ”‚n asignada para darle la siguiente
                     last_position = Waitlist.objects.filter(event=event).aggregate(Max('position'))['position__max'] or 0
                     
                     waitlist_entry = Waitlist.objects.create(
                         event=event,
                         user_id=user_id,
                         position=last_position + 1,
-                        status='waiting' # Estado "en_cola" seg├║n el ticket
+                        status='waiting' # Estado "en_cola" segâ”œâ•‘n el ticket
                     )
                     
-                    mensaje = "El evento ha superado el umbral de capacidad simult├ínea. Has sido colocado en la fila virtual."
+                    mensaje = "El evento ha superado el umbral de capacidad simultâ”œÃ­nea. Has sido colocado en la fila virtual."
                     status_code = status.HTTP_202_ACCEPTED
                 else:
                     mensaje = "Ya te encuentras en la fila virtual para este evento."
@@ -839,9 +843,9 @@ class PurchaseView(APIView):
                     "queue_status": waitlist_entry.status
                 }
             }, status=status_code)
-        # --- FIN L├ôGICA DE FILA VIRTUAL ---
+        # --- FIN Lâ”œÃ´GICA DE FILA VIRTUAL ---
 
-        # Validaciones est├índar de compra
+        # Validaciones estâ”œÃ­ndar de compra
         if event.status == 'cancelled':
             return Response({"error": "No puedes comprar entradas para un evento cancelado"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -868,7 +872,7 @@ class PurchaseView(APIView):
 
         total_price = ticket.price * quantity
         # El timer empieza desde 'Seleccionar Asientos' (accessed_at en service-queue),
-        # no desde la generaci├│n del QR. Fallback: ahora si no hay registro.
+        # no desde la generaciâ”œâ”‚n del QR. Fallback: ahora si no hay registro.
         start_time = _get_queue_access_time(str(event.id), str(user_id)) or timezone.now()
         expires_at = start_time + timedelta(minutes=event.payment_timeout_minutes)
 
@@ -881,8 +885,8 @@ class PurchaseView(APIView):
             status='pending'
         )
         # Sobrescribir created_at para que SimularPagoView y PurchaseStatusView
-        # (que calculan expires_at = created_at + timeout) usen el tiempo de admisi├│n
-        # a la cola en vez del tiempo de creaci├│n de la orden.
+        # (que calculan expires_at = created_at + timeout) usen el tiempo de admisiâ”œâ”‚n
+        # a la cola en vez del tiempo de creaciâ”œâ”‚n de la orden.
         Purchase.objects.filter(id=purchase.id).update(created_at=start_time)
         purchase.refresh_from_db()
 
@@ -913,8 +917,8 @@ class SimularPagoView(APIView):
     """
     POST /api/v1/purchase/<purchase_id>/simular_pago/
     SOLO PARA DESARROLLO/TESTING.
-    Simula la confirmaci├│n de pago bancario, activa la compra y genera el QR/backup_code de la entrada.
-    En producci├│n este endpoint no existir├¡a; se reemplaza por un webhook del banco.
+    Simula la confirmaciâ”œâ”‚n de pago bancario, activa la compra y genera el QR/backup_code de la entrada.
+    En producciâ”œâ”‚n este endpoint no existirâ”œÂ¡a; se reemplaza por un webhook del banco.
     """
     permission_classes = [IsAuthenticated]
 
@@ -937,7 +941,7 @@ class SimularPagoView(APIView):
             purchase.status = 'cancelled'
             purchase.save()
             _notify_queue_release(str(purchase.event.id), str(purchase.user_id))
-            return Response({"error": "El tiempo de pago expir├│. Genera una nueva orden."}, status=410)
+            return Response({"error": "El tiempo de pago expirâ”œâ”‚. Genera una nueva orden."}, status=410)
 
         backup_code = secrets.token_hex(5).upper()
         qr_code_base64 = None
@@ -954,7 +958,7 @@ class SimularPagoView(APIView):
         purchase.qr_code = qr_code_base64
         purchase.save()
 
-        # TIC-569 (US-31): Calcular y persistir comisi├│n de plataforma
+        # TIC-569 (US-31): Calcular y persistir comisiâ”œâ”‚n de plataforma
         CommissionService.aplicar(purchase)
 
         # Registrar comportamiento de compra
@@ -1033,7 +1037,7 @@ class PurchaseStatusView(APIView):
             purchase.status = 'cancelled'
             purchase.save()
 
-            # Liberar asientos si la compra expir├│ por tiempo
+            # Liberar asientos si la compra expirâ”œâ”‚ por tiempo
             Seat.objects.filter(
                 ticket_type=purchase.ticket_type,
                 reserved_by=purchase.user_id,
@@ -1060,8 +1064,8 @@ class PurchaseStatusView(APIView):
 
 class SeatConfigurationView(APIView):
     """
-    GET  /api/v1/events/<event_id>/seat-config/  ÔÇö Devuelve zonas + disponibilidad
-    POST /api/v1/events/<event_id>/seat-config/  ÔÇö Crea/reemplaza zonas del evento
+    GET  /api/v1/events/<event_id>/seat-config/  Ã”Ã‡Ã¶ Devuelve zonas + disponibilidad
+    POST /api/v1/events/<event_id>/seat-config/  Ã”Ã‡Ã¶ Crea/reemplaza zonas del evento
     """
     permission_classes = [IsAuthenticated]
 
@@ -1097,7 +1101,7 @@ class SeatConfigurationView(APIView):
         }, status=200)
 
     def post(self, request, event_id):
-        """Crea o reemplaza la configuraci├│n de zonas. Protege zonas con ventas."""
+        """Crea o reemplaza la configuraciâ”œâ”‚n de zonas. Protege zonas con ventas."""
         event = get_object_or_404(Event, id=event_id)
 
         zones = request.data.get("zones", [])
@@ -1126,7 +1130,7 @@ class SeatConfigurationView(APIView):
 
         for i, z in enumerate(zones):
             if z.get("price", 0) <= 0:
-                errors.append(f"Zona[{i}] tiene precio inv├ílido")
+                errors.append(f"Zona[{i}] tiene precio invâ”œÃ­lido")
 
         total_capacity = sum([z.get("max_capacity", 0) for z in zones])
         if total_capacity > event.capacity:
@@ -1166,14 +1170,14 @@ class SeatConfigurationView(APIView):
 
         return Response({
             "status": "success",
-            "message": "Configuraci├│n de asientos guardada correctamente"
+            "message": "Configuraciâ”œâ”‚n de asientos guardada correctamente"
         }, status=201)
 
 
 class ValidateTicketView(APIView):
     """
     Endpoint para validar entradas en la puerta del evento.
-    Acepta tanto c├â┬│digo QR como c├â┬│digo alfanum├â┬®rico.
+    Acepta tanto câ”œÃ¢â”¬â”‚digo QR como câ”œÃ¢â”¬â”‚digo alfanumâ”œÃ¢â”¬Â®rico.
     """
 
     permission_classes = [IsAuthenticated]
@@ -1184,7 +1188,7 @@ class ValidateTicketView(APIView):
         if not codigo:
             return Response({
                 "status": "error",
-                "message": "El c├â┬│digo es requerido"
+                "message": "El câ”œÃ¢â”¬â”‚digo es requerido"
             }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
@@ -1231,7 +1235,7 @@ class SeatListView(APIView):
     """
     GET /api/v1/seats/?ticket_type_id=<uuid>
     Devuelve todos los asientos de una zona con su estado actual.
-    Si la zona no tiene asientos generados a├║n, los genera autom├íticamente.
+    Si la zona no tiene asientos generados aâ”œâ•‘n, los genera automâ”œÃ­ticamente.
     """
     permission_classes = [IsAuthenticated]
 
@@ -1246,7 +1250,7 @@ class SeatListView(APIView):
         ticket_type = get_object_or_404(TicketType, id=ticket_type_id)
 
         # Si no hay asientos generados y el TicketType tiene layout configurado,
-        # los generamos autom├íticamente (una sola vez).
+        # los generamos automâ”œÃ­ticamente (una sola vez).
         if not Seat.objects.filter(ticket_type=ticket_type).exists():
             if ticket_type.seat_rows and ticket_type.seats_per_row:
                 seats_to_create = []
@@ -1288,7 +1292,7 @@ class SeatListView(APIView):
 class SeatReserveView(APIView):
     """
     POST /api/v1/seats/<seat_id>/reserve/
-    Reserva un asiento de forma at├│mica (select_for_update evita doble reserva).
+    Reserva un asiento de forma atâ”œâ”‚mica (select_for_update evita doble reserva).
     La reserva expira si no se confirma el pago (ver TIC-20 para el scheduler).
     """
     permission_classes = [IsAuthenticated]
@@ -1297,16 +1301,16 @@ class SeatReserveView(APIView):
         user_id = request.user.id
 
         with transaction.atomic():
-            # select_for_update: bloquea la fila mientras la transacci├│n est├í activa
-            # garantizando que dos usuarios simult├íneos no reserven el mismo asiento
+            # select_for_update: bloquea la fila mientras la transacciâ”œâ”‚n estâ”œÃ­ activa
+            # garantizando que dos usuarios simultâ”œÃ­neos no reserven el mismo asiento
             try:
                 seat = Seat.objects.select_for_update(nowait=True).get(id=seat_id)
             except Seat.DoesNotExist:
                 return Response({'error': 'Asiento no encontrado'}, status=404)
             except Exception:
-                # nowait=True lanza error si el registro est├í bloqueado
+                # nowait=True lanza error si el registro estâ”œÃ­ bloqueado
                 return Response(
-                    {'error': 'El asiento est├í siendo reservado por otro usuario. Intenta de nuevo.'},
+                    {'error': 'El asiento estâ”œÃ­ siendo reservado por otro usuario. Intenta de nuevo.'},
                     status=409
                 )
 
@@ -1314,19 +1318,19 @@ class SeatReserveView(APIView):
                 return Response({'error': 'Este asiento ya fue vendido.'}, status=409)
 
             if seat.status == 'reserved':
-                # Verificar si la reserva expir├│ (m├ís de 15 min)
+                # Verificar si la reserva expirâ”œâ”‚ (mâ”œÃ­s de 15 min)
                 if seat.reserved_at:
                     expiracion = seat.reserved_at + timedelta(minutes=15)
                     if timezone.now() < expiracion:
                         return Response(
-                            {'error': 'Este asiento ya est├í reservado. Intenta con otro.'},
+                            {'error': 'Este asiento ya estâ”œÃ­ reservado. Intenta con otro.'},
                             status=409
                         )
                     # Reserva expirada: liberar y tomar
                 seat.status = 'available'
 
             if seat.status != 'available':
-                return Response({'error': 'El asiento no est├í disponible.'}, status=409)
+                return Response({'error': 'El asiento no estâ”œÃ­ disponible.'}, status=409)
 
             seat.status = 'reserved'
             seat.reserved_at = timezone.now()
@@ -1350,7 +1354,7 @@ class SeatBulkReserveView(APIView):
     """
     POST /api/v1/seats/bulk-reserve/
     body: {"seat_ids": [uuid1, uuid2]}
-    Reserva m├║ltiples asientos de forma at├│mica. Si uno falla, toda la transacci├│n se revierte.
+    Reserva mâ”œâ•‘ltiples asientos de forma atâ”œâ”‚mica. Si uno falla, toda la transacciâ”œâ”‚n se revierte.
     """
     permission_classes = [IsAuthenticated]
 
@@ -1362,14 +1366,14 @@ class SeatBulkReserveView(APIView):
             return Response({'error': 'se requiere una lista de seat_ids'}, status=400)
 
         with transaction.atomic():
-            # select_for_update bloquea todos los asientos de la lista de forma at├│mica
+            # select_for_update bloquea todos los asientos de la lista de forma atâ”œâ”‚mica
             try:
-                # order_by('id') previene deadlocks al bloquear m├║ltiples filas
+                # order_by('id') previene deadlocks al bloquear mâ”œâ•‘ltiples filas
                 seats = Seat.objects.select_for_update(nowait=True).filter(id__in=seat_ids).order_by('id')
                 if len(seats) != len(seat_ids):
                     return Response({'error': 'Algunos asientos no fueron encontrados'}, status=404)
             except Exception:
-                return Response({'error': 'Algunos asientos est├ín siendo reservados por otro usuario. Intenta de nuevo.'}, status=409)
+                return Response({'error': 'Algunos asientos estâ”œÃ­n siendo reservados por otro usuario. Intenta de nuevo.'}, status=409)
 
             for seat in seats:
                 if seat.status == 'sold':
@@ -1378,10 +1382,10 @@ class SeatBulkReserveView(APIView):
                     if seat.reserved_at:
                         expiracion = seat.reserved_at + timedelta(minutes=15)
                         if timezone.now() < expiracion:
-                            return Response({'error': f'El asiento {seat.seat_code} ya est├í reservado.'}, status=409)
-                    # Expir├│, podemos tomarlo
+                            return Response({'error': f'El asiento {seat.seat_code} ya estâ”œÃ­ reservado.'}, status=409)
+                    # Expirâ”œâ”‚, podemos tomarlo
                 elif seat.status != 'available':
-                    return Response({'error': f'El asiento {seat.seat_code} no est├í disponible.'}, status=409)
+                    return Response({'error': f'El asiento {seat.seat_code} no estâ”œÃ­ disponible.'}, status=409)
 
             now = timezone.now()
             for seat in seats:
@@ -1402,7 +1406,7 @@ class WaitlistView(APIView):
         user_id = request.user.id
 
         if Waitlist.objects.filter(event=event, user_id=user_id).exists():
-            return Response({"error": "Ya est├ís en la lista de espera"}, status=400)
+            return Response({"error": "Ya estâ”œÃ­s en la lista de espera"}, status=400)
 
         max_pos = Waitlist.objects.filter(event=event).aggregate(Max('position'))['position__max'] or 0
         entry = Waitlist.objects.create(
@@ -1413,12 +1417,12 @@ class WaitlistView(APIView):
         return Response({
             "status": "waitlist",
             "position": entry.position,
-            "message": f"Est├ís en la posici├│n {entry.position} de la lista de espera."
+            "message": f"Estâ”œÃ­s en la posiciâ”œâ”‚n {entry.position} de la lista de espera."
         }, status=status.HTTP_201_CREATED)
 
 
 class LogoutView(APIView):
-    """Endpoint para cerrar sesi├│n (blacklist token)."""
+    """Endpoint para cerrar sesiâ”œâ”‚n (blacklist token)."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -1428,21 +1432,21 @@ class LogoutView(APIView):
                 token=token,
                 defaults={'expires_at': timezone.now() + timedelta(days=1)}
             )
-        return Response({"message": "Sesi├│n cerrada correctamente"}, status=200)
+        return Response({"message": "Sesiâ”œâ”‚n cerrada correctamente"}, status=200)
 
 
 class PurchaseHistoryView(APIView):
     """
     Endpoint para consultar historial de compras del usuario.
     
-    Par├ímetros de consulta soportados:
-      - page (int): N├║mero de p├ígina (default: 1)
-      - page_size (int): Cantidad por p├ígina (default: 10, max: 100)
+    Parâ”œÃ­metros de consulta soportados:
+      - page (int): Nâ”œâ•‘mero de pâ”œÃ­gina (default: 1)
+      - page_size (int): Cantidad por pâ”œÃ­gina (default: 10, max: 100)
       - status (str): Filtrar por estado (active, used, pending, cancelled)
-      - sortBy (str): Campo de ordenaci├│n (created_at, total_price, event_date, status)
-      - sortType (str): Direcci├│n de orden (ASC o DESC, default: DESC)
-      - minPrice (decimal): Precio m├¡nimo del total
-      - maxPrice (decimal): Precio m├íximo del total
+      - sortBy (str): Campo de ordenaciâ”œâ”‚n (created_at, total_price, event_date, status)
+      - sortType (str): Direcciâ”œâ”‚n de orden (ASC o DESC, default: DESC)
+      - minPrice (decimal): Precio mâ”œÂ¡nimo del total
+      - maxPrice (decimal): Precio mâ”œÃ­ximo del total
     
     Ejemplo:
       GET /api/v1/purchases/history/?page=1&page_size=10&status=active&sortBy=total_price&sortType=ASC&minPrice=100
@@ -1461,17 +1465,17 @@ class PurchaseHistoryView(APIView):
         user_id = request.user.id
         qs = Purchase.objects.filter(user_id=user_id).select_related('event', 'ticket_type')
 
-        # ÔöÇÔöÇ Filtro por status ÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ Filtro por status Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         status_filter = request.query_params.get('status')
         if status_filter and status_filter in ('active', 'used', 'pending', 'cancelled'):
             qs = qs.filter(status=status_filter)
 
-        # ÔöÇÔöÇ Filtro por evento ÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ Filtro por evento Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         event_filter = request.query_params.get('event_id')
         if event_filter:
             qs = qs.filter(event_id=event_filter)
 
-        # ÔöÇÔöÇ Filtro por rango de precio ÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ Filtro por rango de precio Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         min_price = request.query_params.get('minPrice')
         max_price = request.query_params.get('maxPrice')
         if min_price:
@@ -1485,7 +1489,7 @@ class PurchaseHistoryView(APIView):
             except ValueError:
                 pass
 
-        # ÔöÇÔöÇ Ordenaci├│n ÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ Ordenaciâ”œâ”‚n Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         sort_by = request.query_params.get('sortBy', 'created_at')
         sort_type = request.query_params.get('sortType', 'DESC').upper()
         db_field = self.ALLOWED_SORT_FIELDS.get(sort_by, 'created_at')
@@ -1494,7 +1498,7 @@ class PurchaseHistoryView(APIView):
         else:
             qs = qs.order_by(f'-{db_field}')
 
-        # ÔöÇÔöÇ Paginaci├│n ÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ Paginaciâ”œâ”‚n Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         page = int(request.query_params.get('page', 1))
         page_size = int(request.query_params.get('page_size', 10))
         page = max(1, page)
@@ -1565,7 +1569,7 @@ class PurchaseDetailView(APIView):
             "is_vip": purchase.ticket_type.is_vip,
             "quantity": purchase.quantity,
             "total_price": str(purchase.total_price),
-            # TIC-526/US-31: Campos de comisi├│n
+            # TIC-526/US-31: Campos de comisiâ”œâ”‚n
             "commission_percentage": str(purchase.commission_percentage) if purchase.commission_percentage else None,
             "commission_amount": str(purchase.commission_amount) if purchase.commission_amount else None,
             "net_amount": str(purchase.net_amount) if purchase.net_amount else None,
@@ -1611,8 +1615,8 @@ class PurchaseCancelView(APIView):
     Solo se puede cancelar si el estado es 'pending' y pertenece al usuario autenticado.
 
     Body (opcional):
-      { "keep_queue": true }  ÔåÆ  cancela la compra y libera asientos pero NO libera
-                                  el cupo en service-queue (├║til para "volver atr├ís"
+      { "keep_queue": true }  Ã”Ã¥Ã†  cancela la compra y libera asientos pero NO libera
+                                  el cupo en service-queue (â”œâ•‘til para "volver atrâ”œÃ­s"
                                   y re-seleccionar asientos sin perder el turno).
     """
     permission_classes = [IsAuthenticated]
@@ -1678,7 +1682,7 @@ class SeatReleaseExpiredView(APIView):
             return Response({"error": f"Asiento {seat_id} no encontrado."}, status=404)
 
         if seat.status == 'available':
-            # Ya est├í disponible, idempotente
+            # Ya estâ”œÃ­ disponible, idempotente
             return Response({"status": "ok", "message": "El asiento ya estaba disponible."}, status=200)
 
         # Registrar en audit log antes de liberar (TIC-339)
@@ -1709,8 +1713,8 @@ class SeatReleaseExpiredView(APIView):
 class QueueConfigView(APIView):
     """
     TIC-350, TIC-351, TIC-352: Panel de configuracion de cola para el Promotor.
-    GET  /api/v1/queue-config/<event_id>/  ÔÇö obtener configuracion actual
-    POST /api/v1/queue-config/<event_id>/  ÔÇö actualizar configuracion
+    GET  /api/v1/queue-config/<event_id>/  Ã”Ã‡Ã¶ obtener configuracion actual
+    POST /api/v1/queue-config/<event_id>/  Ã”Ã‡Ã¶ actualizar configuracion
 
     Solo el promotor dueno del evento puede configurar la cola.
     """
@@ -1746,14 +1750,14 @@ class QueueConfigView(APIView):
             serializer.save()
             event.refresh_from_db()  # asegurar valores actualizados
 
-            # Sincronizar con service-queue: convertir threshold (%) ÔåÆ max_concurrent_users (absoluto)
+            # Sincronizar con service-queue: convertir threshold (%) Ã”Ã¥Ã† max_concurrent_users (absoluto)
             threshold = event.waitlist_threshold
             capacity = event.capacity or 1
             max_concurrent = max(1, math.ceil(capacity * threshold / 100))
             payment_timeout = event.payment_timeout_minutes
 
             try:
-                # Endpoint interno: no autentica ni llama de vuelta ÔåÆ evita deadlock circular
+                # Endpoint interno: no autentica ni llama de vuelta Ã”Ã¥Ã† evita deadlock circular
                 queue_url = f"{django_settings.QUEUE_SERVICE_URL}/api/v1/internal/sync-queue-config/{event_id}/"
                 http_requests.post(
                     queue_url,
@@ -1765,7 +1769,7 @@ class QueueConfigView(APIView):
                     timeout=4,
                 )
             except Exception:
-                pass  # Falla silenciosa; la cola usar├í el valor previo
+                pass  # Falla silenciosa; la cola usarâ”œÃ­ el valor previo
 
             return Response({
                 "status": "success",
@@ -1780,25 +1784,25 @@ class QueueConfigView(APIView):
         }, status=status.HTTP_400_BAD_REQUEST)
 class SuperAdminManageView(APIView):
     """
-    TIC-105 & TIC-106: Gesti├│n integral de Administradores por SuperAdmin.
-    Permite modificar permisos y suspender cuentas con protecci├│n de jerarqu├¡a.
+    TIC-105 & TIC-106: Gestiâ”œâ”‚n integral de Administradores por SuperAdmin.
+    Permite modificar permisos y suspender cuentas con protecciâ”œâ”‚n de jerarquâ”œÂ¡a.
     """
     permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
 
     def patch(self, request, user_id):
-        # 1. SEGURIDAD: Solo el SuperUser (Nivel Dios) puede entrar aqu├¡
+        # 1. SEGURIDAD: Solo el SuperUser (Nivel Dios) puede entrar aquâ”œÂ¡
         if not request.user.is_superuser:
             return Response(
                 {"error": "Acceso denegado. Se requieren privilegios de SuperAdmin."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # 2. VALIDACI├ôN DE JERARQU├ìA: Evitar que toquen a otro SuperAdmin
-        # (Aqu├¡ simulamos la comprobaci├│n, en real consultar├¡as tu BD/Service-Profiles)
+        # 2. VALIDACIâ”œÃ´N DE JERARQUâ”œÃ¬A: Evitar que toquen a otro SuperAdmin
+        # (Aquâ”œÂ¡ simulamos la comprobaciâ”œâ”‚n, en real consultarâ”œÂ¡as tu BD/Service-Profiles)
         target_is_superuser = False # <--- Consultar si el user_id es superusuario
         if target_is_superuser:
             return Response(
-                {"error": "Acci├│n denegada: Un SuperAdmin no puede ser gestionado por este endpoint."},
+                {"error": "Acciâ”œâ”‚n denegada: Un SuperAdmin no puede ser gestionado por este endpoint."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -1806,26 +1810,26 @@ class SuperAdminManageView(APIView):
         # Usamos el serializer para validar si vienen cambios de permisos
         serializer = AdminPermissionsSerializer(data=request.data, partial=True)
         
-        # Detectamos si la intenci├│n es SUSPENDER (TIC-106)
+        # Detectamos si la intenciâ”œâ”‚n es SUSPENDER (TIC-106)
         is_suspend_action = request.data.get('suspend', False)
 
         try:
             acciones_realizadas = []
 
-            # --- L├│gica de Suspensi├│n ---
+            # --- Lâ”œâ”‚gica de Suspensiâ”œâ”‚n ---
             if is_suspend_action:
-                # Aqu├¡ llamar├¡as a la l├│gica de desactivar cuenta (is_active = False)
-                acciones_realizadas.append("Suspensi├│n de cuenta")
+                # Aquâ”œÂ¡ llamarâ”œÂ¡as a la lâ”œâ”‚gica de desactivar cuenta (is_active = False)
+                acciones_realizadas.append("Suspensiâ”œâ”‚n de cuenta")
                 log_admin_action(request, user_id, 'suspend', "Cuenta suspendida por SuperAdmin")
 
-            # --- L├│gica de Permisos ---
+            # --- Lâ”œâ”‚gica de Permisos ---
             if serializer.is_valid() and serializer.validated_data:
-                # Aqu├¡ actualizar├¡as los permisos en la base de datos
+                # Aquâ”œÂ¡ actualizarâ”œÂ¡as los permisos en la base de datos
                 acciones_realizadas.append(f"Cambio de permisos: {list(serializer.validated_data.keys())}")
                 log_admin_action(request, user_id, 'update', f"Permisos modificados: {serializer.validated_data}")
 
             if not acciones_realizadas:
-                return Response({"message": "No se enviaron cambios v├ílidos."}, status=400)
+                return Response({"message": "No se enviaron cambios vâ”œÃ­lidos."}, status=400)
 
             return Response({
                 "status": "success",
@@ -1837,7 +1841,7 @@ class SuperAdminManageView(APIView):
             return Response({"error": str(e)}, status=500)
     
 
-# ÔöÇÔöÇÔöÇ TIC-21/22: Favoritos, Notificaciones, Recomendaciones ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+# Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡ TIC-21/22: Favoritos, Notificaciones, Recomendaciones Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
 
 class UserFavoritesView(APIView):
     """
@@ -1891,7 +1895,7 @@ class UserFavoriteToggleView(APIView):
         ).first()
 
         if favorito_existente:
-            # Ya era favorito ÔåÆ desmarcar
+            # Ya era favorito Ã”Ã¥Ã† desmarcar
             favorito_existente.delete()
             return Response({
                 "status": "removed",
@@ -1900,13 +1904,13 @@ class UserFavoriteToggleView(APIView):
             }, status=status.HTTP_200_OK)
 
         else:
-            # No era favorito ÔåÆ marcar
+            # No era favorito Ã”Ã¥Ã† marcar
             UserFavorite.objects.create(
                 user_id=user_id,
                 event=event
             )
 
-            # Registrar tambi├®n como comportamiento de inter├®s
+            # Registrar tambiâ”œÂ®n como comportamiento de interâ”œÂ®s
             registrar_comportamiento(
                 user_id=user_id,
                 event=event,
@@ -1923,11 +1927,11 @@ class UserFavoriteToggleView(APIView):
 class UserNotificationsView(APIView):
     """
     GET /api/v1/users/{user_id}/notifications/
-    Lista todas las notificaciones del usuario (le├¡das y no le├¡das).
+    Lista todas las notificaciones del usuario (leâ”œÂ¡das y no leâ”œÂ¡das).
 
     Query params opcionales:
-      ?leida=false  ÔåÆ solo no le├¡das
-      ?leida=true   ÔåÆ solo le├¡das
+      ?leida=false  Ã”Ã¥Ã† solo no leâ”œÂ¡das
+      ?leida=true   Ã”Ã¥Ã† solo leâ”œÂ¡das
     """
     permission_classes = [IsAuthenticated]
 
@@ -1965,7 +1969,7 @@ class UserNotificationsView(APIView):
 class UserNotificationReadView(APIView):
     """
     PATCH /api/v1/users/{user_id}/notifications/{notif_id}/read/
-    Marca una notificaci├│n espec├¡fica como le├¡da.
+    Marca una notificaciâ”œâ”‚n especâ”œÂ¡fica como leâ”œÂ¡da.
     """
     permission_classes = [IsAuthenticated]
 
@@ -1986,7 +1990,7 @@ class UserNotificationReadView(APIView):
         if notificacion.leida:
             return Response({
                 "status": "info",
-                "message": "La notificaci├│n ya estaba marcada como le├¡da.",
+                "message": "La notificaciâ”œâ”‚n ya estaba marcada como leâ”œÂ¡da.",
             }, status=status.HTTP_200_OK)
 
         notificacion.leida = True
@@ -1998,15 +2002,15 @@ class UserNotificationReadView(APIView):
 
         return Response({
             "status": "success",
-            "message": "Notificaci├│n marcada como le├¡da.",
+            "message": "Notificaciâ”œâ”‚n marcada como leâ”œÂ¡da.",
             "data": serializer.data,
         }, status=status.HTTP_200_OK)
 
 class UserNotificationReadAllView(APIView):
     """
     PATCH /api/v1/users/{user_id}/notifications/read-all/
-    Marca TODAS las notificaciones no le├¡das del usuario como le├¡das.
-    Endpoint de utilidad para el bot├│n 'Marcar todas como le├¡das'.
+    Marca TODAS las notificaciones no leâ”œÂ¡das del usuario como leâ”œÂ¡das.
+    Endpoint de utilidad para el botâ”œâ”‚n 'Marcar todas como leâ”œÂ¡das'.
     """
     permission_classes = [IsAuthenticated]
 
@@ -2026,13 +2030,13 @@ class UserNotificationReadAllView(APIView):
 
         return Response({
             "status": "success",
-            "message": f"{actualizadas} notificaciones marcadas como le├¡das.",
+            "message": f"{actualizadas} notificaciones marcadas como leâ”œÂ¡das.",
             "actualizadas": actualizadas,
         }, status=status.HTTP_200_OK)
 
 class UserRecommendationsAPIView(APIView):
     """
-    Endpoint para obtener eventos recomendados seg├║n comportamiento pasado.
+    Endpoint para obtener eventos recomendados segâ”œâ•‘n comportamiento pasado.
     """
     def get(self, request):
         user_id = request.query_params.get('user_id')
@@ -2050,7 +2054,7 @@ class UserRecommendationsAPIView(APIView):
 
 
 class StandardResultsSetPagination(pagination.PageNumberPagination):
-    page_size = 10  # N├║mero de eventos por p├ígina
+    page_size = 10  # Nâ”œâ•‘mero de eventos por pâ”œÃ­gina
     page_size_query_param = 'page_size'
     max_page_size = 50
 
@@ -2072,7 +2076,7 @@ class UserRecommendationsListView(generics.ListAPIView):
 class NotificationPreferenceView(APIView):
     """
     TIC-377: PUT /api/v1/users/{user_id}/notification-preferences/
-    Permite al usuario configurar qu├® categor├¡as le generan notificaciones.
+    Permite al usuario configurar quâ”œÂ® categorâ”œÂ¡as le generan notificaciones.
 
     Body esperado: { "preferences": [{"category_id": "<uuid>", "enabled": true/false}, ...] }
     """
@@ -2167,13 +2171,13 @@ class AdminUserCleanupView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# ÔöÇÔöÇÔöÇ TIC-25: Modificar/Dar de baja eventos (Admin) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+# Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡ TIC-25: Modificar/Dar de baja eventos (Admin) Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
 
 class AdminEventEditView(APIView):
     """
     TIC-406: PATCH /admin/events/{id}/
     Permite a un administrador modificar cualquier campo de un evento
-    (nombre, fecha, capacidad, descripci├│n, etc.) y registra la intervenci├│n.
+    (nombre, fecha, capacidad, descripciâ”œâ”‚n, etc.) y registra la intervenciâ”œâ”‚n.
 
     Acceso: Admin con capability 'manage_events' o SuperAdmin (bypass).
     """
@@ -2207,7 +2211,7 @@ class AdminEventEditView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Campos permitidos para edici├│n por admin
+        # Campos permitidos para ediciâ”œâ”‚n por admin
         ALLOWED_FIELDS = [
             'name', 'description', 'event_date', 'event_time',
             'location', 'capacity', 'status', 'category',
@@ -2232,7 +2236,7 @@ class AdminEventEditView(APIView):
                         resolved = Category.objects.get(pk=new_value)
                     except (Category.DoesNotExist, ValueError, Exception):
                         return Response(
-                            {"status": "error", "message": f"Categor├¡a no encontrada: {new_value}"},
+                            {"status": "error", "message": f"Categorâ”œÂ¡a no encontrada: {new_value}"},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
                 if str(old_value) != str(new_value):
@@ -2249,7 +2253,7 @@ class AdminEventEditView(APIView):
                     new_value = int(new_value)
                 except (TypeError, ValueError):
                     return Response(
-                        {"status": "error", "message": "La capacidad debe ser un n├║mero entero."},
+                        {"status": "error", "message": "La capacidad debe ser un nâ”œâ•‘mero entero."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -2267,7 +2271,7 @@ class AdminEventEditView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        reason = request.data.get('admin_reason', 'Modificaci├│n administrativa')
+        reason = request.data.get('admin_reason', 'Modificaciâ”œâ”‚n administrativa')
         event.admin_status = 'modified'
         event.admin_reason = reason
         event.save()
@@ -2338,7 +2342,7 @@ class AdminEventDeactivateView(APIView):
 
         if event.admin_status == 'deactivated':
             return Response(
-                {"status": "error", "message": "El evento ya est├í dado de baja."},
+                {"status": "error", "message": "El evento ya estâ”œÃ­ dado de baja."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -2385,13 +2389,13 @@ class AdminEventDeactivateView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# ÔöÇÔöÇÔöÇ TIC-26: Auditor├¡a de eventos ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+# Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡ TIC-26: Auditorâ”œÂ¡a de eventos Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
 
 class AdminAuditLogListView(APIView):
     """
     TIC-421: GET /admin/audit-log/
     Retorna el historial completo de intervenciones administrativas sobre eventos.
-    Soporta filtros (event_id, admin_id, action, date_from, date_to) y paginaci├│n.
+    Soporta filtros (event_id, admin_id, action, date_from, date_to) y paginaciâ”œâ”‚n.
 
     Acceso: Admin con capability 'view_reports' o SuperAdmin (bypass).
     """
@@ -2412,7 +2416,7 @@ class AdminAuditLogListView(APIView):
         )
         if not es_admin:
             return Response(
-                {"status": "error", "message": "Permisos insuficientes para ver el log de auditor├¡a."},
+                {"status": "error", "message": "Permisos insuficientes para ver el log de auditorâ”œÂ¡a."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -2436,7 +2440,7 @@ class AdminAuditLogListView(APIView):
         if date_to:
             qs = qs.filter(created_at__date__lte=date_to)
 
-        # Paginaci├│n simple
+        # Paginaciâ”œâ”‚n simple
         try:
             page = int(request.query_params.get('page', 1))
             page_size = int(request.query_params.get('page_size', 20))
@@ -2476,7 +2480,7 @@ class AdminAuditLogListView(APIView):
 class EventAuditLogListView(generics.ListAPIView):
     """
     TIC-420: GET /admin/events/{event_id}/audit-log/
-    Historial completo de cambios de un evento espec├¡fico, paginado y ordenado
+    Historial completo de cambios de un evento especâ”œÂ¡fico, paginado y ordenado
     por fecha descendente.
 
     Acceso: Admin con capability 'view_reports' o SuperAdmin (bypass).
@@ -2498,7 +2502,7 @@ class EventAuditLogListView(generics.ListAPIView):
 class ExportAuditLogCSVView(APIView):
     """
     TIC-423: GET /admin/audit-log/export/
-    Genera y retorna un CSV con el historial completo de auditor├¡a para uso externo.
+    Genera y retorna un CSV con el historial completo de auditorâ”œÂ¡a para uso externo.
 
     Acceso: Admin con capability 'view_reports' o SuperAdmin (bypass).
     """
@@ -2516,7 +2520,7 @@ class ExportAuditLogCSVView(APIView):
         writer = csv.writer(response)
         writer.writerow([
             'ID Log', 'Fecha', 'Evento', 'Admin Email',
-            'Acci├│n', 'Raz├│n', 'Estado Anterior', 'Estado Nuevo',
+            'Acciâ”œâ”‚n', 'Razâ”œâ”‚n', 'Estado Anterior', 'Estado Nuevo',
         ])
 
         for log in queryset:
@@ -2534,7 +2538,7 @@ class ExportAuditLogCSVView(APIView):
         return response
 
 
-# ÔöÇÔöÇÔöÇ US23: Gestion administrativa de usuarios (Anghelo) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+# Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡ US23: Gestion administrativa de usuarios (Anghelo) Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
 
 class AdminUserDeleteView(APIView):
     """
@@ -2590,7 +2594,7 @@ class AdminUserDeleteView(APIView):
             )
 
 
-# ÔöÇÔöÇÔöÇ US24: Gestion administrativa de eventos (Ariana) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+# Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡ US24: Gestion administrativa de eventos (Ariana) Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
 
 class AdminEventoBajaView(APIView):
     """
@@ -2845,7 +2849,7 @@ class AdminAuditLogView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# ÔöÇÔöÇÔöÇ US26: Vista detalle por evento (Ariana) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+# Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡ US26: Vista detalle por evento (Ariana) Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
 
 class EventAuditLogView(APIView):
     """
@@ -2890,16 +2894,16 @@ class EventAuditLogView(APIView):
 
 
 
-# ÔöÇÔöÇÔöÇ TIC-526 (US-31): Configuraci├│n de comisiones de la plataforma ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+# Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡ TIC-526 (US-31): Configuraciâ”œâ”‚n de comisiones de la plataforma Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
 
 class PlatformCommissionCurrentView(APIView):
     """
     GET /api/v1/admin/platform/commission/current/
 
-    Devuelve la configuraci├│n de comisi├│n activa vigente.
+    Devuelve la configuraciâ”œâ”‚n de comisiâ”œâ”‚n activa vigente.
     Acceso: Solo SuperAdmin.
 
-    Respuesta cuando hay comisi├│n activa:
+    Respuesta cuando hay comisiâ”œâ”‚n activa:
         { "commission": { ...campos PlatformCommission... }, "configured": true }
     Respuesta cuando no hay ninguna configurada:
         { "commission": null, "configured": false }
@@ -2925,7 +2929,7 @@ class PlatformCommissionCreateView(APIView):
     """
     POST /api/v1/admin/platform/commission/
 
-    Crea una nueva configuraci├│n de comisi├│n y desactiva la anterior.
+    Crea una nueva configuraciâ”œâ”‚n de comisiâ”œâ”‚n y desactiva la anterior.
     Acceso: Solo SuperAdmin (IsSuperadmin).
 
     Body esperado (JSON):
@@ -2955,7 +2959,7 @@ class PlatformCommissionCreateView(APIView):
         # Desactivar todas las comisiones activas anteriores
         PlatformCommission.objects.filter(is_active=True).update(is_active=False)
 
-        # Crear la nueva configuraci├│n
+        # Crear la nueva configuraciâ”œâ”‚n
         nueva = serializer.save(
             created_by=request.user.id,
             is_active=True,
@@ -2978,8 +2982,8 @@ class PromotorDashboardSummaryView(APIView):
       - total_tickets_vendidos
       - tasa_ocupacion_pct  (capacidad promedio utilizada)
       - ingresos_brutos     (sum total_price de compras active/used)
-      - comisiones_totales  (sum commission_amount ÔÇö disponible tras merge US567)
-      - ingresos_netos      (sum net_amount ÔÇö disponible tras merge US567)
+      - comisiones_totales  (sum commission_amount Ã”Ã‡Ã¶ disponible tras merge US567)
+      - ingresos_netos      (sum net_amount Ã”Ã‡Ã¶ disponible tras merge US567)
 
     Permisos: IsAuthenticated + IsPromotor.
     """
@@ -2995,11 +2999,11 @@ class PromotorDashboardSummaryView(APIView):
 
         promoter_id = request.user.id
 
-        # ÔöÇÔöÇ 1. Eventos del promotor ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ 1. Eventos del promotor Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         eventos_qs = Event.objects.filter(promoter_id=promoter_id)
         total_eventos = eventos_qs.count()
 
-        # ÔöÇÔöÇ 2. Compras pagadas en esos eventos ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ 2. Compras pagadas en esos eventos Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         compras_qs = Purchase.objects.filter(
             event__promoter_id=promoter_id,
             status__in=self.PAID_STATUSES,
@@ -3009,8 +3013,8 @@ class PromotorDashboardSummaryView(APIView):
             total=Coalesce(Sum('quantity'), 0),
         )['total']
 
-        # Agregaciones financieras (con fallback si columnas de comisi├│n a├║n
-        # no existen en este branch ÔÇö se completan tras merge con US567).
+        # Agregaciones financieras (con fallback si columnas de comisiâ”œâ”‚n aâ”œâ•‘n
+        # no existen en este branch Ã”Ã‡Ã¶ se completan tras merge con US567).
         try:
             aggs = compras_qs.aggregate(
                 ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
@@ -3024,7 +3028,7 @@ class PromotorDashboardSummaryView(APIView):
             aggs['comisiones_totales'] = D('0')
             aggs['ingresos_netos'] = aggs['ingresos_brutos']
 
-        # ÔöÇÔöÇ 3. Tasa de ocupaci├│n global ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ 3. Tasa de ocupaciâ”œâ”‚n global Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         total_capacidad = eventos_qs.aggregate(
             cap=Coalesce(Sum('capacity'), 0),
         )['cap']
@@ -3077,8 +3081,8 @@ class PromotorDashboardComparativaView(APIView):
     US27 (US-26): Comparativa financiera por evento del Promotor autenticado.
     GET /api/v1/promotor/dashboard/comparativa/?limit=5&estado=<published|completed|all>
 
-    Par├ímetros opcionales:
-      - limit  (int, default=5, m├íx=20): cu├íntos eventos devolver
+    Parâ”œÃ­metros opcionales:
+      - limit  (int, default=5, mâ”œÃ­x=20): cuâ”œÃ­ntos eventos devolver
       - estado (str, default='all'): filtrar por estado del evento
 
     Por cada evento retorna:
@@ -3099,7 +3103,7 @@ class PromotorDashboardComparativaView(APIView):
 
         promoter_id = request.user.id
 
-        # ÔöÇÔöÇ Par├ímetros de query ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ Parâ”œÃ­metros de query Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         try:
             limit = min(int(request.query_params.get('limit', 5)), 20)
         except (ValueError, TypeError):
@@ -3107,7 +3111,7 @@ class PromotorDashboardComparativaView(APIView):
 
         estado_filtro = request.query_params.get('estado', 'all')
 
-        # ÔöÇÔöÇ Eventos del promotor ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ Eventos del promotor Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         eventos_qs = Event.objects.filter(
             promoter_id=promoter_id,
         ).order_by('-event_date')
@@ -3117,7 +3121,7 @@ class PromotorDashboardComparativaView(APIView):
 
         eventos = list(eventos_qs[:limit])
 
-        # ÔöÇÔöÇ Construir comparativa por evento ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ Construir comparativa por evento Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         comparativa = []
         for evento in eventos:
             compras_qs = Purchase.objects.filter(
@@ -3171,10 +3175,10 @@ class PromotorDashboardComparativaView(APIView):
 
 class EventFinancialReportView(APIView):
     """
-    US30 (US-27): Reporte financiero detallado de un evento espec├¡fico.
+    US30 (US-27): Reporte financiero detallado de un evento especâ”œÂ¡fico.
     GET /api/v1/promotor/events/<event_id>/financial/
 
-    Solo el promotor due├▒o del evento puede acceder.
+    Solo el promotor dueâ”œâ–’o del evento puede acceder.
 
     Respuesta:
       - info del evento (nombre, fecha, location, estado, capacidad)
@@ -3184,9 +3188,9 @@ class EventFinancialReportView(APIView):
             nombre, zone_type, precio_unitario, max_capacity,
             tickets_vendidos, ocupacion_pct,
             ingresos_brutos, comisiones, ingresos_netos
-      - top_compradores: los 5 user_id que m├ís gastaron en el evento
+      - top_compradores: los 5 user_id que mâ”œÃ­s gastaron en el evento
 
-    Permisos: IsAuthenticated + IsPromotor (+ verificaci├│n de ownership).
+    Permisos: IsAuthenticated + IsPromotor (+ verificaciâ”œâ”‚n de ownership).
     """
     permission_classes = [IsAuthenticated, IsPromotor]
 
@@ -3197,15 +3201,15 @@ class EventFinancialReportView(APIView):
         from django.db.models import Sum, Count, Q
         from django.db.models.functions import Coalesce
 
-        # ÔöÇÔöÇ Verificar evento y ownership ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ Verificar evento y ownership Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         evento = get_object_or_404(Event, id=event_id)
         if str(evento.promoter_id) != str(request.user.id):
             return Response(
-                {'error': 'No tienes permisos. Solo el promotor due├▒o del evento puede acceder.'},
+                {'error': 'No tienes permisos. Solo el promotor dueâ”œâ–’o del evento puede acceder.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # ÔöÇÔöÇ Compras pagadas del evento ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ Compras pagadas del evento Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         compras_qs = Purchase.objects.filter(
             event=evento,
             status__in=self.PAID_STATUSES,
@@ -3217,7 +3221,7 @@ class EventFinancialReportView(APIView):
 
         total_compradores = compras_qs.values('user_id').distinct().count()
 
-        # Financiero global con fallback si US567 a├║n no est├í mergeado
+        # Financiero global con fallback si US567 aâ”œâ•‘n no estâ”œÃ­ mergeado
         try:
             aggs = compras_qs.aggregate(
                 ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
@@ -3236,7 +3240,7 @@ class EventFinancialReportView(APIView):
             if evento.capacity else 0.0
         )
 
-        # ÔöÇÔöÇ Desglose por tipo de ticket ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ Desglose por tipo de ticket Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         ticket_types = TicketType.objects.filter(event=evento)
         desglose = []
         for tt in ticket_types:
@@ -3277,7 +3281,7 @@ class EventFinancialReportView(APIView):
                 'ingresos_netos': tt_fin['ingresos_netos'],
             })
 
-        # ÔöÇÔöÇ Top 5 compradores por gasto ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        # Ã”Ã¶Ã‡Ã”Ã¶Ã‡ Top 5 compradores por gasto Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡Ã”Ã¶Ã‡
         top_compradores = (
             compras_qs
             .values('user_id')
@@ -3321,27 +3325,27 @@ class EventFinancialReportView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# ─── US33 (US-28): Lista de Compradores por Evento ───────────────────────────
+# â”€â”€â”€ US33 (US-28): Lista de Compradores por Evento â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class EventBuyersListView(APIView):
     """
     US33 (US-28): Lista paginada de compradores de un evento.
     GET /api/v1/promotor/events/<event_id>/buyers/
 
-    Solo el promotor dueño del evento puede acceder.
+    Solo el promotor dueÃ±o del evento puede acceder.
 
-    Parámetros opcionales (query string):
+    ParÃ¡metros opcionales (query string):
       - status      (str): filtrar por estado de compra
                            (active|used|pending|cancelled|expired|all)
       - ticket_type_id (uuid): filtrar por tipo de ticket
-      - ordering    (str): campo de ordenación precedido de '-' para desc
+      - ordering    (str): campo de ordenaciÃ³n precedido de '-' para desc
                            (created_at, total_price, quantity). Default: -created_at
-      - page        (int): número de página. Default: 1
-      - page_size   (int): resultados por página. Default: 20, máx: 100
+      - page        (int): nÃºmero de pÃ¡gina. Default: 1
+      - page_size   (int): resultados por pÃ¡gina. Default: 20, mÃ¡x: 100
 
     Respuesta:
-      - resumen: total_compradores únicos, total_tickets, total_ingresos
-      - paginación: count, total_pages, page, page_size, next, previous
+      - resumen: total_compradores Ãºnicos, total_tickets, total_ingresos
+      - paginaciÃ³n: count, total_pages, page, page_size, next, previous
       - results: lista de compras con user_id, purchase_id, ticket_type,
                  quantity, total_price, discount_amount, status, created_at,
                  backup_code
@@ -3366,15 +3370,15 @@ class EventBuyersListView(APIView):
         from django.db.models.functions import Coalesce
         from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
-        # ── Verificar evento y ownership ────────────────────────────────────
+        # â”€â”€ Verificar evento y ownership â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         evento = get_object_or_404(Event, id=event_id)
         if str(evento.promoter_id) != str(request.user.id):
             return Response(
-                {'error': 'No tienes permisos. Solo el promotor dueño del evento puede acceder.'},
+                {'error': 'No tienes permisos. Solo el promotor dueÃ±o del evento puede acceder.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # ── Parámetros de query ──────────────────────────────────────────────
+        # â”€â”€ ParÃ¡metros de query â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         status_filtro = request.query_params.get('status', 'all')
         ticket_type_id = request.query_params.get('ticket_type_id')
         ordering_param = request.query_params.get('ordering', '-created_at')
@@ -3390,7 +3394,7 @@ class EventBuyersListView(APIView):
         except (ValueError, TypeError):
             page_size = 20
 
-        # ── Construcción del queryset ────────────────────────────────────────
+        # â”€â”€ ConstrucciÃ³n del queryset â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         compras_qs = Purchase.objects.filter(event=evento).select_related('ticket_type')
 
         if status_filtro != 'all':
@@ -3401,7 +3405,7 @@ class EventBuyersListView(APIView):
 
         compras_qs = compras_qs.order_by(ordering)
 
-        # ── Resumen (antes de paginar) ───────────────────────────────────────
+        # â”€â”€ Resumen (antes de paginar) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         # Solo compras activas/usadas para el resumen financiero
         compras_pagadas = compras_qs.filter(status__in=['active', 'used'])
         compradores_unicos = compras_qs.values('user_id').distinct().count()
@@ -3415,7 +3419,7 @@ class EventBuyersListView(APIView):
         except Exception:
             total_ingresos = D('0')
 
-        # ── Paginación ───────────────────────────────────────────────────────
+        # â”€â”€ PaginaciÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         paginator = Paginator(compras_qs, page_size)
         total_count = compras_qs.count()
         total_pages = paginator.num_pages
@@ -3426,7 +3430,7 @@ class EventBuyersListView(APIView):
             page_obj = paginator.page(1)
             page_num = 1
 
-        # ── Serializar resultados ────────────────────────────────────────────
+        # â”€â”€ Serializar resultados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         results = []
         for compra in page_obj.object_list:
             tt = compra.ticket_type
@@ -3444,14 +3448,14 @@ class EventBuyersListView(APIView):
                 'backup_code': compra.backup_code,
                 'used_at': compra.used_at.isoformat() if compra.used_at else None,
             }
-            # Campos opcionales de US35 (discount) — presentes tras merge
+            # Campos opcionales de US35 (discount) â€” presentes tras merge
             if hasattr(compra, 'discount_amount'):
                 entry['discount_amount'] = compra.discount_amount
             if hasattr(compra, 'promo_code_id') and compra.promo_code_id:
                 entry['promo_code'] = str(compra.promo_code_id)
             results.append(entry)
 
-        # ── Construir URLs de paginación ─────────────────────────────────────
+        # â”€â”€ Construir URLs de paginaciÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         base_url = request.build_absolute_uri(request.path)
 
         def _page_url(p):
@@ -3509,7 +3513,7 @@ def _csv_response(filename, header, rows):
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
-    response.write('´╗┐')          # BOM UTF-8 para compatibilidad con Excel
+    response.write('Â´â•—â”')          # BOM UTF-8 para compatibilidad con Excel
     writer = csv.writer(response)
     writer.writerow(header)
     writer.writerows(rows)
@@ -3519,7 +3523,7 @@ def _csv_response(filename, header, rows):
 def _pdf_response(filename, title, subtitle, header, rows):
     """
     Genera un HttpResponse con Content-Type application/pdf usando ReportLab.
-    Crea un documento con t├¡tulo, subt├¡tulo y tabla de datos.
+    Crea un documento con tâ”œÂ¡tulo, subtâ”œÂ¡tulo y tabla de datos.
     """
     import io
     from django.http import HttpResponse
@@ -3542,7 +3546,7 @@ def _pdf_response(filename, title, subtitle, header, rows):
     styles = getSampleStyleSheet()
     elements = []
 
-    # T├¡tulo y subt├¡tulo
+    # Tâ”œÂ¡tulo y subtâ”œÂ¡tulo
     elements.append(Paragraph(title, styles['Title']))
     elements.append(Spacer(1, 0.3 * cm))
     elements.append(Paragraph(subtitle, styles['Normal']))
@@ -3585,8 +3589,8 @@ class ExportEventBuyersView(APIView):
     US36 (US-33): Exportar lista de compradores de un evento.
     GET /api/v1/promotor/events/<event_id>/buyers/export/?format=csv|pdf
 
-    Solo el promotor due├▒o del evento puede acceder.
-    Par├ímetros:
+    Solo el promotor dueâ”œâ–’o del evento puede acceder.
+    Parâ”œÃ­metros:
       - format: 'csv' (default) o 'pdf'
       - status: filtrar por estado (default: active,used)
 
@@ -3633,7 +3637,7 @@ class ExportEventFinancialView(APIView):
     GET /api/v1/promotor/events/<event_id>/financial/export/?format=csv|pdf
 
     Exporta el desglose financiero por tipo de ticket del evento.
-    Solo el promotor due├▒o puede acceder.
+    Solo el promotor dueâ”œâ–’o puede acceder.
 
     Permisos: IsAuthenticated + IsPromotor.
     """
@@ -3689,7 +3693,7 @@ class ExportEventFinancialView(APIView):
 
             oc = round(tt_tix / tt.max_capacity * 100, 1) if tt.max_capacity else 0.0
             rows.append([
-                tt.name, tt.zone_type, 'S├¡' if tt.is_vip else 'No',
+                tt.name, tt.zone_type, 'Sâ”œÂ¡' if tt.is_vip else 'No',
                 str(tt.price), tt.max_capacity, tt_tix, f"{oc}%",
                 str(tt_fin['ing']), str(tt_fin['com']), str(tt_fin['net']),
             ])
@@ -3727,8 +3731,8 @@ class AdminExportEventBuyersView(APIView):
     US36 (US-33): El Admin exporta la lista de compradores de cualquier evento.
     GET /api/v1/admin/events/<event_id>/buyers/export/?format=csv|pdf
 
-    Sin restricci├│n de ownership ÔÇö el Admin puede exportar cualquier evento.
-    Expone promoter_id en el nombre del archivo para identificaci├│n.
+    Sin restricciâ”œâ”‚n de ownership Ã”Ã‡Ã¶ el Admin puede exportar cualquier evento.
+    Expone promoter_id en el nombre del archivo para identificaciâ”œâ”‚n.
 
     Permisos: IsAuthenticated + HasAdminCapability('view_reports').
     """
@@ -3769,7 +3773,7 @@ class AdminExportEventBuyersView(APIView):
 class PromotorEventBuyersSummaryView(APIView):
     """
     TIC-150: GET /promotor/events/{event_id}/buyers/summary
-    Retorna las métricas clave de recaudación, compradores únicos y entradas vendidas.
+    Retorna las mÃ©tricas clave de recaudaciÃ³n, compradores Ãºnicos y entradas vendidas.
     """
     permission_classes = [IsPromotor]
 
@@ -3781,7 +3785,7 @@ class PromotorEventBuyersSummaryView(APIView):
             event = Event.objects.get(id=event_id, promotor_id=promotor_id)
         except Event.DoesNotExist:
             return Response(
-                {"error": "Evento no encontrado o no tienes autorización sobre él."},
+                {"error": "Evento no encontrado o no tienes autorizaciÃ³n sobre Ã©l."},
                 status=status.HTTP_404_NOT_FOUND
             )
 
@@ -3804,7 +3808,7 @@ class PromotorEventBuyersSummaryView(APIView):
 class PromotorEventBuyersListView(ListAPIView):
     """
     TIC-151: GET /promotor/events/{event_id}/buyers/
-    Retorna la lista de compradores de un evento específico.
+    Retorna la lista de compradores de un evento especÃ­fico.
     """
     permission_classes = [IsPromotor]
 
@@ -3831,7 +3835,7 @@ class PromotorEventBuyersListView(ListAPIView):
         return queryset.order_by('-id')
 
 
-# ─── US34 (US-29): Admin ve Dashboard Financiero de cualquier Promotor ────────
+# â”€â”€â”€ US34 (US-29): Admin ve Dashboard Financiero de cualquier Promotor â”€â”€â”€â”€â”€â”€â”€â”€
 
 class AdminPromotorSummaryView(APIView):
     """
@@ -4067,7 +4071,7 @@ class AdminEventFinancialReportView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# ─── US566 (US-32): Dashboard Financiero Global del Sistema (SuperAdmin) ──────
+# â”€â”€â”€ US566 (US-32): Dashboard Financiero Global del Sistema (SuperAdmin) â”€â”€â”€â”€â”€â”€
 
 class SuperAdminGlobalDashboardView(APIView):
     """
@@ -4123,7 +4127,7 @@ class SuperAdminGlobalDashboardView(APIView):
         top_categorias = [
             {
                 'categoria_id': str(r['event__category__id']) if r['event__category__id'] else None,
-                'categoria_nombre': r['event__category__name'] or 'Sin categoría',
+                'categoria_nombre': r['event__category__name'] or 'Sin categorÃ­a',
                 'tickets_vendidos': r['tickets'],
                 'ingresos': r['ingresos'],
             }
@@ -4318,3 +4322,268 @@ class SuperAdminDashboardEvolutionView(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": f"Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+class PromoCodeListCreateView(APIView):
+    """
+    GET  /api/v1/promotor/promo-codes/   ÔåÆ lista c+¦digos del Promotor autenticado
+    POST /api/v1/promotor/promo-codes/   ÔåÆ crea un nuevo c+¦digo de promoci+¦n
+
+    Acceso: solo Promotor (IsPromotor). El promoter_id se toma del JWT.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    def get(self, request):
+        from .serializers import PromoCodeReadSerializer
+        promoter_id = request.user.id
+        codes = PromoCode.objects.filter(promoter_id=promoter_id).order_by('-created_at')
+        serializer = PromoCodeReadSerializer(codes, many=True)
+        return Response({
+            "status": "ok",
+            "total": codes.count(),
+            "results": serializer.data,
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        from .serializers import PromoCodeCreateSerializer, PromoCodeReadSerializer
+        serializer = PromoCodeCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"status": "error", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verificar que el evento (si se envi+¦) pertenece al promotor
+        event = serializer.validated_data.get('event')
+        if event and str(event.promoter_id) != str(request.user.id):
+            return Response(
+                {"status": "error", "detail": "El evento no pertenece a tu cuenta."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        code = serializer.save(promoter_id=request.user.id)
+        return Response(
+            {"status": "created", "promo_code": PromoCodeReadSerializer(code).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PromoCodeDetailView(APIView):
+    """
+    GET    /api/v1/promotor/promo-codes/{id}/  ÔåÆ detalle
+    PATCH  /api/v1/promotor/promo-codes/{id}/  ÔåÆ actualizar
+    DELETE /api/v1/promotor/promo-codes/{id}/  ÔåÆ desactivar (soft delete)
+
+    Acceso: solo el Promotor propietario del c+¦digo.
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    def _get_own_code(self, request, pk):
+        return get_object_or_404(PromoCode, id=pk, promoter_id=request.user.id)
+
+    def get(self, request, pk):
+        from .serializers import PromoCodeReadSerializer
+        code = self._get_own_code(request, pk)
+        return Response(PromoCodeReadSerializer(code).data)
+
+    def patch(self, request, pk):
+        from .serializers import PromoCodeCreateSerializer, PromoCodeReadSerializer
+        code = self._get_own_code(request, pk)
+        serializer = PromoCodeCreateSerializer(code, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(
+                {"status": "error", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Verificar que el nuevo evento (si cambi+¦) sigue siendo del promotor
+        event = serializer.validated_data.get('event')
+        if event and str(event.promoter_id) != str(request.user.id):
+            return Response(
+                {"status": "error", "detail": "El evento no pertenece a tu cuenta."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        updated = serializer.save()
+        return Response(
+            {"status": "updated", "promo_code": PromoCodeReadSerializer(updated).data}
+        )
+
+    def delete(self, request, pk):
+        code = self._get_own_code(request, pk)
+        code.is_active = False
+        code.save(update_fields=['is_active'])
+        return Response({"status": "deactivated"}, status=status.HTTP_200_OK)
+
+
+class PromoCodeValidateView(APIView):
+    """
+    POST /api/v1/promo-codes/validate/
+
+    Endpoint p+¦blico (solo autenticado) que valida un c+¦digo antes de comprar.
+    El comprador env+¡a: { code, event_id, subtotal }
+    Responde con el descuento calculado o el motivo de rechazo.
+
+    Acceso: cualquier usuario autenticado.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from .serializers import PromoCodeValidateSerializer
+        serializer = PromoCodeValidateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"status": "error", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        code_str = serializer.validated_data['code'].upper().strip()
+        event_id = serializer.validated_data['event_id']
+        subtotal = serializer.validated_data['subtotal']
+
+        try:
+            promo = PromoCode.objects.get(code=code_str)
+        except PromoCode.DoesNotExist:
+            return Response(
+                {"status": "invalid", "detail": "C+¦digo de promoci+¦n no encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        event = get_object_or_404(Event, id=event_id)
+        valid, mensaje = promo.is_valid_for(event)
+        if not valid:
+            return Response(
+                {"status": "invalid", "detail": mensaje},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        discount_amount = promo.calcular_descuento(subtotal)
+        final_price = subtotal - discount_amount
+
+        return Response({
+            "status": "valid",
+            "promo_code_id": str(promo.id),
+            "code": promo.code,
+            "discount_type": promo.discount_type,
+            "discount_value": str(promo.discount_value),
+            "discount_amount": str(discount_amount),
+            "subtotal": str(subtotal),
+            "final_price": str(final_price),
+        }, status=status.HTTP_200_OK)
+class ValidateOrderCouponView(APIView):
+    """
+    TIC-300: POST /orders/validate-code
+    Valida un c+¦digo de descuento usando las reglas de negocio de PromoCode
+    y retorna el monto descontado junto al precio final.
+    """
+    permission_classes = [IsComprador]
+
+    def post(self, request):
+        serializer = ValidateCodeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        code_str = serializer.validated_data['code'].strip().upper()
+        event_id = serializer.validated_data['event_id']
+        base_price = serializer.validated_data['base_price']
+
+        # 1. Obtener el evento asociado
+        try:
+            event = Event.objects.get(id=event_id)
+        except Event.DoesNotExist:
+            return Response(
+                {"valid": False, "error": "El evento especificado no existe."},
+                status=status.HTTP_444_NOT_FOUND if hasattr(status, 'HTTP_444_NOT_FOUND') else 404
+            )
+
+        # 2. Buscar si el c+¦digo promocional existe en el sistema
+        try:
+            promo_code = PromoCode.objects.get(code=code_str)
+        except PromoCode.DoesNotExist:
+            return Response(
+                {"valid": False, "error": "El c+¦digo de promoci+¦n no existe."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 3. EJECUTAR VALIDACI+ôN NATIVA DEL MODELO (Expiraci+¦n, max_uses, times_used, event match)
+        # Tu modelo ya tiene la funci+¦n 'validar_codigo(event)' incorporada
+        is_valid, message = promo_code.validar_codigo(event)
+        if not is_valid:
+            return Response(
+                {"valid": False, "error": message},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 4. CALCULAR DESCUENTO NATIVO DEL MODELO
+        # Tu modelo ya tiene 'calcular_descuento(subtotal)' que maneja porcentaje y monto fijo
+        from decimal import Decimal
+        try:
+            monto_descuento_decimal = promo_code.calcular_descuento(Decimal(str(base_price)))
+            monto_descontado = float(monto_descuento_decimal)
+        except Exception:
+            # Fallback matem+ítico cl+ísico si hay problemas con los tipos de datos decimales
+            if promo_code.discount_type == 'porcentaje':
+                monto_descontado = base_price * (float(promo_code.discount_value) / 100.0)
+            else:
+                monto_descontado = float(promo_code.discount_value)
+
+        # Asegurar que el descuento no exceda el precio base de la entrada
+        if monto_descontado > base_price:
+            monto_descontado = base_price
+
+        precio_final = base_price - monto_descontado
+
+        # 5. RETORNAR RESULTADOS
+        return Response({
+            "valid": True,
+            "code": promo_code.code,
+            "discount_type": promo_code.discount_type,
+            "discount_value": float(promo_code.discount_value),
+            "monto_descontado": round(monto_descontado, 2),
+            "precio_final": round(precio_final, 2)
+        }, status=status.HTTP_200_OK)
+class PromotorPromoCodeStatsView(APIView):
+    """
+    TIC-302: GET /promotor/promo-codes/{id}/stats
+    Retorna m+®tricas de rendimiento y uso de un c+¦digo promocional para su creador.
+    """
+    permission_classes = [IsPromotor]
+
+    def get(self, request, id):
+        # 1. Seguridad: Extraer el ID del promotor desde el payload de tu JWT
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        promotor_id = payload.get('user_id')
+
+        # 2. Obtener el c+¦digo promocional validando propiedad intelectual
+        try:
+            # Buscamos por id f+¡sico (UUID) y verificamos que coincida el promotor
+            promo_code = PromoCode.objects.get(id=id, promoter_id=promotor_id)
+        except PromoCode.DoesNotExist:
+            return Response(
+                {"error": "C+¦digo promocional no encontrado o no tienes autorizaci+¦n sobre +®l."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # 3. Calcular la anal+¡tica (Filtrando compras que NO est+®n canceladas o expiradas)
+        # Consideramos 'active' o 'completed' como estados v+ílidos de uso real
+        purchases_queryset = Purchase.objects.filter(
+            promo_code_id=promo_code.id,
+            status__in=['active', 'completed'] 
+        )
+
+        metrics = purchases_queryset.aggregate(
+            total_descontado_sum=Sum('discount_amount'),
+            real_used_count=Count('id')
+        )
+
+        # 4. Obtener los +¦ltimos usos (por ejemplo, los +¦ltimos 5 para un feed r+ípido)
+        ultimos_usos_qs = purchases_queryset.order_by('-created_at')[:5]
+
+        # 5. Estructurar la respuesta
+        raw_data = {
+            "code": promo_code.code,
+            # Usamos el conteo en BD o el campo de contingencia times_used de tu modelo
+            "used_count": metrics['real_used_count'] or promo_code.times_used,
+            "total_descontado": float(metrics['total_descontado_sum'] or 0.0),
+            "ultimos_usos": ultimos_usos_qs
+        }
+
+        serializer = PromoCodeStatsSerializer(raw_data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
