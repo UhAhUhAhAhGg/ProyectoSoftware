@@ -483,6 +483,17 @@ from .models import Notification, NotificationPreference
 
 matching_logger = logging.getLogger(__name__)
 
+# TIC-570 - Placeholder para cron de promociones expiradas
+def desactivar_promociones_expiradas():
+    """
+    Punto de entrada para un cron job diario.
+    Por ahora solo deja registrado cuándo se ejecutaría
+    la revisión de promociones expiradas.
+    """
+    logger = logging.getLogger(__name__)
+    logger.info("[TIC-570] Verificación de promociones expiradas ejecutada")
+    return True
+
 
 class MatchingService:
     """
