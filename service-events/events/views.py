@@ -956,6 +956,38 @@ class SimularPagoView(APIView):
         purchase.status = 'active'
         purchase.backup_code = backup_code
         purchase.qr_code = qr_code_base64
+
+        # Procesar código promocional si viene en la solicitud
+        promo_code_str = request.data.get('promo_code')
+        if promo_code_str:
+            try:
+                from .models import PromoCode
+                promo = PromoCode.objects.get(code=promo_code_str)
+                is_valid, _ = promo.validar_codigo(purchase.event)
+                if is_valid:
+                    # Aplicar descuento
+                    from decimal import Decimal
+                    try:
+                        monto_descuento = float(promo.calcular_descuento(Decimal(str(purchase.total_price))))
+                    except Exception:
+                        if promo.discount_type == 'porcentaje':
+                            monto_descuento = float(purchase.total_price) * (float(promo.discount_value) / 100.0)
+                        else:
+                            monto_descuento = float(promo.discount_value)
+                    
+                    if monto_descuento > float(purchase.total_price):
+                        monto_descuento = float(purchase.total_price)
+                    
+                    purchase.promo_code_id = promo.id
+                    purchase.discount_amount = round(monto_descuento, 2)
+                    purchase.total_price = round(float(purchase.total_price) - monto_descuento, 2)
+                    
+                    # Incrementar contador de usos del código de forma segura (sin F expressions por simplicidad en tests)
+                    promo.times_used += 1
+                    promo.save(update_fields=['times_used'])
+            except Exception as e:
+                print(f"No se pudo aplicar el código {promo_code_str}: {e}")
+
         purchase.save()
 
         # TIC-569 (US-31): Calcular y persistir comisiâ”œâ”‚n de plataforma

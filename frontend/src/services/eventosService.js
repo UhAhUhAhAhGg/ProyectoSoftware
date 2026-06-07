@@ -340,10 +340,11 @@ export const eventosService = {
     return data;
   },
 
-  simularPago: async (purchaseId) => {
+  simularPago: async (purchaseId, promoCode = null) => {
     const res = await apiFetch(`${EVENTS_URL}/api/v1/purchase/${purchaseId}/simular_pago/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(promoCode ? { promo_code: promoCode } : {})
     });
     const data = await res.json();
     if (!res.ok) {
@@ -457,6 +458,28 @@ export const eventosService = {
     } catch (err) {
       console.warn('No se pudo cargar historial de compras:', err?.message);
       return [];
+    }
+  },
+
+  // ===== CÓDIGOS DE PROMOCIÓN =====
+  validarCodigoDescuento: async (code, event_id, base_price) => {
+    try {
+      const res = await apiFetch(`${EVENTS_URL}/api/v1/orders/validate-code/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          event_id,
+          base_price
+        })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Código inválido o expirado.');
+      }
+      return await res.json();
+    } catch (e) {
+      throw e;
     }
   },
 

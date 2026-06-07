@@ -63,8 +63,11 @@ export default function ModalPagoQR({ ordenData, onCerrar, onVolver, asientosSel
     setSimulando(true);
     setErrorMsg('');
     try {
-      const res = await eventosService.simularPago(ordenData.purchase_id);
-      setDatosTicket(res.data);
+      const res = await eventosService.simularPago(
+        ordenData.purchase_id,
+        descuentoAplicado ? descuentoAplicado.code : null
+      );
+      setDatosTicket(res.data || res);
       setEstadoPago('active');
     } catch (e) {
       setErrorMsg(e.message);
@@ -162,16 +165,18 @@ export default function ModalPagoQR({ ordenData, onCerrar, onVolver, asientosSel
   paddingTop: '10px',
   borderTop: '1px dashed #dee2e6'
 }}>
-  <div style={{
-    display: 'flex',
-    justifyContent: 'space-between',
-    marginBottom: '4px'
-  }}>
-    <span>Descuento aplicado:</span>
-    <span style={{ color: '#dc3545' }}>
-      - Bs. 10
-    </span>
-  </div>
+  {descuentoAplicado && (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      marginBottom: '4px'
+    }}>
+      <span>Descuento aplicado ({descuentoAplicado.code}):</span>
+      <span style={{ color: '#dc3545' }}>
+        - Bs. {descuentoAplicado.monto_descontado}
+      </span>
+    </div>
+  )}
 
   <div style={{
     display: 'flex',
@@ -181,63 +186,91 @@ export default function ModalPagoQR({ ordenData, onCerrar, onVolver, asientosSel
   }}>
     <span>Total final:</span>
     <span>
-      Bs. {Math.max((ordenData.total || 0) - 10, 0)}
+      Bs. {descuentoAplicado ? descuentoAplicado.precio_final : ordenData.total}
     </span>
   </div>
 </div>
 
-                  
-  <div style={{
-    background: '#f8f9fa',
-    border: '1px solid #dee2e6',
-    borderRadius: 8,
-    padding: '12px',
-    marginBottom: '12px',
-    textAlign: 'left'
-    }}>
-    <label
-    style={{
-      display: 'block',
-      marginBottom: '6px',
-      fontWeight: 'bold'
-    }}
-    >
-    🎟️ Código de descuento
-    </label>
+<div style={{
+  background: '#f8f9fa',
+  border: '1px solid #dee2e6',
+  borderRadius: 8,
+  padding: '12px',
+  marginBottom: '12px',
+  textAlign: 'left'
+  }}>
+  <label
+  style={{
+    display: 'block',
+    marginBottom: '6px',
+    fontWeight: 'bold'
+  }}
+  >
+  🎟️ Código de descuento
+  </label>
 
-    <input
-    type="text"
-    value={codigoDescuento}
-    onChange={(e) => setCodigoDescuento(e.target.value)}
-    onBlur={() => {
-      if (codigoDescuento.trim()) {
-        setDescuentoAplicado('Código validado');
+  <input
+  type="text"
+  value={codigoDescuento}
+  onChange={(e) => {
+    setCodigoDescuento(e.target.value.toUpperCase());
+    setErrorMsg('');
+  }}
+  disabled={descuentoAplicado != null}
+  placeholder="Ingresa tu código"
+  style={{
+    width: '100%',
+    padding: '8px',
+    borderRadius: '6px',
+    border: '1px solid #ced4da',
+    textTransform: 'uppercase'
+  }}
+/>
+
+{!descuentoAplicado ? (
+  <button
+    onClick={async () => {
+      if (!codigoDescuento.trim()) return;
+      try {
+        const result = await eventosService.validarCodigoDescuento(
+          codigoDescuento.trim(),
+          ordenData.event_id,
+          ordenData.total
+        );
+        setDescuentoAplicado(result);
+        setErrorMsg('');
+      } catch (err) {
+        setErrorMsg(err.message);
       }
     }}
-    placeholder="Ingresa tu código"
-    style={{
-      width: '100%',
-      padding: '8px',
-      borderRadius: '6px',
-      border: '1px solid #ced4da'
+    style={{ ...btnStyle('#17a2b8'), marginTop: '8px', padding: '6px 12px', fontSize: '0.9rem' }}
+  >
+    Validar código
+  </button>
+) : (
+  <button
+    onClick={() => {
+      setDescuentoAplicado(null);
+      setCodigoDescuento('');
     }}
-  />
+    style={{ ...btnStyle('#dc3545'), marginTop: '8px', padding: '6px 12px', fontSize: '0.9rem' }}
+  >
+    Quitar cupón
+  </button>
+)}
 
-  <small style={{ color: '#6c757d' }}>
-    La validación se ejecutará al salir del campo.
-  </small>
-
-  {descuentoAplicado && (
-    <p
-      style={{
-        color: '#28a745',
-        marginTop: '8px',
-        fontWeight: 'bold'
-      }}
-    >
-      ✅ {descuentoAplicado}
-    </p>
-  )}
+{descuentoAplicado && (
+  <p
+    style={{
+      color: '#28a745',
+      marginTop: '8px',
+      fontWeight: 'bold',
+      fontSize: '0.85rem'
+    }}
+  >
+    ✅ Cupón {descuentoAplicado.code} válido! Se descontaron Bs. {descuentoAplicado.monto_descontado}.
+  </p>
+)}
 </div>
             
             <p style={{ color: '#666', fontSize: '0.85rem', marginBottom: '8px' }}>
