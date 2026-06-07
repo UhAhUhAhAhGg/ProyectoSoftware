@@ -45,6 +45,13 @@ from .views import (
     PromoCodeValidateView,       # POST /promo-codes/validate/
     ValidateOrderCouponView,
     PromotorPromoCodeStatsView,
+
+    # TIC-561/562 (US-34): Planes de promoción y eventos destacados
+    PromotionPlanListView,        # GET /promotion-plans/
+    EventPromoteView,             # POST /promotor/events/{id}/promote/
+    EventPromotionStatusView,     # GET /promotor/events/{id}/promotion/
+    FeaturedEventsView,           # GET /events/featured/
+    AdminPromotionListView,       # GET /admin/promotions/
     
     # US27 (US-26): Dashboard Financiero del Promotor
     PromotorDashboardSummaryView,    # GET /promotor/dashboard/summary/
@@ -180,4 +187,11 @@ urlpatterns = [
     path('promotor/promo-codes/<uuid:id>/stats/', 
      PromotorPromoCodeStatsView.as_view(), 
      name='promotor-promocode-stats'),
+
+    # TIC-561/562 (US-34): Planes de promoción y eventos destacados
+    path('promotion-plans/', PromotionPlanListView.as_view(), name='promotion-plan-list'),
+    path('promotor/events/<uuid:event_id>/promote/', EventPromoteView.as_view(), name='event-promote'),
+    path('promotor/events/<uuid:event_id>/promotion/', EventPromotionStatusView.as_view(), name='event-promotion-status'),
+    path('events/featured/', FeaturedEventsView.as_view(), name='events-featured'),
+    path('admin/promotions/', AdminPromotionListView.as_view(), name='admin-promotion-list'),
 ]

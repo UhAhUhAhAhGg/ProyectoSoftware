@@ -63,6 +63,14 @@ export default function EventCard({
             {evento.estado}
           </div>
         )}
+        {/* Badge de promoción si existe */}
+        {evento.promocion && (
+          <div className={`badge-destacado badge-${evento.promocion}`}>
+            {evento.promocion === 'basico' && '⭐ Destacado'}
+            {evento.promocion === 'premium' && '🥇 Premium'}
+            {evento.promocion === 'pro' && '🚀 Pro'}
+          </div>
+        )}
       </div>
 
       {/* Contenido */}

@@ -459,4 +459,60 @@ export const eventosService = {
       return [];
     }
   },
+
+  // ===== PROMOCIÓN DE EVENTOS =====
+
+  /**
+   * Genera un código QR para el pago de la promoción del evento
+   * Backend: POST /api/v1/events/{id}/generate-promotion-qr/
+   */
+  generarQRPromocion: async (eventoId, datos) => {
+    const res = await apiFetch(
+      `${EVENTS_URL}/api/v1/events/${eventoId}/generate-promotion-qr/`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan: datos.plan,
+          monto: datos.monto,
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(
+        err.detail || err.message || 'Error al generar código QR de promoción.'
+      );
+    }
+
+    return await res.json();
+  },
+
+  /**
+   * Registra la promoción del evento después de confirmado el pago
+   * Backend: POST /api/v1/events/{id}/promocionar/
+   */
+  promocionarEvento: async (eventoId, datos) => {
+    const res = await apiFetch(
+      `${EVENTS_URL}/api/v1/events/${eventoId}/promocionar/`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan: datos.plan,
+          comprobante: datos.comprobante,
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(
+        err.detail || err.message || 'No se pudo registrar la promoción.'
+      );
+    }
+
+    return await res.json();
+  },
 };
