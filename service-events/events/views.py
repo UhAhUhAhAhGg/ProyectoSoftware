@@ -3025,6 +3025,30 @@ class PromotorDashboardSummaryView(APIView):
         total_capacidad = eventos_qs.aggregate(
             cap=Coalesce(Sum('capacity'), 0),
         )['cap']
+        
+        from django.db.models.functions import TruncMonth
+
+        # 4. Ingresos por mes
+        monthly_qs = compras_qs.annotate(
+            month=TruncMonth('event__event_date')
+        ).values('month').annotate(
+            ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+            ingresos_netos=Coalesce(Sum('net_amount'), D('0')) if 'net_amount' in [f.name for f in Purchase._meta.get_fields()] else Coalesce(Sum('total_price'), D('0'))
+        ).order_by('month')
+
+        ingresos_mensuales = [
+            {
+                'month': m['month'].strftime('%b %Y') if m['month'] else 'Sin Fecha',
+                'ingresos_brutos': m['ingresos_brutos'],
+                'ingresos_netos': m['ingresos_netos'],
+                'time': m['month'].isoformat() if m['month'] else ''
+            }
+            for m in monthly_qs
+        ]
+        
+        # Sort by timestamp to be sure
+        ingresos_mensuales.sort(key=lambda x: x['time'])
+
         tasa_ocupacion = (
             round(total_tickets / total_capacidad * 100, 1)
             if total_capacidad else 0.0
@@ -3038,7 +3062,10 @@ class PromotorDashboardSummaryView(APIView):
             'tasa_ocupacion_pct': tasa_ocupacion,
             'ingresos_brutos': aggs['ingresos_brutos'],
             'comisiones_totales': aggs['comisiones_totales'],
+            
             'ingresos_netos': aggs['ingresos_netos'],
+            'ingresos_mensuales': ingresos_mensuales,
+
         }, status=status.HTTP_200_OK)
 
 
@@ -3284,7 +3311,10 @@ class EventFinancialReportView(APIView):
                 'ocupacion_pct': ocupacion_pct,
                 'ingresos_brutos': aggs['ingresos_brutos'],
                 'comisiones': aggs['comisiones'],
-                'ingresos_netos': aggs['ingresos_netos'],
+                
+            'ingresos_netos': aggs['ingresos_netos'],
+            'ingresos_mensuales': ingresos_mensuales,
+
             },
             'desglose_por_tipo': desglose,
             'top_compradores': top_list,
