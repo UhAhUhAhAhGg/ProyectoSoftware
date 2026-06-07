@@ -126,7 +126,8 @@ const DashboardPromotor = () => {
         <button
           className="export-btn"
           onClick={() => {
-            const url = `${api.defaults.baseURL}/promotor/dashboard/summary/export?format=pdf`;
+            const EVENTS_URL = process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002';
+            const url = `${EVENTS_URL}/api/v1/promotor/dashboard/summary/export?format=pdf`;
             window.open(url, '_blank');
           }}
         >
@@ -135,7 +136,8 @@ const DashboardPromotor = () => {
         <button
           className="export-btn"
           onClick={() => {
-            const url = `${api.defaults.baseURL}/promotor/dashboard/summary/export?format=excel`;
+            const EVENTS_URL = process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002';
+            const url = `${EVENTS_URL}/api/v1/promotor/dashboard/summary/export?format=excel`;
             window.open(url, '_blank');
           }}
         >

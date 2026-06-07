@@ -14,6 +14,7 @@ import FormularioEvento from './components/dashboard/eventos/FormularioEvento';
 import ExplorarEventos from './components/dashboard/eventos/ExplorarEventos';
 import DetalleEvento from './components/dashboard/eventos/DetalleEvento';
 import ColaBannerFlotante from './components/dashboard/eventos/ColaBannerFlotante';
+import ReporteEvento from './pages/ReporteEvento';
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
             <Route path="/dashboard/mis-eventos" element={<ListaEventos />} />
             <Route path="/dashboard/crear-evento" element={<FormularioEvento />} />
             <Route path="/dashboard/evento/:id/editar" element={<FormularioEvento />} />
+            <Route path="/dashboard/evento/:id/reporte" element={<ReporteEvento />} />
             {/* TIC-25: admin edita el evento con el mismo formulario + control administrativo */}
             <Route path="/admin/evento/:id/editar" element={<FormularioEvento adminMode={true} />} />
           </Routes>

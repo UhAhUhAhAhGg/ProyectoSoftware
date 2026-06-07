@@ -277,6 +277,13 @@ function ListaEventos() {
                   👁️
                 </button>
                 <Link 
+                  to={`/dashboard/evento/${evento.id}/reporte`} 
+                  className="btn-accion reporte"
+                  title="Ver Reporte Financiero"
+                >
+                  📊
+                </Link>
+                <Link 
                   to={`/dashboard/evento/${evento.id}/editar`} 
                   className="btn-accion editar"
                   title="Editar"
