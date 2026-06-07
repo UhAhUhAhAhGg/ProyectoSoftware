@@ -1,0 +1,278 @@
+.pcm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.pcm-modal {
+  background-color: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 800px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.pcm-header {
+  padding: 20px 25px;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background-color: #f8fafc;
+}
+
+.pcm-header h2 {
+  margin: 0 0 5px 0;
+  font-size: 22px;
+  color: #1e293b;
+}
+
+.pcm-evento-nombre {
+  margin: 0;
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.pcm-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #94a3b8;
+  transition: color 0.2s;
+  padding: 5px;
+  border-radius: 50%;
+}
+
+.pcm-close:hover {
+  color: #ef4444;
+  background-color: #fee2e2;
+}
+
+.pcm-error {
+  margin: 15px 25px;
+  padding: 12px 15px;
+  background-color: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+/* Formularios */
+.pcm-form-section {
+  padding: 20px 25px;
+  background-color: #fff;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.pcm-form-section h3 {
+  margin: 0 0 15px 0;
+  font-size: 16px;
+  color: #334155;
+}
+
+.pcm-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.pcm-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pcm-form-row {
+  flex-direction: row;
+  gap: 15px;
+}
+
+.pcm-form-row > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pcm-form label {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.pcm-form input,
+.pcm-form select {
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.pcm-form input:focus,
+.pcm-form select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.pcm-btn-submit {
+  padding: 10px 15px;
+  background-color: #10b981;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+  margin-top: 5px;
+  transition: background-color 0.2s;
+}
+
+.pcm-btn-submit:hover:not(:disabled) {
+  background-color: #059669;
+}
+
+.pcm-btn-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Lista de códigos */
+.pcm-list-section {
+  padding: 20px 25px;
+  flex: 1;
+  overflow-y: auto;
+  background-color: #f8fafc;
+}
+
+.pcm-list-section h3 {
+  margin: 0 0 15px 0;
+  font-size: 16px;
+  color: #334155;
+}
+
+.pcm-loading,
+.pcm-empty {
+  text-align: center;
+  padding: 30px;
+  color: #64748b;
+  font-size: 14px;
+  background: white;
+  border-radius: 8px;
+  border: 1px dashed #cbd5e1;
+}
+
+.pcm-table-wrap {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  overflow-x: auto;
+}
+
+.pcm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.pcm-table th {
+  background-color: #f1f5f9;
+  color: #475569;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 12px;
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.pcm-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+  vertical-align: middle;
+}
+
+.pcm-td-code {
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: 0.5px;
+}
+
+.pcm-status {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.pcm-status.active {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.pcm-status.inactive {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.pcm-td-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.pcm-btn-toggle,
+.pcm-btn-delete {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pcm-btn-toggle {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
+.pcm-btn-toggle:hover {
+  background-color: #e2e8f0;
+  color: #1e293b;
+}
+
+.pcm-btn-delete {
+  background-color: transparent;
+  color: #ef4444;
+  font-size: 14px;
+  padding: 4px;
+}
+
+.pcm-btn-delete:hover {
+  background-color: #fee2e2;
+}
+
+@media (max-width: 640px) {
+  .pcm-form-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+}

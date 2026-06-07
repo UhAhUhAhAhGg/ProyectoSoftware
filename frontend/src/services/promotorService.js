@@ -131,6 +131,29 @@ const PromotorService = {
     );
     return _downloadBlob(res, `financiero_${eventId}.csv`);
   },
+
+  // ---------------------------------------------------------
+  // TIC-514: Gestión de Códigos de Descuento
+  // ---------------------------------------------------------
+  async getPromoCodes(eventId) {
+    const res = await api.get(`${EVENTS_URL}/api/v1/promotor/promo-codes/?event=${eventId}`);
+    return res.data;
+  },
+
+  async createPromoCode(promoData) {
+    const res = await api.post(`${EVENTS_URL}/api/v1/promotor/promo-codes/`, promoData);
+    return res.data;
+  },
+
+  async updatePromoCode(id, updates) {
+    const res = await api.patch(`${EVENTS_URL}/api/v1/promotor/promo-codes/${id}/`, updates);
+    return res.data;
+  },
+
+  async deletePromoCode(id) {
+    await api.delete(`${EVENTS_URL}/api/v1/promotor/promo-codes/${id}/`);
+    return true;
+  }
 };
 
 // Helper para descargar blobs
