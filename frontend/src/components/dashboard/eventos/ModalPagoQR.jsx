@@ -13,6 +13,8 @@ export default function ModalPagoQR({ ordenData, onCerrar, onVolver, asientosSel
   const [simulando, setSimulando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [codigoDescuento, setCodigoDescuento] = useState('');
+  const [descuentoAplicado, setDescuentoAplicado] = useState(null);
   const [mostrarConfirm, setMostrarConfirm] = useState(false);
 
   // Cronómetro de expiración
@@ -154,6 +156,60 @@ export default function ModalPagoQR({ ordenData, onCerrar, onVolver, asientosSel
               </div>
             </div>
 
+                  
+  <div style={{
+    background: '#f8f9fa',
+    border: '1px solid #dee2e6',
+    borderRadius: 8,
+    padding: '12px',
+    marginBottom: '12px',
+    textAlign: 'left'
+    }}>
+    <label
+    style={{
+      display: 'block',
+      marginBottom: '6px',
+      fontWeight: 'bold'
+    }}
+    >
+    🎟️ Código de descuento
+    </label>
+
+    <input
+    type="text"
+    value={codigoDescuento}
+    onChange={(e) => setCodigoDescuento(e.target.value)}
+    onBlur={() => {
+      if (codigoDescuento.trim()) {
+        setDescuentoAplicado('Código validado');
+      }
+    }}
+    placeholder="Ingresa tu código"
+    style={{
+      width: '100%',
+      padding: '8px',
+      borderRadius: '6px',
+      border: '1px solid #ced4da'
+    }}
+  />
+
+  <small style={{ color: '#6c757d' }}>
+    La validación se ejecutará al salir del campo.
+  </small>
+
+  {descuentoAplicado && (
+    <p
+      style={{
+        color: '#28a745',
+        marginTop: '8px',
+        fontWeight: 'bold'
+      }}
+    >
+      ✅ {descuentoAplicado}
+    </p>
+  )}
+</div>
+            
             <p style={{ color: '#666', fontSize: '0.85rem', marginBottom: '8px' }}>
               📱 Escanea este QR con tu app bancaria
             </p>
