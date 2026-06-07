@@ -1,0 +1,408 @@
+/* ═══════════════════════════════════════════════════════════════════
+   ModalFinancieroEvento.css — Modal financiero premium
+   ═══════════════════════════════════════════════════════════════════ */
+
+.mfe-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: mfe-fadeIn 0.2s ease;
+}
+
+@keyframes mfe-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.mfe-modal {
+  background: #fff;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.2);
+  animation: mfe-slideUp 0.3s ease;
+}
+
+@keyframes mfe-slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+.mfe-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 24px 28px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  background: linear-gradient(135deg, #f8fafc, #eef2ff);
+  border-radius: 20px 20px 0 0;
+}
+
+.mfe-header h2 {
+  margin: 0 0 4px 0;
+  font-size: 1.2rem;
+  color: #1e293b;
+}
+
+.mfe-evento-nombre {
+  margin: 0 0 6px 0;
+  font-size: 0.95rem;
+  color: #AD8149;
+  font-weight: 600;
+}
+
+.mfe-header-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.mfe-close {
+  background: rgba(0,0,0,0.05);
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  transition: all 0.15s;
+}
+
+.mfe-close:hover {
+  background: rgba(0,0,0,0.1);
+  color: #1e293b;
+}
+
+/* ── Body ───────────────────────────────────────────────── */
+.mfe-body {
+  padding: 24px 28px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── KPIs ───────────────────────────────────────────────── */
+.mfe-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.mfe-kpi {
+  display: flex;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+}
+
+.mfe-kpi-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.mfe-kpi-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mfe-kpi-label {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.mfe-kpi-value {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.mfe-kpi-brutos .mfe-kpi-value { color: #2563eb; }
+.mfe-kpi-comisiones .mfe-kpi-value { color: #dc2626; }
+.mfe-kpi-netos .mfe-kpi-value { color: #16a34a; }
+.mfe-kpi-ocupacion .mfe-kpi-value { color: #7c3aed; }
+
+.mfe-kpi-bar {
+  height: 5px;
+  background: #e2e8f0;
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.mfe-kpi-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #a78bfa);
+  border-radius: 99px;
+  transition: width 0.5s ease;
+}
+
+.mfe-kpi-subtext {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+/* ── Secciones ──────────────────────────────────────────── */
+.mfe-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 0.95rem;
+  color: #334155;
+  font-weight: 700;
+}
+
+/* ── Tabla ───────────────────────────────────────────────── */
+.mfe-table-wrap {
+  overflow-x: auto;
+}
+
+.mfe-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.mfe-table th {
+  background: #f8fafc;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.3px;
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.mfe-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+}
+
+.mfe-table tr:hover td {
+  background: #fafafe;
+}
+
+.mfe-td-nombre {
+  font-weight: 600;
+}
+
+.mfe-vip-badge {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+  font-size: 0.6rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.mfe-td-money {
+  font-weight: 700;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.mfe-td-comision { color: #dc2626; }
+.mfe-td-neto { color: #16a34a; }
+
+.mfe-mini-bar {
+  display: inline-block;
+  width: 50px;
+  height: 5px;
+  background: #e2e8f0;
+  border-radius: 99px;
+  overflow: hidden;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.mfe-mini-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+}
+
+.mfe-mini-pct {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+/* ── Gráfico ────────────────────────────────────────────── */
+.mfe-chart-wrap {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #f1f5f9;
+}
+
+/* ── Top Compradores ────────────────────────────────────── */
+.mfe-top-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mfe-top-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #f1f5f9;
+}
+
+.mfe-top-rank {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #AD8149;
+  min-width: 30px;
+}
+
+.mfe-top-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.mfe-top-user {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.mfe-top-tickets {
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.mfe-top-gasto {
+  font-weight: 800;
+  color: #16a34a;
+  font-size: 0.9rem;
+}
+
+/* ── Acciones ───────────────────────────────────────────── */
+.mfe-acciones-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.mfe-action-btn {
+  padding: 12px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #fff;
+  color: #334155;
+  text-decoration: none;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  position: relative;
+}
+
+.mfe-action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.mfe-action-export {
+  background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.mfe-action-export:hover:not(:disabled) {
+  background: linear-gradient(135deg, #dcfce7, #d1fae5);
+}
+
+.mfe-action-compradores {
+  background: linear-gradient(135deg, #f5f0ea, #efe6da);
+  border-color: #e0d1c1;
+  color: #8f6734;
+}
+
+.mfe-action-compradores:hover {
+  background: linear-gradient(135deg, #efe6da, #e0d1c1);
+}
+
+.mfe-action-editar {
+  background: linear-gradient(135deg, #fff7ed, #fef3c7);
+  border-color: #fed7aa;
+  color: #92400e;
+}
+
+.mfe-action-editar:hover {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+}
+
+.mfe-action-disabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+  position: relative;
+}
+
+.mfe-proximamente {
+  position: absolute;
+  top: -8px;
+  right: -4px;
+  background: linear-gradient(135deg, #AD8149, #EABF0B);
+  color: #fff;
+  font-size: 0.6rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 700px) {
+  .mfe-kpis {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mfe-acciones-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mfe-modal {
+    max-height: 95vh;
+    border-radius: 14px;
+  }
+
+  .mfe-header {
+    padding: 18px 20px 12px;
+  }
+
+  .mfe-body {
+    padding: 18px 20px;
+  }
+}

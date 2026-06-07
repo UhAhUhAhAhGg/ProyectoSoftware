@@ -14,10 +14,15 @@ function SuperAdminComisiones() {
       try {
         const data = await settingsService.getCommissionSettings();
         if (!mounted || !data) return;
-        // Esperamos una forma como: { mode: 'porcentaje', percentage: 5, fixed: 0 }
-        if (data.mode) setMode(data.mode);
-        if (typeof data.percentage === 'number') setPercentage(data.percentage);
-        if (typeof data.fixed === 'number') setFixed(data.fixed);
+        // Esperamos una forma como: { commission: { commission_type, percentage_value, fixed_value }, configured: true }
+        if (data.configured && data.commission) {
+          const c = data.commission;
+          if (c.commission_type) setMode(c.commission_type);
+          if (typeof c.percentage_value === 'number') setPercentage(c.percentage_value);
+          else if (typeof c.percentage_value === 'string') setPercentage(parseFloat(c.percentage_value));
+          if (typeof c.fixed_value === 'number') setFixed(c.fixed_value);
+          else if (typeof c.fixed_value === 'string') setFixed(parseFloat(c.fixed_value));
+        }
       } catch (err) {
         console.warn('No hay config de comisiones en el backend o hubo error');
       }
@@ -46,7 +51,11 @@ function SuperAdminComisiones() {
     if (!validate()) return;
     setLoading(true);
     try {
-      const payload = { mode, percentage: Number(percentage), fixed: Number(fixed) };
+      const payload = { 
+        commission_type: mode, 
+        percentage_value: Number(percentage), 
+        fixed_value: Number(fixed) 
+      };
       await settingsService.updateCommissionSettings(payload);
       setMessage('Configuración de comisiones guardada correctamente.');
     } catch (err) {

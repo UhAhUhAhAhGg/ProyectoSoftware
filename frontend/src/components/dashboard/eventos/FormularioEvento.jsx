@@ -11,8 +11,9 @@ import './FormularioEvento.css';
 // adminMode=true: el SuperAdmin/Admin edita un evento de cualquier promotor.
 // Reusa todo el formulario del promotor y agrega secciones administrativas
 // (Control Administrativo, Notas) abajo, antes del Gestor de Tipos de Entrada.
-function FormularioEvento({ adminMode = false }) {
-  const { id } = useParams(); // Si hay ID, es edición
+function FormularioEvento({ adminMode = false, eventId = null, onClose = null }) {
+  const params = useParams();
+  const id = eventId || params.id; // Si hay eventId por prop, usarlo, sino usar useParams
   const navigate = useNavigate();
   const { user } = useAuth();
   const isEditing = !!id;
@@ -274,9 +275,9 @@ function FormularioEvento({ adminMode = false }) {
           }
           alert('✅ Evento creado exitosamente');
         }
-        // En adminMode el destino /admin/dashboard vive en Next.js App Router,
-        // asi que navigate() de react-router no basta — forzamos full reload.
-        if (adminMode) {
+        if (onClose) {
+          onClose(); // Cerrar modal si se pasó onClose
+        } else if (adminMode) {
           window.location.href = '/admin/dashboard';
         } else {
           navigate('/dashboard/mis-eventos');
@@ -312,7 +313,9 @@ function FormularioEvento({ adminMode = false }) {
     TAB_FIELDS[tab].some((f) => !!errores[f]);
 
   const handleCancelar = () => {
-    if (adminMode) {
+    if (onClose) {
+      onClose(); // Cerrar modal
+    } else if (adminMode) {
       window.location.href = '/admin/dashboard';
     } else {
       navigate('/dashboard/mis-eventos');
