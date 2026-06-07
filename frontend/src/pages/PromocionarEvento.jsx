@@ -36,9 +36,10 @@ const PLANES = [
   }
 ];
 
-export default function PromocionarEvento() {
-  const { id: eventoId } = useParams();
+export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
+  const params = useParams();
   const navigate = useNavigate();
+  const eventoId = propEventoId || params.id;
   const { user } = useAuth();
   
   const [planSeleccionado, setPlanSeleccionado] = useState(null);
@@ -105,9 +106,10 @@ export default function PromocionarEvento() {
         comprobante: comprobante
       });
 
-      // Mostrar éxito y redirigir
+      // Mostrar éxito y redirigir o cerrar
       alert(`✅ ¡Evento promocionado exitosamente!\nPlan ${planSeleccionado.nombre} activado por ${planSeleccionado.duracion}`);
-      navigate('/dashboard/mis-eventos');
+      if (onClose) onClose();
+      else navigate('/dashboard/mis-eventos');
     } catch (err) {
       setError(err.message || 'Error al confirmar la promoción. Intenta de nuevo.');
       console.error(err);
@@ -132,10 +134,17 @@ export default function PromocionarEvento() {
   }
 
   return (
-    <div className="promocionar-evento">
+    <div className={`promocionar-overlay ${onClose ? 'is-modal' : ''}`} onClick={() => onClose && onClose()}>
+      <div className={`promocionar-evento ${onClose ? 'as-modal' : ''}`} onClick={e => e.stopPropagation()}>
       {/* Header */}
       <div className="promocionar-header">
-        <button className="btn-volver" onClick={() => navigate('/dashboard/mis-eventos')}>
+        <button 
+          className="btn-volver" 
+          onClick={() => {
+            if (onClose) onClose();
+            else navigate('/dashboard/mis-eventos');
+          }}
+        >
           ← Volver
         </button>
         <div>
@@ -244,7 +253,10 @@ export default function PromocionarEvento() {
       <div className="acciones-footer">
         <button 
           className="btn-cancelar"
-          onClick={() => navigate('/dashboard/mis-eventos')}
+          onClick={() => {
+            if (onClose) onClose();
+            else navigate('/dashboard/mis-eventos');
+          }}
           disabled={loading}
         >
           Cancelar
@@ -268,6 +280,7 @@ export default function PromocionarEvento() {
           concepto={`Promoción ${planSeleccionado?.nombre} - Evento #${eventoId}`}
         />
       )}
+      </div>
     </div>
   );
 }

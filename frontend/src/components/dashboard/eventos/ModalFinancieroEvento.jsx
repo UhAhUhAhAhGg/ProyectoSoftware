@@ -3,12 +3,16 @@ import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import PromotorService from '../../../services/promotorService';
 import ListaCompradoresModal from './ListaCompradoresModal';
+import PromocionarEvento from '../../../pages/PromocionarEvento';
+import PromocodesModal from './PromocodesModal';
 import './ModalFinancieroEvento.css';
 
 const COLORS = ['#6366f1', '#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#818cf8'];
 
 function ModalFinancieroEvento({ evento, financiero, onClose }) {
   const [showCompradores, setShowCompradores] = useState(false);
+  const [showPromocionar, setShowPromocionar] = useState(false);
+  const [showPromocodes, setShowPromocodes] = useState(false);
   const [exportando, setExportando] = useState(null);
 
   if (!evento) return null;
@@ -48,6 +52,25 @@ function ModalFinancieroEvento({ evento, financiero, onClose }) {
         eventoNombre={evento.nombre}
         onClose={() => setShowCompradores(false)}
         onBack={() => setShowCompradores(false)}
+      />
+    );
+  }
+
+  if (showPromocionar) {
+    return (
+      <PromocionarEvento
+        eventoId={evento.id}
+        onClose={() => setShowPromocionar(false)}
+      />
+    );
+  }
+
+  if (showPromocodes) {
+    return (
+      <PromocodesModal
+        eventId={evento.id}
+        eventoNombre={evento.nombre}
+        onClose={() => setShowPromocodes(false)}
       />
     );
   }
@@ -215,16 +238,22 @@ function ModalFinancieroEvento({ evento, financiero, onClose }) {
                 ✏️ Editar Evento
               </Link>
 
-              {/* TIC-35: Próximamente */}
-              <button className="mfe-action-btn mfe-action-disabled" disabled title="Próximamente">
+              {/* TIC-35: Códigos de Descuento */}
+              <button 
+                className="mfe-action-btn" 
+                style={{ background: '#10b981', color: 'white' }}
+                onClick={() => setShowPromocodes(true)}
+              >
                 🏷️ Crear Código de Descuento
-                <span className="mfe-proximamente">Próximamente</span>
               </button>
 
-              {/* TIC-570: Próximamente */}
-              <button className="mfe-action-btn mfe-action-disabled" disabled title="Próximamente">
+              {/* TIC-570: Destacar Evento */}
+              <button 
+                className="mfe-action-btn"
+                style={{ background: '#eab308', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onClick={() => setShowPromocionar(true)}
+              >
                 ⭐ Destacar Evento
-                <span className="mfe-proximamente">Próximamente</span>
               </button>
             </div>
           </div>
