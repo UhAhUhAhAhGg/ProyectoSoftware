@@ -25,6 +25,31 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
   const [error, setError] = useState('');
   const [capacidadDisponible, setCapacidadDisponible] = useState(0);
 
+  //filtros preparados para búsqueda de compradores
+const [busquedaComprador, setBusquedaComprador] = useState('');
+const [tipoEntradaFiltro, setTipoEntradaFiltro] = useState('');
+const [fechaInicioFiltro, setFechaInicioFiltro] = useState('');
+const [fechaFinFiltro, setFechaFinFiltro] = useState('');
+
+// debounce 300ms
+useEffect(() => {
+  const timer = setTimeout(() => {
+    console.log('Aplicando filtros de compradores...', {
+      busquedaComprador,
+      tipoEntradaFiltro,
+      fechaInicioFiltro,
+      fechaFinFiltro,
+    });
+  }, 300);
+
+  return () => clearTimeout(timer);
+}, [
+  busquedaComprador,
+  tipoEntradaFiltro,
+  fechaInicioFiltro,
+  fechaFinFiltro,
+]);
+
   const cargarTiposEntrada = useCallback(async () => {
     if (!eventoId) return;
     setCargando(true);
@@ -187,6 +212,37 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
         compact
       />
 
+      {/* US33 - Barra de búsqueda y filtros */}
+<div className="filtros-compradores-demo">
+  <input
+    type="text"
+    placeholder="Buscar comprador..."
+    value={busquedaComprador}
+    onChange={(e) => setBusquedaComprador(e.target.value)}
+  />
+
+  <select
+    value={tipoEntradaFiltro}
+    onChange={(e) => setTipoEntradaFiltro(e.target.value)}
+  >
+    <option value="">Todos los tipos</option>
+    <option value="general">General</option>
+    <option value="vip">VIP</option>
+    <option value="platea">Platea</option>
+  </select>
+
+  <input
+    type="date"
+    value={fechaInicioFiltro}
+    onChange={(e) => setFechaInicioFiltro(e.target.value)}
+  />
+
+  <input
+    type="date"
+    value={fechaFinFiltro}
+    onChange={(e) => setFechaFinFiltro(e.target.value)}
+  />
+</div>
       <div className="tipos-filtros">
         <button 
           className={`filtro-btn ${filtro === 'activos' ? 'activo' : ''}`}
