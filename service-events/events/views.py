@@ -3315,9 +3315,9 @@ class EventFinancialReportView(APIView):
                 'ingresos_brutos': aggs['ingresos_brutos'],
                 'comisiones': aggs['comisiones'],
                 'ingresos_netos': aggs['ingresos_netos'],
-                'ingresos_mensuales': ingresos_mensuales,
-                'top_compradores': top_list,
             },
+            'desglose_por_tipo': desglose,
+            'top_compradores': top_list,
         }, status=status.HTTP_200_OK)
 
 
@@ -3462,29 +3462,20 @@ class EventBuyersListView(APIView):
 
         return Response({
             'status': 'success',
-            'evento': {
-                'id': str(evento.id),
-                'nombre': evento.name,
-                'fecha': str(evento.event_date),
-                'hora': str(evento.event_time) if evento.event_time else None,
-                'location': evento.location,
-                'estado': evento.status,
-                'admin_status': evento.admin_status,
-                'capacidad': evento.capacity,
+            'resumen': {
+                'total_compradores': compradores_unicos,
+                'total_tickets': total_tickets,
+                'total_ingresos': total_ingresos,
             },
-            'resumen_financiero': {
-                'total_tickets_vendidos': total_tickets,
-                'total_compradores': total_compradores,
-                'ocupacion_pct': ocupacion_pct,
-                'ingresos_brutos': aggs['ingresos_brutos'],
-                'comisiones': aggs['comisiones'],
-                
-            'ingresos_netos': aggs['ingresos_netos'],
-            'ingresos_mensuales': ingresos_mensuales,
-
+            'paginacion': {
+                'count': total_count,
+                'total_pages': total_pages,
+                'page': page_num,
+                'page_size': page_size,
+                'next': _page_url(page_num + 1) if page_obj.has_next() else None,
+                'previous': _page_url(page_num - 1) if page_obj.has_previous() else None,
             },
-            'desglose_por_tipo': desglose,
-            'top_compradores': top_list,
+            'results': results,
         }, status=status.HTTP_200_OK)
 
 

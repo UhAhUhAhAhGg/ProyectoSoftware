@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
 import { useAuth } from '../../../context/AuthContext';
+import EventoCardFinanciero from './EventoCardFinanciero';
+import ModalFinancieroEvento from './ModalFinancieroEvento';
+import FormularioEvento from './FormularioEvento';
 import ConfiguracionCola from './ConfiguracionCola';
 import './ListaEventos.css';
 
@@ -14,12 +17,17 @@ function ListaEventos() {
   const [mostrarModal, setMostrarModal] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [eventoDetalle, setEventoDetalle] = useState(null);
+  const [eventoAEditarId, setEventoAEditarId] = useState(null);
+
+  // Modal financiero
+  const [modalEvento, setModalEvento] = useState(null);
+  const [modalFinanciero, setModalFinanciero] = useState(null);
 
   useEffect(() => {
-    cargarEventos();
+    fetchEventos();
   }, [user]);
 
-  const cargarEventos = async () => {
+  const fetchEventos = async () => {
     setCargando(true);
     try {
       const eventosData = await eventosService.getEventosByPromotor(user?.id);
@@ -30,6 +38,8 @@ function ListaEventos() {
       setCargando(false);
     }
   };
+
+  const cargarEventos = fetchEventos; // alias de compatibilidad
 
   const handleEliminarClick = (evento) => {
     setEventoAEliminar(evento);
@@ -43,7 +53,7 @@ function ListaEventos() {
       } catch (err) {
         alert(err.message || 'No se pudo cancelar el evento.');
       }
-      cargarEventos();
+      fetchEventos();
       setMostrarModal(false);
       setEventoAEliminar(null);
     }
@@ -60,40 +70,7 @@ function ListaEventos() {
     } catch (err) {
       alert(err.message || 'No se pudo restaurar el evento.');
     }
-    cargarEventos();
-  };
-
-  // Filtrar eventos
-  const eventosFiltrados = eventos.filter(evento => {
-    // Filtro por estado
-    if (filtro !== 'todos' && evento.estado !== filtro) return false;
-    
-    // Búsqueda por nombre o ubicación
-    if (busqueda) {
-      const termino = busqueda.toLowerCase();
-      return evento.nombre.toLowerCase().includes(termino) ||
-             evento.ubicacion.toLowerCase().includes(termino) ||
-             evento.ciudad.toLowerCase().includes(termino);
-    }
-    
-    return true;
-  });
-
-  const getEstadoBadge = (estado) => {
-    switch(estado) {
-      case 'activo':
-        return <span className="badge activo">Activo</span>;
-      case 'finalizado':
-        return <span className="badge finalizado">Finalizado</span>;
-      case 'cancelado':
-        return <span className="badge cancelado">Cancelado</span>;
-      default:
-        return <span className="badge">{estado}</span>;
-    }
-  };
-
-  const getProgresoVentas = (vendidos, capacidad) => {
-    return Math.round((vendidos / capacidad) * 100);
+    fetchEventos();
   };
 
   const getRangoPrecios = (evento) => {
@@ -106,28 +83,35 @@ function ListaEventos() {
     return min === max ? `Desde $${min}` : `$${min} - $${max}`;
   };
 
-  const exportarHistorialCSV = async () => {
-  try {
-    const response = await fetch(
-      'http://localhost:8000/api/auditoria/exportar-csv/'
-    );
+  const handleVerDetalle = (evento, financiero) => {
+    setModalEvento(evento);
+    setModalFinanciero(financiero);
+  };
 
-    const blob = await response.blob();
+  const handleCloseModal = () => {
+    setModalEvento(null);
+    setModalFinanciero(null);
+  };
 
-    const url = window.URL.createObjectURL(blob);
+  // Filtrar eventos
+  const eventosFiltrados = eventos.filter(evento => {
+    if (filtro !== 'todos' && evento.estado !== filtro) return false;
+    if (busqueda) {
+      const termino = busqueda.toLowerCase();
+      return evento.nombre.toLowerCase().includes(termino) ||
+             (evento.ubicacion || '').toLowerCase().includes(termino) ||
+             (evento.ciudad || '').toLowerCase().includes(termino);
+    }
+    return true;
+  });
 
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'historial_auditoria.csv';
-
-    document.body.appendChild(link);
-    link.click();
-
-    link.remove();
-  } catch (error) {
-    alert('Error al exportar historial');
-  }
-};
+  // Contadores por estado
+  const contadores = {
+    todos: eventos.length,
+    activo: eventos.filter(e => e.estado === 'activo').length,
+    finalizado: eventos.filter(e => e.estado === 'finalizado').length,
+    cancelado: eventos.filter(e => e.estado === 'cancelado').length,
+  };
 
   if (cargando) {
     return (
@@ -169,34 +153,25 @@ function ListaEventos() {
         </div>
 
         <div className="filtros-tabs">
-          <button 
-            className={`filtro-tab ${filtro === 'todos' ? 'activo' : ''}`}
-            onClick={() => setFiltro('todos')}
-          >
-            Todos
-          </button>
-          <button 
-            className={`filtro-tab ${filtro === 'activo' ? 'activo' : ''}`}
-            onClick={() => setFiltro('activo')}
-          >
-            Activos
-          </button>
-          <button 
-            className={`filtro-tab ${filtro === 'finalizado' ? 'activo' : ''}`}
-            onClick={() => setFiltro('finalizado')}
-          >
-            Finalizados
-          </button>
-          <button 
-            className={`filtro-tab ${filtro === 'cancelado' ? 'activo' : ''}`}
-            onClick={() => setFiltro('cancelado')}
-          >
-            Cancelados
-          </button>
+          {[
+            { key: 'todos', label: 'Todos' },
+            { key: 'activo', label: 'Activos' },
+            { key: 'finalizado', label: 'Finalizados' },
+            { key: 'cancelado', label: 'Cancelados' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              className={`filtro-tab ${filtro === tab.key ? 'activo' : ''}`}
+              onClick={() => setFiltro(tab.key)}
+            >
+              {tab.label}
+              <span className="filtro-count">{contadores[tab.key]}</span>
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Grid de eventos */}
+      {/* Lista de eventos — tarjetas horizontales */}
       {eventosFiltrados.length === 0 ? (
         <div className="no-eventos">
           <div className="no-eventos-icono">📅</div>
@@ -207,108 +182,17 @@ function ListaEventos() {
           </Link>
         </div>
       ) : (
-        <div className="eventos-grid">
+        <div className="eventos-list-vertical">
           {eventosFiltrados.map(evento => (
-            <div key={evento.id} className={`evento-card ${evento.estado}`}>
-              <div className="evento-imagen">
-                <img 
-                  src={typeof evento.imagen === 'string' ? evento.imagen : 'https://via.placeholder.com/300x200?text=Sin+Imagen'} 
-                  alt={evento.nombre} 
-                  onError={(e) => { e.target.onerror = null; e.target.src = "https://via.placeholder.com/300x200?text=Sin+Imagen" }}
-                />
-                <div className="evento-estado-badge">
-                  {getEstadoBadge(evento.estado)}
-                </div>
-              </div>
-
-              <div className="evento-info">
-                <h3>{evento.nombre}</h3>
-                {evento.categoriaNombre && (
-                  <div style={{ display: 'inline-block', background: '#e0e0e0', color: '#333', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', marginBottom: '10px' }}>
-                    🏷️ {evento.categoriaNombre}
-                  </div>
-                )}
-                
-                <div className="evento-detalles">
-                  <p className="evento-fecha">
-                    <span className="detalle-icono">📅</span>
-                    {new Date(evento.fecha).toLocaleDateString('es-ES', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })} - {evento.hora}
-                  </p>
-                  <p className="evento-ubicacion">
-                    <span className="detalle-icono">📍</span>
-                    {evento.ubicacion}, {evento.ciudad}
-                  </p>
-                  <p className="evento-descripcion">{evento.descripcion}</p>
-                </div>
-
-                <div className="evento-stats">
-                  <div className="stat-ventas">
-                    <div className="stat-header">
-                      <span>Ventas</span>
-                      <span className="stat-numero">
-                        {evento.boletosVendidos}/{evento.capacidad}
-                      </span>
-                    </div>
-                    <div className="progreso-bar">
-                      <div 
-                        className="progreso-fill"
-                        style={{ width: `${getProgresoVentas(evento.boletosVendidos, evento.capacidad)}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                  <div className="stat-precio">
-                    <span className="precio-label">Entradas</span>
-                    <span className="precio-valor">{getRangoPrecios(evento)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="evento-acciones">
-                <button 
-                  onClick={() => setEventoDetalle(evento)} 
-                  className="btn-accion ver"
-                  title="Ver detalles"
-                >
-                  👁️
-                </button>
-                <Link 
-                  to={`/dashboard/evento/${evento.id}/reporte`} 
-                  className="btn-accion reporte"
-                  title="Ver Reporte Financiero"
-                >
-                  📊
-                </Link>
-                <Link 
-                  to={`/dashboard/evento/${evento.id}/editar`} 
-                  className="btn-accion editar"
-                  title="Editar"
-                >
-                  ✏️
-                </Link>
-                {evento.estado === 'activo' ? (
-                  <button 
-                    className="btn-accion eliminar"
-                    onClick={() => handleEliminarClick(evento)}
-                    title="Cancelar evento"
-                  >
-                    🗑️
-                  </button>
-                ) : evento.estado === 'cancelado' ? (
-                  <button 
-                    className="btn-accion restaurar"
-                    onClick={() => handleRestaurar(evento.id)}
-                    title="Restaurar evento"
-                  >
-                    🔄
-                  </button>
-                ) : null}
-              </div>
-            </div>
+            <EventoCardFinanciero
+              key={evento.id}
+              evento={evento}
+              onVerDetalle={handleVerDetalle}
+              onVerDetalleGeneral={(ev) => setEventoDetalle(ev)}
+              onEditar={(id) => setEventoAEditarId(id)}
+              onEliminar={handleEliminarClick}
+              onRestaurar={handleRestaurar}
+            />
           ))}
         </div>
       )}
@@ -337,6 +221,15 @@ function ListaEventos() {
         </div>
       )}
 
+      {/* Modal Financiero Detalle (TIC-30 + TIC-33 + TIC-36) */}
+      {modalEvento && (
+        <ModalFinancieroEvento
+          evento={modalEvento}
+          financiero={modalFinanciero}
+          onClose={handleCloseModal}
+        />
+      )}
+
       {/* Modal Detalles del Evento (Miniventana) */}
       {eventoDetalle && (
         <DetalleEventoModal 
@@ -345,6 +238,47 @@ function ListaEventos() {
           getRangoPrecios={getRangoPrecios}
           user={user}
         />
+      )}
+
+      {/* Modal Editar Evento */}
+      {eventoAEditarId && (
+        <div
+          className="modal-overlay modal-overlay-scroll"
+          style={{ zIndex: 1000 }}
+          onClick={() => setEventoAEditarId(null)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '20px',
+              maxWidth: '1050px',
+              width: '95%',
+              position: 'relative',
+              overflow: 'hidden',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setEventoAEditarId(null)}
+              style={{
+                position: 'absolute', top: '14px', right: '18px',
+                background: 'none', border: 'none', fontSize: '2rem',
+                cursor: 'pointer', zIndex: 1001, color: '#64748b', lineHeight: 1,
+              }}
+              title="Cerrar"
+            >&times;</button>
+            <div style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+              <FormularioEvento
+                eventId={eventoAEditarId}
+                onClose={() => {
+                  setEventoAEditarId(null);
+                  fetchEventos();
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -411,49 +345,48 @@ function DetalleEventoModal({ evento, onClose, getRangoPrecios, user }) {
           )}
         </div>
 
-        {/* Configuración de Cola Virtual */}
         {/* Historial de cambios */}
-<div style={{
-  background: '#f8f8f8',
-  padding: '12px',
-  borderRadius: '8px',
-  marginTop: '14px',
-  marginBottom: '14px'
-}}>
-  <h4 style={{ marginBottom: '10px', fontSize: '0.95rem' }}>
-    🕘 Historial de Cambios
-  </h4>
+        <div style={{
+          background: '#f8f8f8',
+          padding: '12px',
+          borderRadius: '8px',
+          marginTop: '14px',
+          marginBottom: '14px'
+        }}>
+          <h4 style={{ marginBottom: '10px', fontSize: '0.95rem' }}>
+            🕘 Historial de Cambios
+          </h4>
 
-  <div style={{
-    borderBottom: '1px solid #ddd',
-    paddingBottom: '8px',
-    marginBottom: '8px',
-    fontSize: '0.85rem'
-  }}>
-    <strong>Campo:</strong> Nombre<br />
-    <strong>Anterior:</strong> Festival Primavera<br />
-    <strong>Nuevo:</strong> Festival Primavera 2026
-  </div>
+          <div style={{
+            borderBottom: '1px solid #ddd',
+            paddingBottom: '8px',
+            marginBottom: '8px',
+            fontSize: '0.85rem'
+          }}>
+            <strong>Campo:</strong> Nombre<br />
+            <strong>Anterior:</strong> Festival Primavera<br />
+            <strong>Nuevo:</strong> Festival Primavera 2026
+          </div>
 
-  <div style={{
-    borderBottom: '1px solid #ddd',
-    paddingBottom: '8px',
-    marginBottom: '8px',
-    fontSize: '0.85rem'
-  }}>
-    <strong>Campo:</strong> Capacidad<br />
-    <strong>Anterior:</strong> 500<br />
-    <strong>Nuevo:</strong> 650
-  </div>
+          <div style={{
+            borderBottom: '1px solid #ddd',
+            paddingBottom: '8px',
+            marginBottom: '8px',
+            fontSize: '0.85rem'
+          }}>
+            <strong>Campo:</strong> Capacidad<br />
+            <strong>Anterior:</strong> 500<br />
+            <strong>Nuevo:</strong> 650
+          </div>
 
-  <div style={{
-    fontSize: '0.85rem'
-  }}>
-    <strong>Campo:</strong> Ubicación<br />
-    <strong>Anterior:</strong> Teatro Municipal<br />
-    <strong>Nuevo:</strong> Arena Central
-  </div>
-</div>
+          <div style={{
+            fontSize: '0.85rem'
+          }}>
+            <strong>Campo:</strong> Ubicación<br />
+            <strong>Anterior:</strong> Teatro Municipal<br />
+            <strong>Nuevo:</strong> Arena Central
+          </div>
+        </div>
         <ConfiguracionCola
           eventoId={evento.id}
           promotorId={evento.promotorId}
