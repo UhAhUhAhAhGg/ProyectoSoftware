@@ -39,8 +39,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db.models import Q
 from rest_framework.generics import ListAPIView
-from .models import Event, Ticket
-from django_filters.rest_framework import DjangoFilterBackend
 from .models import Event, EventAuditLog
 from .serializers import EventSerializer
 from .permissions import IsAdministrador, IsPromotor, IsComprador, IsAdminWithAudit, HasAdminCapability, IsSuperadmin
