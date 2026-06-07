@@ -1,0 +1,496 @@
+/* ═══════════════════════════════════════════════════════════════
+   DashboardPromotorAdmin.css
+   Sigue el patrón de AdminVentas.css / AdminAuditoria.css
+   Variables CSS heredadas del tema global del proyecto
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Variables locales (fallback si no hay tema global) ────────── */
+:root {
+  --dpa-bg: #0f1117;
+  --dpa-surface: #1a1d27;
+  --dpa-surface-2: #22263a;
+  --dpa-border: #2e3248;
+  --dpa-text: #e8eaf0;
+  --dpa-text-muted: #7b82a0;
+  --dpa-primary: #6c8aff;
+  --dpa-primary-dim: rgba(108, 138, 255, 0.12);
+  --dpa-success: #3ecf8e;
+  --dpa-success-dim: rgba(62, 207, 142, 0.12);
+  --dpa-warning: #f5a623;
+  --dpa-warning-dim: rgba(245, 166, 35, 0.12);
+  --dpa-danger: #ff5c5c;
+  --dpa-danger-dim: rgba(255, 92, 92, 0.12);
+  --dpa-radius: 10px;
+  --dpa-radius-sm: 6px;
+  --dpa-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  --dpa-font: "DM Sans", "Segoe UI", system-ui, sans-serif;
+}
+
+/* ── Wrapper principal ─────────────────────────────────────────── */
+.dpa-wrapper {
+  font-family: var(--dpa-font);
+  color: var(--dpa-text);
+  background: var(--dpa-bg);
+  min-height: 100vh;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  animation: dpa-fade-in 0.3s ease;
+}
+
+@keyframes dpa-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Header ────────────────────────────────────────────────────── */
+.dpa-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.dpa-header__left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dpa-header__identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dpa-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--dpa-primary-dim);
+  border: 2px solid var(--dpa-primary);
+  color: var(--dpa-primary);
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dpa-header__title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 2px;
+  color: var(--dpa-text);
+}
+
+.dpa-header__subtitle {
+  font-size: 13px;
+  color: var(--dpa-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ── Insignia solo lectura ─────────────────────────────────────── */
+.dpa-readonly-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--dpa-warning-dim);
+  color: var(--dpa-warning);
+  border: 1px solid rgba(245, 166, 35, 0.3);
+  flex-shrink: 0;
+}
+
+/* ── Tarjetas de métricas ───────────────────────────────────────── */
+.dpa-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.dpa-metric-card {
+  background: var(--dpa-surface);
+  border: 1px solid var(--dpa-border);
+  border-radius: var(--dpa-radius);
+  padding: 20px 22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  box-shadow: var(--dpa-shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dpa-metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+.dpa-metric-card__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--dpa-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Variantes de color */
+.dpa-metric-card--primary .dpa-metric-card__icon {
+  background: var(--dpa-primary-dim);
+  color: var(--dpa-primary);
+}
+.dpa-metric-card--success .dpa-metric-card__icon {
+  background: var(--dpa-success-dim);
+  color: var(--dpa-success);
+}
+.dpa-metric-card--warning .dpa-metric-card__icon {
+  background: var(--dpa-warning-dim);
+  color: var(--dpa-warning);
+}
+.dpa-metric-card--default .dpa-metric-card__icon {
+  background: var(--dpa-surface-2);
+  color: var(--dpa-text-muted);
+}
+
+.dpa-metric-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dpa-metric-card__label {
+  font-size: 12px;
+  color: var(--dpa-text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dpa-metric-card__value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dpa-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dpa-metric-card__sublabel {
+  font-size: 11px;
+  color: var(--dpa-text-muted);
+}
+
+/* ── Sección ───────────────────────────────────────────────────── */
+.dpa-section {
+  background: var(--dpa-surface);
+  border: 1px solid var(--dpa-border);
+  border-radius: var(--dpa-radius);
+  overflow: hidden;
+  box-shadow: var(--dpa-shadow);
+}
+
+.dpa-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--dpa-border);
+}
+
+.dpa-section__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dpa-text);
+  margin: 0;
+}
+
+/* ── Filtros ───────────────────────────────────────────────────── */
+.dpa-filter-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dpa-filter-btn {
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--dpa-border);
+  background: transparent;
+  color: var(--dpa-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  font-family: var(--dpa-font);
+}
+
+.dpa-filter-btn:hover {
+  border-color: var(--dpa-primary);
+  color: var(--dpa-primary);
+}
+
+.dpa-filter-btn--active {
+  background: var(--dpa-primary-dim);
+  border-color: var(--dpa-primary);
+  color: var(--dpa-primary);
+  font-weight: 600;
+}
+
+/* ── Tabla ─────────────────────────────────────────────────────── */
+.dpa-table-wrapper {
+  overflow-x: auto;
+}
+
+.dpa-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.dpa-table__th {
+  padding: 11px 18px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dpa-text-muted);
+  background: var(--dpa-surface-2);
+  border-bottom: 1px solid var(--dpa-border);
+  white-space: nowrap;
+}
+
+.dpa-table__row {
+  border-bottom: 1px solid var(--dpa-border);
+  transition: background 0.15s ease;
+}
+
+.dpa-table__row:last-child {
+  border-bottom: none;
+}
+
+.dpa-table__row:hover {
+  background: var(--dpa-surface-2);
+}
+
+.dpa-table__cell {
+  padding: 14px 18px;
+  color: var(--dpa-text);
+  vertical-align: middle;
+}
+
+.dpa-table__cell--name {
+  min-width: 200px;
+}
+
+.dpa-table__cell--net {
+  font-weight: 700;
+  color: var(--dpa-success);
+}
+
+.dpa-table__cell--commission {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Nombre y fecha del evento */
+.dpa-event-name {
+  display: block;
+  font-weight: 600;
+  color: var(--dpa-text);
+  margin-bottom: 3px;
+}
+
+.dpa-event-date {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--dpa-text-muted);
+}
+
+/* Badge de comisión */
+.dpa-commission-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--dpa-warning-dim);
+  color: var(--dpa-warning);
+}
+
+.dpa-commission-amount {
+  font-size: 12px;
+  color: var(--dpa-text-muted);
+}
+
+/* Badges de estado */
+.dpa-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.dpa-status-badge--activo {
+  background: var(--dpa-success-dim);
+  color: var(--dpa-success);
+}
+
+.dpa-status-badge--finalizado {
+  background: var(--dpa-primary-dim);
+  color: var(--dpa-primary);
+}
+
+.dpa-status-badge--cancelado {
+  background: var(--dpa-danger-dim);
+  color: var(--dpa-danger);
+}
+
+/* ── Empty state ───────────────────────────────────────────────── */
+.dpa-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 24px;
+  color: var(--dpa-text-muted);
+  font-size: 14px;
+}
+
+.dpa-empty svg {
+  color: var(--dpa-border);
+  width: 32px;
+  height: 32px;
+}
+
+/* ── Loading ───────────────────────────────────────────────────── */
+.dpa-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 300px;
+  color: var(--dpa-text-muted);
+  font-size: 14px;
+}
+
+.dpa-loading__spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--dpa-border);
+  border-top-color: var(--dpa-primary);
+  border-radius: 50%;
+  animation: dpa-spin 0.7s linear infinite;
+}
+
+@keyframes dpa-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Error ─────────────────────────────────────────────────────── */
+.dpa-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 24px;
+  color: var(--dpa-danger);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* ── Botones ───────────────────────────────────────────────────── */
+.dpa-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: var(--dpa-radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-family: var(--dpa-font);
+  transition: all 0.18s ease;
+}
+
+.dpa-btn--ghost {
+  background: transparent;
+  color: var(--dpa-text-muted);
+  border-color: var(--dpa-border);
+}
+
+.dpa-btn--ghost:hover {
+  color: var(--dpa-text);
+  border-color: var(--dpa-text-muted);
+  background: var(--dpa-surface-2);
+}
+
+.dpa-btn--icon {
+  padding: 8px;
+}
+
+.dpa-btn--secondary {
+  background: var(--dpa-surface-2);
+  color: var(--dpa-text);
+  border-color: var(--dpa-border);
+}
+
+.dpa-btn--secondary:hover {
+  background: var(--dpa-border);
+}
+
+/* ── Responsive ────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .dpa-wrapper {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .dpa-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .dpa-metric-card__value {
+    font-size: 18px;
+  }
+
+  .dpa-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .dpa-section__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .dpa-metrics {
+    grid-template-columns: 1fr;
+  }
+}

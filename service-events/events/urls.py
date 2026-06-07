@@ -51,6 +51,10 @@ from .views import (
     # US33 (US-28): Lista de Compradores por Evento
     EventBuyersListView,         # GET /promotor/events/{id}/buyers/
     PromotorEventBuyersSummaryView, # GET /promotor/events/{id}/buyers/summary/
+    # US34 (US-29): Admin ve Dashboard del Promotor
+    AdminPromotorSummaryView,         # GET /admin/promotor/{id}/summary/
+    AdminPromotorComparativaView,     # GET /admin/promotor/{id}/comparativa/
+    AdminEventFinancialReportView,    # GET /admin/events/{id}/financial/
 )
 
 app_name = 'events'
@@ -145,4 +149,8 @@ urlpatterns = [
     # US33 (US-28): Lista de Compradores por Evento
     path('promotor/events/<uuid:event_id>/buyers/', EventBuyersListView.as_view(), name='event-buyers-list'),
     path('promotor/events/<uuid:event_id>/buyers/summary/', PromotorEventBuyersSummaryView.as_view(), name='promotor-event-buyers-summary'),
+    # US34 (US-29): Admin ve Dashboard del Promotor
+    path('admin/promotor/<uuid:promoter_id>/summary/', AdminPromotorSummaryView.as_view(), name='admin-promotor-summary'),
+    path('admin/promotor/<uuid:promoter_id>/comparativa/', AdminPromotorComparativaView.as_view(), name='admin-promotor-comparativa'),
+    path('admin/events/<uuid:event_id>/financial/', AdminEventFinancialReportView.as_view(), name='admin-event-financial'),
 ]

@@ -8,7 +8,7 @@ import './AdminUsuarios.css';
 
 const API_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:8000';
 
-function AdminUsuarios({ module }) {
+function AdminUsuarios({ module, onViewPromotorDashboard }) {
   const titles = {
     usuarios: 'Gestión de Usuarios',
     promotores: 'Gestión de Promotores',
@@ -629,6 +629,16 @@ const cambiarPagina = (numeroPagina) => {
                       <td>{usuario.date_joined ? new Date(usuario.date_joined).toLocaleDateString('es-ES') : '—'}</td>
                       <td>
                         <div className="admin-acciones">
+                          {/* Botón Ver Dashboard para Promotores */}
+                          {module === 'promotores' && onViewPromotorDashboard && (
+                            <button
+                              className="admin-btn-action admin-btn-dashboard"
+                              onClick={() => onViewPromotorDashboard(usuario.id)}
+                              title="Ver dashboard financiero"
+                            >
+                              📊 Dashboard
+                            </button>
+                          )}
                           {obtenerEstado(usuario) === 'activo' && (
                             <>
                               <button
