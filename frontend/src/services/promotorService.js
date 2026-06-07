@@ -40,6 +40,11 @@ const PromotorService = {
       })) : []
     };
   },
+
+  getEventReport: async (eventId) => {
+    const res = await api.get(`${process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002'}/api/v1/promotor/events/${eventId}/financial/`);
+    return res.data;
+  },
 };
 
 export default PromotorService;
