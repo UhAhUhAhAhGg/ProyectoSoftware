@@ -55,6 +55,11 @@ from .views import (
     AdminPromotorSummaryView,         # GET /admin/promotor/{id}/summary/
     AdminPromotorComparativaView,     # GET /admin/promotor/{id}/comparativa/
     AdminEventFinancialReportView,    # GET /admin/events/{id}/financial/
+    # US566 (US-32): Dashboard Financiero Global del Sistema (SuperAdmin)
+    SuperAdminGlobalDashboardView,   # GET /superadmin/dashboard/global/
+    SuperAdminPromotorRankingView,   # GET /superadmin/dashboard/promotores/
+    SuperAdminTopPromotorsView,      # GET /admin/dashboard/top-promotors/
+    SuperAdminDashboardEvolutionView, # GET /admin/dashboard/evolution/
 )
 
 app_name = 'events'
@@ -153,4 +158,9 @@ urlpatterns = [
     path('admin/promotor/<uuid:promoter_id>/summary/', AdminPromotorSummaryView.as_view(), name='admin-promotor-summary'),
     path('admin/promotor/<uuid:promoter_id>/comparativa/', AdminPromotorComparativaView.as_view(), name='admin-promotor-comparativa'),
     path('admin/events/<uuid:event_id>/financial/', AdminEventFinancialReportView.as_view(), name='admin-event-financial'),
+    # US566 (US-32): Dashboard Financiero Global del Sistema (SuperAdmin)
+    path('superadmin/dashboard/global/', SuperAdminGlobalDashboardView.as_view(), name='superadmin-dashboard-global'),
+    path('superadmin/dashboard/promotores/', SuperAdminPromotorRankingView.as_view(), name='superadmin-dashboard-promotores'),
+    path('admin/dashboard/top-promotors/', SuperAdminTopPromotorsView.as_view(), name='superadmin-dashboard-top-promotors'),
+    path('admin/dashboard/evolution/', SuperAdminDashboardEvolutionView.as_view(), name='superadmin-dashboard-evolution'),
 ]

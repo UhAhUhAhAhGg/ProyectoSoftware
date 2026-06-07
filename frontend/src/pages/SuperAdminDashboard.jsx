@@ -4,12 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import AdminTable from '../components/dashboard/admin/AdminTable';
-import api from '../services/api';
 import AdminUsuarios from '../components/dashboard/admin/AdminUsuarios';
 import AdminAuditoria from '../components/dashboard/admin/AdminAuditoria';
 import SuperAdminSolicitudes from '../components/dashboard/admin/SuperAdminSolicitudes';
 import SuperAdminCrearAdmin from '../components/dashboard/admin/SuperAdminCrearAdmin';
-import SuperAdminComisiones from '../components/dashboard/admin/SuperAdminComisiones';
+import DashboardSistema from '../components/dashboard/admin/DashboardSistema';
 import './SuperAdminDashboard.css';
 
 function SuperAdminDashboard() {
@@ -39,7 +38,7 @@ function SuperAdminDashboard() {
     }
   }, [isAuthenticated, user, router]);
 
-  if (!mounted || !user) {
+  if (!user) {
     return (
       <div className="admin-loading">
         <div className="spinner"></div>
@@ -49,6 +48,13 @@ function SuperAdminDashboard() {
   }
 
   const menuItems = [
+    {
+      path: '/superadmin/finanzas',
+      icon: '📊',
+      label: 'Dashboard Financiero',
+      section: 'dashboard-sistema',
+      badge: null,
+    },
     {
       path: '/superadmin/administradores',
       icon: '⚙️',
@@ -75,13 +81,6 @@ function SuperAdminDashboard() {
       icon: '🔧',
       label: 'Configuración Global',
       section: 'configuracion',
-      badge: null,
-    },
-    {
-      path: '/superadmin/comisiones',
-      icon: '💸',
-      label: 'Comisiones',
-      section: 'comisiones',
       badge: null,
     },
   ];
@@ -188,55 +187,6 @@ function SuperAdminDashboard() {
                 <p className="user-status">SuperAdmin</p>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, marginLeft: 12 }}>
-              <button
-                className="export-btn"
-                onClick={async () => {
-                  try {
-                    window.dispatchEvent(new Event('export:start'));
-                    const res = await api.get(`/admin/dashboard/export?format=pdf`, { responseType: 'blob' });
-                    const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/pdf' });
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `dashboard_sistema.pdf`;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    window.URL.revokeObjectURL(url);
-                  } catch (err) {
-                    console.error('Export error', err);
-                    alert('Error exportando PDF: ' + (err?.message || ''));
-                  } finally {
-                    window.dispatchEvent(new Event('export:end'));
-                  }
-                }}
-              >Exportar PDF</button>
-
-              <button
-                className="export-btn"
-                onClick={async () => {
-                  try {
-                    window.dispatchEvent(new Event('export:start'));
-                    const res = await api.get(`/admin/dashboard/export?format=excel`, { responseType: 'blob' });
-                    const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `dashboard_sistema.xlsx`;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    window.URL.revokeObjectURL(url);
-                  } catch (err) {
-                    console.error('Export error', err);
-                    alert('Error exportando Excel: ' + (err?.message || ''));
-                  } finally {
-                    window.dispatchEvent(new Event('export:end'));
-                  }
-                }}
-              >Exportar Excel</button>
-            </div>
           </div>
         </header>
 
@@ -249,6 +199,11 @@ function SuperAdminDashboard() {
               {menuItems.find(item => item.section === activeSection)?.label}
             </span>
           </div>
+
+          {/* Section: Dashboard Financiero Global */}
+          {activeSection === 'dashboard-sistema' && (
+            <DashboardSistema />
+          )}
 
           {/* Section: Gestión de Administradores */}
           {activeSection === 'administradores' && (
@@ -317,19 +272,6 @@ function SuperAdminDashboard() {
               <div className="coming-soon">
                 <p>🔧 Próxima funcionalidad en desarrollo</p>
               </div>
-            </div>
-          )}
-
-          {/* Section: Comisiones */}
-          {activeSection === 'comisiones' && (
-            <div className="section-container">
-              <div className="section-header">
-                <h2>Comisiones de la Plataforma</h2>
-                <p className="section-description">
-                  Configura la comisión que cobra la plataforma por cada venta.
-                </p>
-              </div>
-              <SuperAdminComisiones />
             </div>
           )}
         </div>

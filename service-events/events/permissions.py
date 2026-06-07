@@ -99,7 +99,7 @@ def HasAdminCapability(required):
 
 class IsSuperadmin(permissions.BasePermission):
     """
-    TIC-526 (US-31): Solo SuperAdmin puede acceder.
+    TIC-526 (US-31) / US566 (US-32): Solo SuperAdmin puede acceder.
     Verifica is_superadmin en el JWT payload o is_staff como fallback histórico.
     """
     message = "Solo el SuperAdmin puede realizar esta acción."

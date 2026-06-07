@@ -4076,3 +4076,256 @@ class AdminEventFinancialReportView(APIView):
                 for c in top_compradores
             ],
         }, status=status.HTTP_200_OK)
+
+
+# ─── US566 (US-32): Dashboard Financiero Global del Sistema (SuperAdmin) ──────
+
+class SuperAdminGlobalDashboardView(APIView):
+    """
+    US566 (US-32): Dashboard financiero global de la plataforma.
+    GET /api/v1/superadmin/dashboard/global/
+    """
+    permission_classes = [IsAuthenticated, IsSuperadmin]
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request):
+        from decimal import Decimal as D
+        from django.db.models import Sum, Count
+        from django.db.models.functions import Coalesce
+
+        total_eventos = Event.objects.count()
+        total_promotores = Event.objects.values('promoter_id').distinct().count()
+
+        compras_qs = Purchase.objects.filter(status__in=self.PAID_STATUSES)
+        total_compradores = compras_qs.values('user_id').distinct().count()
+        total_tickets = compras_qs.aggregate(t=Coalesce(Sum('quantity'), 0))['t']
+
+        try:
+            aggs = compras_qs.aggregate(
+                ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+            )
+        except Exception:
+            aggs = compras_qs.aggregate(ingresos_brutos=Coalesce(Sum('total_price'), D('0')))
+            aggs['comisiones'] = D('0')
+            aggs['ingresos_netos'] = aggs['ingresos_brutos']
+
+        try:
+            from .models import EventPromotion
+            ingresos_promociones = (
+                EventPromotion.objects.filter(status='active')
+                .aggregate(total=Coalesce(Sum('amount_paid'), D('0')))
+            )['total']
+        except Exception:
+            ingresos_promociones = D('0')
+
+        total_ingresos_plataforma = aggs['comisiones'] + ingresos_promociones
+
+        top_categorias_qs = (
+            compras_qs
+            .values('event__category__id', 'event__category__name')
+            .annotate(
+                tickets=Coalesce(Sum('quantity'), 0),
+                ingresos=Coalesce(Sum('total_price'), D('0')),
+            )
+            .order_by('-tickets')[:5]
+        )
+        top_categorias = [
+            {
+                'categoria_id': str(r['event__category__id']) if r['event__category__id'] else None,
+                'categoria_nombre': r['event__category__name'] or 'Sin categoría',
+                'tickets_vendidos': r['tickets'],
+                'ingresos': r['ingresos'],
+            }
+            for r in top_categorias_qs
+        ]
+
+        return Response({
+            'status': 'success',
+            'resumen_plataforma': {
+                'total_eventos': total_eventos,
+                'total_promotores_unicos': total_promotores,
+                'total_compradores_unicos': total_compradores,
+                'total_tickets_vendidos': total_tickets,
+            },
+            'financiero': {
+                'ingresos_brutos_plataforma': aggs['ingresos_brutos'],
+                'comisiones_plataforma': aggs['comisiones'],
+                'ingresos_netos_promotores': aggs['ingresos_netos'],
+                'ingresos_por_promociones': ingresos_promociones,
+                'total_ingresos_plataforma': total_ingresos_plataforma,
+            },
+            'top_categorias': top_categorias,
+        }, status=status.HTTP_200_OK)
+
+
+class SuperAdminPromotorRankingView(APIView):
+    """
+    US566 (US-32): Ranking de Promotores por ingresos generados.
+    GET /api/v1/superadmin/dashboard/promotores/
+    """
+    permission_classes = [IsAuthenticated, IsSuperadmin]
+    PAID_STATUSES = ['active', 'used']
+
+    def get(self, request):
+        from decimal import Decimal as D
+        from django.db.models import Sum, Count
+        from django.db.models.functions import Coalesce
+
+        try:
+            limit = min(int(request.query_params.get('limit', 10)), 50)
+        except (ValueError, TypeError):
+            limit = 10
+
+        ordering_param = request.query_params.get('ordering', '-ingresos_brutos')
+
+        try:
+            ranking_qs = (
+                Purchase.objects.filter(status__in=self.PAID_STATUSES)
+                .values('event__promoter_id')
+                .annotate(
+                    tickets_vendidos=Coalesce(Sum('quantity'), 0),
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                    comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                    ingresos_netos=Coalesce(Sum('net_amount'), D('0')),
+                )
+            )
+        except Exception:
+            ranking_qs = (
+                Purchase.objects.filter(status__in=self.PAID_STATUSES)
+                .values('event__promoter_id')
+                .annotate(
+                    tickets_vendidos=Coalesce(Sum('quantity'), 0),
+                    ingresos_brutos=Coalesce(Sum('total_price'), D('0')),
+                )
+            )
+
+        VALID_ORDERINGS = {
+            '-ingresos_brutos': '-ingresos_brutos',
+            '-tickets_vendidos': '-tickets_vendidos',
+            'ingresos_brutos': 'ingresos_brutos',
+            'tickets_vendidos': 'tickets_vendidos',
+        }
+        ordering = VALID_ORDERINGS.get(ordering_param, '-ingresos_brutos')
+        ranking_list = list(ranking_qs.order_by(ordering)[:limit])
+
+        promotores_ids = [r['event__promoter_id'] for r in ranking_list]
+        eventos_por_promotor = dict(
+            Event.objects.filter(promoter_id__in=promotores_ids)
+            .values('promoter_id').annotate(total=Count('id'))
+            .values_list('promoter_id', 'total')
+        )
+        capacidad_por_promotor = dict(
+            Event.objects.filter(promoter_id__in=promotores_ids)
+            .values('promoter_id').annotate(cap=Coalesce(Sum('capacity'), 0))
+            .values_list('promoter_id', 'cap')
+        )
+
+        resultados = []
+        for i, r in enumerate(ranking_list, start=1):
+            pid = r['event__promoter_id']
+            total_ev = eventos_por_promotor.get(pid, 0)
+            cap = capacidad_por_promotor.get(pid, 0)
+            tickets = r['tickets_vendidos']
+            tasa = round(tickets / cap * 100, 1) if cap else 0.0
+            resultados.append({
+                'posicion': i,
+                'promoter_id': str(pid),
+                'total_eventos': total_ev,
+                'tickets_vendidos': tickets,
+                'tasa_ocupacion_pct': tasa,
+                'ingresos_brutos': r['ingresos_brutos'],
+                'comisiones': r.get('comisiones', D('0')),
+                'ingresos_netos': r.get('ingresos_netos', r['ingresos_brutos']),
+            })
+
+        return Response({
+            'status': 'success',
+            'limit': limit,
+            'total_promotores': len(resultados),
+            'ranking': resultados,
+        }, status=status.HTTP_200_OK)
+
+
+class SuperAdminDashboardSummaryView(APIView):
+    """TIC-200: GET /admin/dashboard/summary"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        is_superuser = payload.get('is_superuser', False)
+        user_role = payload.get('role', '')
+        if not is_superuser and user_role != 'Administrador':
+            return Response({"error": "Acceso denegado."}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            ticket_metrics = Ticket.objects.aggregate(total_tickets=Count('id'), total_comisiones=Sum('comision'))
+            promo_metrics = Event.objects.filter(is_featured=True).aggregate(total_promo=Sum('promotion_fee'))
+            promotores_cnt = Event.objects.filter(status='published').values('promotor_id').distinct().count()
+            raw_data = {
+                "ingresos_comisiones": float(ticket_metrics['total_comisiones'] or 0.0),
+                "ingresos_promociones": float(promo_metrics['total_promo'] or 0.0),
+                "total_sistema": float(ticket_metrics['total_comisiones'] or 0.0) + float(promo_metrics['total_promo'] or 0.0),
+                "tickets_vendidos": ticket_metrics['total_tickets'] or 0,
+                "promotores_activos": promotores_cnt
+            }
+            serializer = DashboardSummarySerializer(raw_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class SuperAdminTopPromotorsView(APIView):
+    """TIC-201: GET /admin/dashboard/top-promotors"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        is_superuser = payload.get('is_superuser', False)
+        user_role = payload.get('role', '')
+        if not is_superuser and user_role != 'Administrador':
+            return Response({"error": "Acceso denegado."}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            top_promotores = (
+                Ticket.objects.values('event__promotor_id')
+                .annotate(
+                    promotor_id=models.F('event__promotor_id'),
+                    total_generado=Sum('comision'),
+                    eventos_publicados=Count('event_id', distinct=True)
+                )
+                .order_by('-total_generado')[:10]
+            )
+            serializer = TopPromotorSerializer(top_promotores, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": f"Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class SuperAdminDashboardEvolutionView(APIView):
+    """TIC-202: GET /admin/dashboard/evolution"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        is_superuser = payload.get('is_superuser', False)
+        user_role = payload.get('role', '')
+        if not is_superuser and user_role != 'Administrador':
+            return Response({"error": "Acceso denegado."}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            evolucion_ingresos = (
+                Ticket.objects.annotate(month=TruncMonth('created_at'))
+                .values('month')
+                .annotate(ingresos_comisiones=Sum('comision'))
+                .order_by('month')
+            )
+            data_formateada = []
+            for registro in evolucion_ingresos:
+                if registro['month']:
+                    data_formateada.append({
+                        "mes": registro['month'].strftime('%Y-%m'),
+                        "ingresos_comisiones": float(registro['ingresos_comisiones'] or 0.0)
+                    })
+            serializer = DashboardEvolutionSerializer(data_formateada, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": f"Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
