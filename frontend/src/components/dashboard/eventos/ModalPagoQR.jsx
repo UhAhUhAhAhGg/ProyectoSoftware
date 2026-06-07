@@ -156,6 +156,36 @@ export default function ModalPagoQR({ ordenData, onCerrar, onVolver, asientosSel
               </div>
             </div>
 
+            
+<div style={{
+  marginTop: '10px',
+  paddingTop: '10px',
+  borderTop: '1px dashed #dee2e6'
+}}>
+  <div style={{
+    display: 'flex',
+    justifyContent: 'space-between',
+    marginBottom: '4px'
+  }}>
+    <span>Descuento aplicado:</span>
+    <span style={{ color: '#dc3545' }}>
+      - Bs. 10
+    </span>
+  </div>
+
+  <div style={{
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontWeight: 'bold',
+    color: '#28a745'
+  }}>
+    <span>Total final:</span>
+    <span>
+      Bs. {Math.max((ordenData.total || 0) - 10, 0)}
+    </span>
+  </div>
+</div>
+
                   
   <div style={{
     background: '#f8f9fa',
