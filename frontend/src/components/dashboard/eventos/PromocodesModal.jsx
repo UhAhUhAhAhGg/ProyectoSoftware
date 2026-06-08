@@ -45,9 +45,12 @@ function PromocodesModal({ eventId, eventoNombre, onClose }) {
         event: eventId,
         code: nuevoCodigo.code.toUpperCase(),
         discount_value: parseFloat(nuevoCodigo.discount_value),
-        max_uses: nuevoCodigo.max_uses ? parseInt(nuevoCodigo.max_uses) : 0,
-        valid_until: nuevoCodigo.valid_until || null
+        max_uses: (nuevoCodigo.max_uses && parseInt(nuevoCodigo.max_uses) > 0) ? parseInt(nuevoCodigo.max_uses) : null,
       };
+
+      if (nuevoCodigo.valid_until) {
+        data.valid_until = nuevoCodigo.valid_until;
+      }
 
       await PromotorService.createPromoCode(data);
       setNuevoCodigo({ code: '', discount_type: 'porcentaje', discount_value: '', max_uses: '', valid_until: '' });

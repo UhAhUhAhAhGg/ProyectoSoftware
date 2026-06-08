@@ -168,33 +168,55 @@ const DashboardPromotorAdmin = ({
     setError(null);
 
     try {
-      // Endpoint del microservicio de eventos / admin
-      // GET /api/admin/promotores/{promotorId}/dashboard/
-      const token = localStorage.getItem("access_token");
+      const token = localStorage.getItem("token");
       const headers = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       };
 
+      const EVENTS_URL = process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002';
+      const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:8000';
+
       const [promotorRes, resumenRes, eventosRes] = await Promise.all([
-        fetch(`/api/admin/promotores/${promotorId}/`, { headers }),
-        fetch(`/api/admin/promotores/${promotorId}/resumen-financiero/`, { headers }),
-        fetch(`/api/admin/promotores/${promotorId}/eventos/`, { headers }),
+        fetch(`${AUTH_URL}/api/v1/users/${promotorId}/`, { headers }),
+        fetch(`${EVENTS_URL}/api/v1/admin/promotor/${promotorId}/summary/`, { headers }),
+        fetch(`${EVENTS_URL}/api/v1/admin/promotor/${promotorId}/comparativa/?limit=100`, { headers }),
       ]);
 
+      // If summary is 404 because no events, don't throw an error, just handle gracefully
       if (!promotorRes.ok) throw new Error("No se pudo cargar el perfil del promotor.");
-      if (!resumenRes.ok) throw new Error("No se pudo cargar el resumen financiero.");
+      // if (!resumenRes.ok) throw new Error("No se pudo cargar el resumen financiero.");
       if (!eventosRes.ok) throw new Error("No se pudieron cargar los eventos.");
 
-      const [promotorData, resumenData, eventosData] = await Promise.all([
-        promotorRes.json(),
-        resumenRes.json(),
-        eventosRes.json(),
-      ]);
+      const promotorDataRaw = await promotorRes.json();
+      const promotorData = {
+        nombre: `${promotorDataRaw.first_name || ''} ${promotorDataRaw.last_name || ''}`.trim() || 'Promotor',
+        email: promotorDataRaw.email || '—'
+      };
+
+      const resumenData = resumenRes.ok ? await resumenRes.json() : null;
+      const eventosData = await eventosRes.json();
+      
+      const rawComparativa = eventosData.comparativa || [];
+      const mappedEventos = rawComparativa.map(e => {
+        const brutos = Number(e.ingresos_brutos) || 0;
+        const comisiones = Number(e.comisiones) || 0;
+        const pct = brutos > 0 ? ((comisiones / brutos) * 100).toFixed(1) : "—";
+        return {
+          id: e.evento_id,
+          nombre: e.evento_nombre,
+          fecha: e.fecha,
+          estado: e.estado,
+          ingresos_brutos: brutos,
+          comision_plataforma: comisiones,
+          porcentaje_comision: pct,
+          ingreso_neto: Number(e.ingresos_netos) || 0,
+        };
+      });
 
       setPromotor(promotorData);
-      setResumen(resumenData);
-      setEventos(Array.isArray(eventosData) ? eventosData : eventosData.results ?? []);
+      setResumen(resumenData || { ingresos_brutos: 0, comisiones_totales: 0, ingresos_netos: 0, total_tickets: 0 });
+      setEventos(mappedEventos);
     } catch (err) {
       setError(err.message || "Error inesperado al cargar el dashboard.");
     } finally {
@@ -278,31 +300,31 @@ const DashboardPromotorAdmin = ({
       <section className="dpa-metrics">
         <MetricCard
           label="Ingresos Brutos"
-          value={formatCurrency(resumen?.ingresos_brutos_total)}
+          value={formatCurrency(resumen?.ingresos_brutos)}
           icon={Icon.TrendingUp}
           variant="primary"
           sublabel={`${resumen?.total_eventos ?? 0} evento(s)`}
         />
         <MetricCard
           label="Comisión Plataforma"
-          value={formatCurrency(resumen?.comisiones_total)}
+          value={formatCurrency(resumen?.comisiones_totales)}
           icon={Icon.Percent}
           variant="warning"
-          sublabel={`Promedio ${resumen?.porcentaje_comision_promedio ?? "—"}%`}
+          sublabel={`Ocupación ${resumen?.tasa_ocupacion_pct ?? "—"}%`}
         />
         <MetricCard
           label="Ingresos Netos"
-          value={formatCurrency(resumen?.ingresos_netos_total)}
+          value={formatCurrency(resumen?.ingresos_netos)}
           icon={Icon.DollarSign}
           variant="success"
           sublabel="Transferido al promotor"
         />
         <MetricCard
           label="Entradas Vendidas"
-          value={resumen?.entradas_vendidas_total ?? "—"}
+          value={resumen?.total_tickets_vendidos ?? "—"}
           icon={Icon.Ticket}
           variant="default"
-          sublabel={`${resumen?.eventos_activos ?? 0} evento(s) activo(s)`}
+          sublabel={`${resumen?.total_eventos ?? 0} evento(s)`}
         />
       </section>
 

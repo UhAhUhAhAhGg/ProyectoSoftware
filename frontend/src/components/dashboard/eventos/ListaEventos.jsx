@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
+import PromotorService from '../../../services/promotorService';
 import { useAuth } from '../../../context/AuthContext';
 import EventoCardFinanciero from './EventoCardFinanciero';
 import ModalFinancieroEvento from './ModalFinancieroEvento';
@@ -10,6 +11,7 @@ import './ListaEventos.css';
 
 function ListaEventos() {
   const { user } = useAuth();
+  const location = useLocation();
   const [eventos, setEventos] = useState([]);
   const [filtro, setFiltro] = useState('todos');
   const [busqueda, setBusqueda] = useState('');
@@ -38,6 +40,27 @@ function ListaEventos() {
       setCargando(false);
     }
   };
+
+  useEffect(() => {
+    const openId = location.state?.openEventId;
+    if (openId && eventos.length > 0) {
+      const ev = eventos.find(e => e.id === openId);
+      if (ev) {
+        PromotorService.getEventReport(openId)
+          .then(data => {
+            setModalEvento(ev);
+            setModalFinanciero(data);
+            // Limpiar state para que no se reabra si el user cierra el modal y recarga
+            window.history.replaceState({}, document.title);
+          })
+          .catch(() => {
+            setModalEvento(ev);
+            setModalFinanciero(null);
+            window.history.replaceState({}, document.title);
+          });
+      }
+    }
+  }, [location.state, eventos]);
 
   const cargarEventos = fetchEventos; // alias de compatibilidad
 

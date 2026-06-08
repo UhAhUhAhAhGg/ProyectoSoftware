@@ -476,6 +476,57 @@ body.dark-mode .no-tipos p {
   color: var(--dark-text-secondary);
 }
 
+/* Banner de Comisiones */
+.comision-info-banner {
+  background-color: rgba(218, 165, 32, 0.15);
+  border-left: 4px solid var(--color-dorado);
+  padding: 15px 20px;
+  border-radius: 8px;
+  margin-bottom: 25px;
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.comision-icon {
+  font-size: 24px;
+}
+
+.comision-text {
+  color: var(--color-verde-gris);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.comision-text strong {
+  color: var(--color-negro);
+  display: block;
+  margin-bottom: 4px;
+  font-size: 15px;
+}
+
+body.dark-mode .comision-info-banner {
+  background-color: rgba(214, 168, 7, 0.1);
+}
+
+body.dark-mode .comision-text {
+  color: var(--dark-text-secondary);
+}
+
+body.dark-mode .comision-text strong {
+  color: var(--color-dorado);
+}
+
+.ganancia-neta {
+  display: block;
+  font-size: 12px;
+  color: #4CAF50;
+  font-weight: 600;
+  margin-top: 5px;
+  text-align: right;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .tipos-header {

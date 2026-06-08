@@ -47,7 +47,7 @@ from .models import (
     Category, Event, TicketType, Purchase, Waitlist, BlacklistedToken, Seat,
     UserBehavior, UserPreference, UserFavorite, Notification, NotificationPreference,
     RecommendationEngine, registrar_comportamiento, generar_notificaciones_match,
-    PlatformCommission, PromoCode,
+    PlatformCommission, PromoCode, PromotionPlan, EventPromotion
 )
 from .serializers import (
     CategorySerializer,
@@ -909,6 +909,7 @@ class PurchaseView(APIView):
                 "payment_qr": payment_qr_base64,
                 "expires_at": expires_at.isoformat(),
                 "event_name": event.name,
+                "event_id": str(event.id),
                 "ticket_type_name": ticket.name,
             }
         }, status=status.HTTP_201_CREATED)
@@ -963,7 +964,7 @@ class SimularPagoView(APIView):
             try:
                 from .models import PromoCode
                 promo = PromoCode.objects.get(code=promo_code_str)
-                is_valid, _ = promo.validar_codigo(purchase.event)
+                is_valid, _ = promo.is_valid_for(purchase.event)
                 if is_valid:
                     # Aplicar descuento
                     from decimal import Decimal
@@ -2940,7 +2941,7 @@ class PlatformCommissionCurrentView(APIView):
     Respuesta cuando no hay ninguna configurada:
         { "commission": null, "configured": false }
     """
-    permission_classes = [IsAuthenticated, IsSuperadmin]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         from .serializers import PlatformCommissionReadSerializer
@@ -3429,6 +3430,16 @@ class EventBuyersListView(APIView):
         # â”€â”€ ConstrucciÃ³n del queryset â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         compras_qs = Purchase.objects.filter(event=evento).select_related('ticket_type')
 
+        search_query = request.query_params.get('search', '').strip()
+        user_ids_query = request.query_params.get('user_ids', '').strip()
+
+        if user_ids_query:
+            ids_list = [u_id.strip() for u_id in user_ids_query.split(',') if u_id.strip()]
+            compras_qs = compras_qs.filter(user_id__in=ids_list)
+        elif search_query:
+            from django.db.models import Q
+            compras_qs = compras_qs.filter(Q(user_id__icontains=search_query))
+
         if status_filtro != 'all':
             compras_qs = compras_qs.filter(status=status_filtro)
 
@@ -3854,12 +3865,16 @@ class PromotorEventBuyersListView(ListAPIView):
             return Purchase.objects.none()
 
         search_query = self.request.query_params.get('search', '').strip()
+        user_ids_query = self.request.query_params.get('user_ids', '').strip()
         
         queryset = Purchase.objects.filter(
             ticket_type__event_id=event_id
         )
 
-        if search_query:
+        if user_ids_query:
+            ids_list = [u_id.strip() for u_id in user_ids_query.split(',') if u_id.strip()]
+            queryset = queryset.filter(user_id__in=ids_list)
+        elif search_query:
             queryset = queryset.filter(
                 Q(user_id__icontains=search_query)
             )
@@ -4337,10 +4352,16 @@ class SuperAdminDashboardEvolutionView(APIView):
         if not is_superuser and user_role != 'Administrador':
             return Response({"error": "Acceso denegado."}, status=status.HTTP_403_FORBIDDEN)
         try:
+            from .models import Purchase
+            from django.db.models import Sum
+            from django.db.models.functions import TruncMonth
+            from .serializers import DashboardEvolutionSerializer
+
             evolucion_ingresos = (
-                Ticket.objects.annotate(month=TruncMonth('created_at'))
+                Purchase.objects.filter(status__in=['active', 'used'])
+                .annotate(month=TruncMonth('created_at'))
                 .values('month')
-                .annotate(ingresos_comisiones=Sum('comision'))
+                .annotate(ingresos_comisiones=Sum('commission_amount'))
                 .order_by('month')
             )
             data_formateada = []
@@ -4533,9 +4554,8 @@ class ValidateOrderCouponView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # 3. EJECUTAR VALIDACI+ôN NATIVA DEL MODELO (Expiraci+¦n, max_uses, times_used, event match)
-        # Tu modelo ya tiene la funci+¦n 'validar_codigo(event)' incorporada
-        is_valid, message = promo_code.validar_codigo(event)
+        # 3. EJECUTAR VALIDACIÓN NATIVA DEL MODELO
+        is_valid, message = promo_code.is_valid_for(event)
         if not is_valid:
             return Response(
                 {"valid": False, "error": message},
@@ -4635,6 +4655,38 @@ class PromotionPlanListView(APIView):
         serializer = PromotionPlanSerializer(plans, many=True)
         return Response({"status": "ok", "plans": serializer.data})
 
+class SuperAdminPromotionPlanListView(APIView):
+    """
+    GET /api/v1/superadmin/promotion-plans/
+    Lista todos los planes, incluyendo inactivos.
+    """
+    permission_classes = [IsAuthenticated, IsSuperadmin]
+
+    def get(self, request):
+        from .serializers import PromotionPlanSerializer
+        plans = PromotionPlan.objects.all().order_by('priority')
+        serializer = PromotionPlanSerializer(plans, many=True)
+        return Response({"status": "ok", "plans": serializer.data})
+
+class SuperAdminPromotionPlanUpdateView(APIView):
+    """
+    PATCH /api/v1/superadmin/promotion-plans/<id>/
+    Permite modificar price_bob e is_active.
+    """
+    permission_classes = [IsAuthenticated, IsSuperadmin]
+
+    def patch(self, request, pk):
+        from .serializers import PromotionPlanUpdateSerializer
+        try:
+            plan = PromotionPlan.objects.get(pk=pk)
+        except PromotionPlan.DoesNotExist:
+            return Response({"error": "Plan no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = PromotionPlanUpdateSerializer(plan, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"status": "ok", "message": "Plan actualizado correctamente."})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class EventPromoteView(APIView):
     """

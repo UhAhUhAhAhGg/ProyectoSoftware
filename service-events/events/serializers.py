@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Event, TicketType, UserFavorite, Notification, EventAuditLog, PromoCode, PromotionPlan, EventPromotion
+from .models import Category, Event, TicketType, UserFavorite, Notification, EventAuditLog, PromoCode, PromotionPlan, EventPromotion, PlatformCommission
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -320,6 +320,13 @@ class PromotionPlanSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+class PromotionPlanUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializador para que el SuperAdmin actualice el plan de promoción.
+    """
+    class Meta:
+        model = PromotionPlan
+        fields = ['price_bob', 'is_active']
 
 class EventPromotionReadSerializer(serializers.ModelSerializer):
     """
@@ -440,6 +447,22 @@ class PromoCodeCreateSerializer(serializers.ModelSerializer):
             'max_uses',
             'is_active',
         ]
+        extra_kwargs = {
+            'valid_from': {'required': False},
+            'valid_until': {'required': False},
+        }
+
+    def create(self, validated_data):
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        if 'valid_from' not in validated_data:
+            validated_data['valid_from'] = timezone.now()
+        if 'valid_until' not in validated_data or not validated_data['valid_until']:
+            # Set to 10 years by default if null or not provided
+            validated_data['valid_until'] = timezone.now() + timedelta(days=3650)
+            
+        return super().create(validated_data)
 
     def validate_code(self, value):
         return value.upper().strip()
@@ -532,3 +555,13 @@ class DashboardEvolutionSerializer(serializers.Serializer):
     """
     mes = serializers.CharField(read_only=True)  # Formato: "YYYY-MM"
     ingresos_comisiones = serializers.FloatField(read_only=True)
+
+class PlatformCommissionReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlatformCommission
+        fields = '__all__'
+
+class PlatformCommissionCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlatformCommission
+        fields = ['commission_type', 'percentage_value', 'fixed_value', 'valid_from', 'notes']

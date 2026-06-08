@@ -48,6 +48,8 @@ from .views import (
 
     # TIC-561/562 (US-34): Planes de promoción y eventos destacados
     PromotionPlanListView,        # GET /promotion-plans/
+    SuperAdminPromotionPlanListView,
+    SuperAdminPromotionPlanUpdateView,
     EventPromoteView,             # POST /promotor/events/{id}/promote/
     EventPromotionStatusView,     # GET /promotor/events/{id}/promotion/
     FeaturedEventsView,           # GET /events/featured/
@@ -194,4 +196,6 @@ urlpatterns = [
     path('promotor/events/<uuid:event_id>/promotion/', EventPromotionStatusView.as_view(), name='event-promotion-status'),
     path('events/featured/', FeaturedEventsView.as_view(), name='events-featured'),
     path('admin/promotions/', AdminPromotionListView.as_view(), name='admin-promotion-list'),
+    path('superadmin/promotion-plans/', SuperAdminPromotionPlanListView.as_view(), name='superadmin-promotion-plans-list'),
+    path('superadmin/promotion-plans/<uuid:pk>/', SuperAdminPromotionPlanUpdateView.as_view(), name='superadmin-promotion-plans-update'),
 ]

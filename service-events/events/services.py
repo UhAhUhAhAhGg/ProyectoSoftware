@@ -636,12 +636,19 @@ class CommissionService:
     def aplicar(cls, purchase):
         """
         Calcula y persiste commission_amount, net_amount y commission_percentage en el Purchase dado.
-        Debe invocarse justo antes de confirmar el estado 'active' de la compra.
-
-        :param purchase: instancia de Purchase ya guardada (tiene id y total_price).
-        :return: purchase actualizado.
+        La comisión se calcula sobre el precio ORIGINAL del ticket (antes de descuentos).
+        El descuento promocional es absorbido por la ganancia neta del promotor.
         """
-        commission_amount, net_amount, commission_percentage = cls.calcular(purchase.total_price)
+        from decimal import Decimal
+        original_price = Decimal(str(purchase.total_price))
+        if purchase.discount_amount:
+            original_price += Decimal(str(purchase.discount_amount))
+            
+        commission_amount, _, commission_percentage = cls.calcular(original_price)
+        
+        # El neto que recibe el promotor es lo que el comprador pagó (total_price) menos la comisión
+        net_amount = (Decimal(str(purchase.total_price)) - commission_amount).quantize(Decimal('0.01'))
+        
         purchase.commission_amount = commission_amount
         purchase.net_amount = net_amount
         purchase.commission_percentage = commission_percentage

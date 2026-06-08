@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useAuth } from '../../../context/AuthContext';
+import SuperAdminComisiones from './SuperAdminComisiones';
+import SuperAdminPlanesPromocion from './SuperAdminPlanesPromocion';
 
 function AdminConfiguracion() {
-  const { inactivityMinutes, updateInactivityTimeout } = useAuth();
+  const { user, inactivityMinutes, updateInactivityTimeout } = useAuth();
   const [tempMinutes, setTempMinutes] = useState(inactivityMinutes);
   const [mensaje, setMensaje] = useState('');
 
@@ -121,6 +123,14 @@ function AdminConfiguracion() {
           </div>
         </div>
       </div>
+
+      {/* Solo SuperAdmins pueden ver y editar las comisiones de la plataforma */}
+      {(user?.is_superadmin || user?.role === 'SuperAdmin') && (
+        <div style={{ marginTop: '2rem' }}>
+          <SuperAdminComisiones />
+          <SuperAdminPlanesPromocion />
+        </div>
+      )}
     </div>
   );
 }

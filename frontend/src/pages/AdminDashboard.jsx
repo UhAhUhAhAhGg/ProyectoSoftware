@@ -67,7 +67,7 @@ function AdminDashboard() {
     }
   }, [isAuthenticated, isAdministrador, router]);
 
-  if (!user) {
+  if (!mounted || !user) {
     return (
       <div className="admin-loading" suppressHydrationWarning>
         <div className="spinner"></div>

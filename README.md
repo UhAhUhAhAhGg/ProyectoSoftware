@@ -1,7 +1,7 @@
 # 🎟️ TicketGo / ProyectoSoftware
 
 Plataforma de venta de entradas construida con arquitectura de microservicios.
-Sprint actual: **Sprint 4** (recomendaciones, notificaciones, gestión administrativa, SuperAdmin con permisos granulares, auditoría unificada).
+Sprint actual: **Sprint 5** (monetización, comisiones, códigos de descuento, planes de promoción, dashboards financieros).
 
 ---
 
@@ -28,8 +28,8 @@ Sprint actual: **Sprint 4** (recomendaciones, notificaciones, gestión administr
 |---|---|---|---|
 | `service-auth` | Django + DRF + simplejwt | 8000 | JWT, usuarios, roles, permisos granulares, auditoría de usuarios |
 | `service-profiles` | Django + DRF | 8001 | Perfiles por rol (Admin, Comprador, Promotor) |
-| `service-events` | Django + DRF | 8002 | Eventos, tickets, asientos, compras, favoritos, notificaciones, auditoría de eventos |
-| `service-queue` | Django + DRF | 8003 | Cola virtual para alta demanda (Sprint 3) |
+| `service-events` | Django + DRF | 8002 | Eventos, tickets, asientos, promociones, comisiones, códigos de descuento |
+| `service-queue` | Django + DRF | 8003 | Cola virtual para alta demanda |
 | `frontend` | Next.js 16 + React 19 | 3000 | UI |
 
 ---
@@ -72,14 +72,17 @@ La primera vez tarda unos minutos descargando imágenes y aplicando migraciones.
 **Imprescindible la primera vez** — sin esto no hay roles ni usuarios de prueba:
 
 ```bash
-# 1. Crea los roles base + el SuperAdmin "histórico" (asigna rol Superadmin a usuarios is_staff existentes)
+# 1. Crea los roles base + el SuperAdmin "histórico"
 docker compose exec service-auth python seed_superadmin_role.py
 
-# 2. Crea las 4 cuentas de prueba (admin SuperAdmin, admin con permisos limitados, promotor, comprador)
+# 2. Crea las cuentas de prueba (SuperAdmin, Admin, Promotor, Comprador)
 docker compose exec service-auth python seed_users.py
 
 # 3. Crea las 10 categorías de eventos
 docker compose exec service-events python seed_categories.py
+
+# 4. Crea los planes de promoción base (Básico, Premium, Pro)
+docker compose exec service-events python seed_planes.py
 ```
 
 > **Nota**: el orden importa. `seed_users.py` asume que los roles ya existen (los crea automáticamente si faltan).
@@ -186,12 +189,37 @@ Toda la documentación está en [`docs/`](docs/README.md), organizada por sprint
 | Sprint 2 | [docs/sprint-2/](docs/sprint-2/) | HU-9 a HU-32: explorar, comprar, pago QR, perfil |
 | Sprint 3 | [docs/sprint-3/](docs/sprint-3/) | US-11 a US-20: mapa de asientos, cola virtual |
 | Sprint 4 | [docs/sprint-4/](docs/sprint-4/) | US-21 a US-26: recomendaciones, notificaciones, admin |
+| Sprint 5 | [docs/sprint-5/](docs/sprint-5/) | Monetización, comisiones, códigos de descuento, promoción |
+
+---
+
+## 🧪 Cómo probar Sprint 5
+
+Esta es la entrega más reciente.
+
+### Prerrequisitos
+
+- `docker compose up` corriendo
+- Seeds ejecutados (incluyendo `seed_planes.py`)
+
+### Dashboard Financiero del Promotor y Comisiones
+
+1. Login como `admin@ticketproject.com` (SuperAdmin) → "Gestión de Usuarios → Promotores".
+2. Clic en "Ver Dashboard" en algún promotor para ver sus ingresos brutos, comisiones de plataforma, ingresos netos y entradas vendidas.
+3. El SuperAdmin puede ir a "Configuración Global" para modificar las tasas de comisión y los precios de los planes de promoción.
+
+### Promocionar un Evento
+
+1. Login como Promotor → "Gestión de Eventos" → Crear un evento o usar uno existente.
+2. En la lista de eventos, selecciona "Promocionar Evento".
+3. Se mostrarán los planes de promoción disponibles (Básico, Premium, Pro) con los precios configurados globalmente.
+4. Selecciona un plan, paga con QR y el evento será destacado en la plataforma.
 
 ---
 
 ## 🧪 Cómo probar Sprint 4
 
-Esta es la entrega más reciente. Para una guía detallada por US, ver [docs/sprint-4/](docs/sprint-4/).
+Para una guía detallada por US, ver [docs/sprint-4/](docs/sprint-4/).
 
 ### Prerrequisitos
 

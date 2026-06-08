@@ -1,4 +1,5 @@
 import api from './api';
+import { authService } from './authService';
 
 const EVENTS_URL = process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002';
 
@@ -19,13 +20,15 @@ const PromotorService = {
     return {
       total_net_income: summary.ingresos_netos,
       total_income: summary.ingresos_brutos,
+      total_commissions: summary.comisiones_totales, // added
       total_sales: summary.total_tickets_vendidos,
       total_events: summary.total_eventos,
       avg_occupancy: summary.tasa_ocupacion_pct,
       events_comparison: comparativaData.map(e => ({
          name: e.evento_nombre,
          revenue: e.ingresos_brutos,
-         net_revenue: e.ingresos_netos
+         net_revenue: e.ingresos_netos,
+         ventas: e.tickets_vendidos
       })),
       monthly_income: summary.ingresos_mensuales ? summary.ingresos_mensuales.map(m => ({
         month: m.month,
@@ -92,25 +95,51 @@ const PromotorService = {
   },
 
   // ── TIC-33: Lista de Compradores por Evento ─────────────────────────
-  getEventBuyers: async (eventId, { page = 1, pageSize = 10, search = '' } = {}) => {
-    const params = new URLSearchParams({ page, page_size: pageSize });
-    if (search) params.append('search', search);
+  getEventBuyers: async (eventId, { page = 1, pageSize = 10, search = '', status = 'all', ordering = '-created_at' } = {}) => {
+    const params = new URLSearchParams({ page, page_size: pageSize, status, ordering });
+    
+    if (search) {
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          const matchedUsers = await authService.searchUsers(search, token);
+          if (matchedUsers.length > 0) {
+            params.append('user_ids', matchedUsers.map(u => u.id).join(','));
+          } else {
+            // If zero matches by name, pass a dummy user_id to ensure it returns empty instead of all users
+            params.append('user_ids', '00000000-0000-0000-0000-000000000000');
+          }
+        } else {
+          params.append('search', search);
+        }
+      } catch (e) {
+        console.error("Error searching users:", e);
+        params.append('search', search);
+      }
+    }
+    
     const res = await api.get(`${EVENTS_URL}/api/v1/promotor/events/${eventId}/buyers/?${params}`);
     const data = res.data || res;
     return {
       evento: data.evento || {},
-      resumen: data.resumen || {},
+      resumen: {
+        total_compradores: data.resumen?.total_compradores || 0,
+        total_tickets: data.resumen?.total_tickets || 0,
+        total_ingreso: data.resumen?.total_ingresos || 0, // Fix: the backend sends total_ingresos
+      },
       paginacion: data.paginacion || { count: 0, total_pages: 1, page: 1, page_size: pageSize },
       resultados: (data.results || []).map(c => ({
         id: c.purchase_id || c.id,
         userId: c.user_id,
-        tipoEntrada: c.ticket_type_name || c.ticket_type,
+        tipoEntrada: c.ticket_type_nombre || c.ticket_type || 'Desconocido', // Fix: backend sends ticket_type_nombre
         zona: c.zone_type || 'general',
         cantidad: c.quantity || 0,
         precioTotal: parseFloat(c.total_price || 0),
         estado: c.status,
         fecha: c.created_at,
         codigoBackup: c.backup_code || '',
+        descuentoAplicado: parseFloat(c.discount_amount || 0),
+        codigoPromoId: c.promo_code || null,
       })),
     };
   },

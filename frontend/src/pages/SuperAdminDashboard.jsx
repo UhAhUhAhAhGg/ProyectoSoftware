@@ -9,6 +9,7 @@ import AdminAuditoria from '../components/dashboard/admin/AdminAuditoria';
 import SuperAdminSolicitudes from '../components/dashboard/admin/SuperAdminSolicitudes';
 import SuperAdminCrearAdmin from '../components/dashboard/admin/SuperAdminCrearAdmin';
 import DashboardSistema from '../components/dashboard/admin/DashboardSistema';
+import AdminConfiguracion from '../components/dashboard/admin/AdminConfiguracion';
 import './SuperAdminDashboard.css';
 
 function SuperAdminDashboard() {
@@ -269,9 +270,7 @@ function SuperAdminDashboard() {
                   Controla la configuración general del sistema
                 </p>
               </div>
-              <div className="coming-soon">
-                <p>🔧 Próxima funcionalidad en desarrollo</p>
-              </div>
+              <AdminConfiguracion />
             </div>
           )}
         </div>

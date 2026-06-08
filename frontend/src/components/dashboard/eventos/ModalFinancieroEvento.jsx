@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import PromotorService from '../../../services/promotorService';
+import { authService } from '../../../services/authService';
 import ListaCompradoresModal from './ListaCompradoresModal';
 import PromocionarEvento from '../../../pages/PromocionarEvento';
 import PromocodesModal from './PromocodesModal';
@@ -14,6 +15,37 @@ function ModalFinancieroEvento({ evento, financiero, onClose }) {
   const [showPromocionar, setShowPromocionar] = useState(false);
   const [showPromocodes, setShowPromocodes] = useState(false);
   const [exportando, setExportando] = useState(null);
+  const [buyerNames, setBuyerNames] = useState({});
+
+  useEffect(() => {
+    const fetchTopBuyersNames = async () => {
+      const topCompradores = financiero?.topCompradores || [];
+      const userIds = topCompradores.map(c => c.userId).filter(Boolean);
+      if (userIds.length === 0) return;
+
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const newNames = { ...buyerNames };
+      const fetchPromises = userIds.map(async (id) => {
+        if (newNames[id]) return; // ya lo tenemos
+        try {
+          const userData = await authService.getUserById(id, token);
+          const profile = userData.profile || {};
+          const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ');
+          newNames[id] = fullName ? `${fullName} (${userData.email})` : userData.email;
+        } catch (e) {
+          console.error(`Error fetching user ${id}:`, e);
+          newNames[id] = 'Usuario Desconocido';
+        }
+      });
+
+      await Promise.all(fetchPromises);
+      setBuyerNames(newNames);
+    };
+
+    fetchTopBuyersNames();
+  }, [financiero]);
 
   if (!evento) return null;
 
@@ -206,7 +238,9 @@ function ModalFinancieroEvento({ evento, financiero, onClose }) {
                   <div key={c.userId || i} className="mfe-top-item">
                     <span className="mfe-top-rank">#{i + 1}</span>
                     <div className="mfe-top-info">
-                      <span className="mfe-top-user">👤 {c.userId?.slice(0, 8)}...</span>
+                      <span className="mfe-top-user">
+                        👤 {buyerNames[c.userId] || `${c.userId?.slice(0, 8)}...`}
+                      </span>
                       <span className="mfe-top-tickets">{c.ticketsComprados} tickets</span>
                     </div>
                     <span className="mfe-top-gasto">{formatMoney(c.gastoTotal)}</span>

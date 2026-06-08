@@ -3,38 +3,29 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { eventosService } from '../services/eventosService';
 import ModalPagoQR from '../components/ModalPagoQR';
+import api from '../services/api';
 import './PromocionarEvento.css';
 
-// Planes de promoción disponibles
-const PLANES = [
-  {
-    id: 'basico',
-    nombre: 'Básico',
-    precio: 50,
-    duracion: '7 días',
-    beneficios: ['Badge destacado', 'Aparece primero en su categoría'],
-    color: '#6B7280',
-    emoji: '⭐'
-  },
-  {
-    id: 'premium',
-    nombre: 'Premium',
-    precio: 120,
-    duracion: '15 días',
-    beneficios: ['Badge Premium', 'Top 3 en búsquedas', 'Banner en home'],
-    color: '#F59E0B',
-    emoji: '🥇'
-  },
-  {
-    id: 'pro',
-    nombre: 'Pro',
-    precio: 250,
-    duracion: '30 días',
-    beneficios: ['Badge Pro', 'Posición #1', 'Banner destacado', 'Notificación a usuarios'],
-    color: '#8B5CF6',
-    emoji: '🚀'
-  }
-];
+const EVENTS_URL = process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002';
+
+// Beneficios reales y honestos según el nivel del plan
+const BENEFICIOS_POR_TIER = {
+  basico: [
+    'Tu evento aparece en la sección "Eventos Destacados" del dashboard del comprador',
+    'Visibilidad prioridad baja frente a eventos sin promoción',
+  ],
+  premium: [
+    'Tu evento aparece en la sección "Eventos Destacados" del dashboard del comprador',
+    'Mayor prioridad de visibilidad que el plan Básico',
+  ],
+  pro: [
+    'Tu evento aparece en la sección "Eventos Destacados" del dashboard del comprador',
+    'Mayor prioridad de visibilidad que todos los demás planes',
+  ],
+};
+
+const EMOJIS_POR_TIER = { basico: '⭐', premium: '🥇', pro: '🚀' };
+const COLORES_POR_TIER = { basico: '#6B7280', premium: '#F59E0B', pro: '#8B5CF6' };
 
 export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
   const params = useParams();
@@ -43,12 +34,43 @@ export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
   const { user } = useAuth();
   
   const [planSeleccionado, setPlanSeleccionado] = useState(null);
+  const [planes, setPlanes] = useState([]);
   const [modalPagoAbierto, setModalPagoAbierto] = useState(false);
   const [qrData, setQrData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingPlanes, setLoadingPlanes] = useState(true);
   const [error, setError] = useState('');
   const [eventoInfo, setEventoInfo] = useState(null);
-  const [cargaringEvento, setCargandoEvento] = useState(true);
+  const [cargandoEvento, setCargandoEvento] = useState(true);
+
+  // Cargar planes desde el backend
+  useEffect(() => {
+    const cargarPlanes = async () => {
+      try {
+        const token = localStorage.getItem('access_token');
+        const res = await api.get(`${EVENTS_URL}/api/v1/promotion-plans/`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const planesBackend = (res.data?.plans || []).map(p => ({
+          id: p.tier,
+          planId: p.id,
+          nombre: p.name,
+          precio: parseFloat(p.price_bob),
+          duracion: `${p.duration_days} días`,
+          beneficios: BENEFICIOS_POR_TIER[p.tier] || [`Visibilidad ${p.tier} en la plataforma`],
+          color: COLORES_POR_TIER[p.tier] || '#6B7280',
+          emoji: EMOJIS_POR_TIER[p.tier] || '⭐',
+        }));
+        setPlanes(planesBackend);
+      } catch (err) {
+        console.error('Error al cargar planes:', err);
+        setError('No se pudieron cargar los planes de promoción. Intenta de nuevo.');
+      } finally {
+        setLoadingPlanes(false);
+      }
+    };
+    cargarPlanes();
+  }, []);
 
   // Cargar información del evento
   useEffect(() => {
@@ -79,7 +101,6 @@ export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
     setError('');
 
     try {
-      // Generar QR para el pago de la promoción
       const qrResponse = await eventosService.generarQRPromocion(eventoId, {
         plan: planSeleccionado.id,
         monto: planSeleccionado.precio
@@ -100,13 +121,11 @@ export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
       setLoading(true);
       setError('');
 
-      // Registrar la promoción con el comprobante
       await eventosService.promocionarEvento(eventoId, {
         plan: planSeleccionado.id,
         comprobante: comprobante
       });
 
-      // Mostrar éxito y redirigir o cerrar
       alert(`✅ ¡Evento promocionado exitosamente!\nPlan ${planSeleccionado.nombre} activado por ${planSeleccionado.duracion}`);
       if (onClose) onClose();
       else navigate('/dashboard/mis-eventos');
@@ -124,11 +143,11 @@ export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
     setQrData(null);
   };
 
-  if (cargaringEvento) {
+  if (cargandoEvento || loadingPlanes) {
     return (
       <div className="promocionar-evento-loading">
         <div className="spinner"></div>
-        <p>Cargando información del evento...</p>
+        <p>Cargando información...</p>
       </div>
     );
   }
@@ -164,67 +183,74 @@ export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
       {/* Descripción */}
       <div className="promocionar-description">
         <p>
-          Selecciona un plan de promoción para aumentar la visibilidad de tu evento.
-          Cada plan incluye beneficios exclusivos para posicionar tu evento en la plataforma.
+          Selecciona un plan de promoción para que tu evento aparezca en la sección 
+          <strong> "Eventos Destacados"</strong> del dashboard del comprador. 
+          A mayor plan, mayor prioridad de visibilidad.
         </p>
       </div>
 
       {/* Grid de Planes */}
       <div className="planes-container">
-        {PLANES.map(plan => (
-          <div
-            key={plan.id}
-            className={`plan-card ${planSeleccionado?.id === plan.id ? 'seleccionado' : ''}`}
-            onClick={() => setPlanSeleccionado(plan)}
-            style={{
-              borderColor: planSeleccionado?.id === plan.id ? plan.color : '#e0e0e0',
-              backgroundColor: planSeleccionado?.id === plan.id ? `${plan.color}08` : '#ffffff'
-            }}
-          >
-            {/* Header del Plan */}
-            <div className="plan-header" style={{ borderBottomColor: plan.color }}>
-              <div className="plan-emoji">{plan.emoji}</div>
-              <h3 className="plan-nombre">{plan.nombre}</h3>
-              <div className="plan-precio">
-                <span className="cantidad">Bs. {plan.precio}</span>
+        {planes.length === 0 ? (
+          <p style={{ textAlign: 'center', color: '#999', padding: '20px' }}>
+            No hay planes disponibles en este momento.
+          </p>
+        ) : (
+          planes.map(plan => (
+            <div
+              key={plan.id}
+              className={`plan-card ${planSeleccionado?.id === plan.id ? 'seleccionado' : ''}`}
+              onClick={() => setPlanSeleccionado(plan)}
+              style={{
+                borderColor: planSeleccionado?.id === plan.id ? plan.color : '#e0e0e0',
+                backgroundColor: planSeleccionado?.id === plan.id ? `${plan.color}08` : '#ffffff'
+              }}
+            >
+              {/* Header del Plan */}
+              <div className="plan-header" style={{ borderBottomColor: plan.color }}>
+                <div className="plan-emoji">{plan.emoji}</div>
+                <h3 className="plan-nombre">{plan.nombre}</h3>
+                <div className="plan-precio">
+                  <span className="cantidad">Bs. {plan.precio}</span>
+                </div>
+              </div>
+
+              {/* Duración */}
+              <div className="plan-duracion">
+                <span className="icono">⏱️</span>
+                <span>{plan.duracion}</span>
+              </div>
+
+              {/* Beneficios */}
+              <div className="plan-beneficios">
+                <h4>¿Qué obtienes?</h4>
+                <ul>
+                  {plan.beneficios.map((beneficio, idx) => (
+                    <li key={idx}>
+                      <span className="beneficio-icono">✓</span>
+                      <span>{beneficio}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Selector */}
+              <div className="plan-selector">
+                <input
+                  type="radio"
+                  name="plan"
+                  value={plan.id}
+                  checked={planSeleccionado?.id === plan.id}
+                  onChange={() => setPlanSeleccionado(plan)}
+                  style={{ accentColor: plan.color }}
+                />
+                <span className="selector-label">
+                  {planSeleccionado?.id === plan.id ? 'Seleccionado' : 'Seleccionar'}
+                </span>
               </div>
             </div>
-
-            {/* Duración */}
-            <div className="plan-duracion">
-              <span className="icono">⏱️</span>
-              <span>{plan.duracion}</span>
-            </div>
-
-            {/* Beneficios */}
-            <div className="plan-beneficios">
-              <h4>Beneficios incluidos:</h4>
-              <ul>
-                {plan.beneficios.map((beneficio, idx) => (
-                  <li key={idx}>
-                    <span className="beneficio-icono">✓</span>
-                    <span>{beneficio}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Checkbox de Selección */}
-            <div className="plan-selector">
-              <input
-                type="radio"
-                name="plan"
-                value={plan.id}
-                checked={planSeleccionado?.id === plan.id}
-                onChange={() => setPlanSeleccionado(plan)}
-                style={{ accentColor: plan.color }}
-              />
-              <span className="selector-label">
-                {planSeleccionado?.id === plan.id ? 'Seleccionado' : 'Seleccionar'}
-              </span>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Resumen de Selección */}
@@ -275,7 +301,6 @@ export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
         <ModalPagoQR
           qrData={qrData}
           onCancel={handleCerrarModal}
-          // Propiedades adicionales si ModalPagoQR las soporta
           onPagoConfirmado={handlePagoConfirmado}
           concepto={`Promoción ${planSeleccionado?.nombre} - Evento #${eventoId}`}
         />

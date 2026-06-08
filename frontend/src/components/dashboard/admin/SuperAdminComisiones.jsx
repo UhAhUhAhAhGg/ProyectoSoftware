@@ -92,32 +92,34 @@ function SuperAdminComisiones() {
           </div>
 
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ color: '#ccc', fontSize: '0.9rem' }}>Porcentaje (%)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={percentage}
-                onChange={(e) => setPercentage(e.target.value)}
-                disabled={mode === 'fijo'}
-                style={{ width: '160px', padding: '0.5rem', borderRadius: '8px', background: '#222', color: '#fff', border: '1px solid #444' }}
-              />
-            </div>
+            {mode !== 'fijo' && (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <label style={{ color: '#ccc', fontSize: '0.9rem' }}>Porcentaje (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={percentage}
+                  onChange={(e) => setPercentage(e.target.value)}
+                  style={{ width: '160px', padding: '0.5rem', borderRadius: '8px', background: '#222', color: '#fff', border: '1px solid #444' }}
+                />
+              </div>
+            )}
 
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ color: '#ccc', fontSize: '0.9rem' }}>Monto fijo (BOB)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={fixed}
-                onChange={(e) => setFixed(e.target.value)}
-                disabled={mode === 'porcentaje'}
-                style={{ width: '160px', padding: '0.5rem', borderRadius: '8px', background: '#222', color: '#fff', border: '1px solid #444' }}
-              />
-            </div>
+            {mode !== 'porcentaje' && (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <label style={{ color: '#ccc', fontSize: '0.9rem' }}>Monto fijo (BOB)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={fixed}
+                  onChange={(e) => setFixed(e.target.value)}
+                  style={{ width: '160px', padding: '0.5rem', borderRadius: '8px', background: '#222', color: '#fff', border: '1px solid #444' }}
+                />
+              </div>
+            )}
           </div>
 
           <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
