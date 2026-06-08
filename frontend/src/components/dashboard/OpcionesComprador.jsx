@@ -63,10 +63,10 @@ function OpcionesComprador() {
       }
     })();
 
-    // 2) Eventos destacados (TIC-362 + TIC-364 fallback)
+    // 2) Eventos destacados (Promocionados)
     (async () => {
       try {
-        const evts = await recommendationsService.getRecommendedEvents();
+        const evts = await eventosService.getEventosDestacados();
         if (!cancelled) setEventosDestacados(Array.isArray(evts) ? evts.slice(0, 3) : []);
       } catch {
         if (!cancelled) setEventosDestacados([]);
@@ -194,7 +194,12 @@ function OpcionesComprador() {
               <Link
                 to={`/dashboard/evento/${evento.id}`}
                 key={evento.id}
-                className="evento-mini-card"
+                className={`evento-mini-card ${evento.promocion ? 'evento-promocionado' : ''}`}
+                style={{
+                  borderLeft: evento.promocion === 'pro' ? '4px solid #8B5CF6' :
+                              evento.promocion === 'premium' ? '4px solid #F59E0B' :
+                              evento.promocion === 'basico' ? '4px solid #6B7280' : 'none'
+                }}
               >
                 {evento.imagen ? (
                   <img src={evento.imagen} alt={evento.nombre} className="evento-mini-imagen-img" />

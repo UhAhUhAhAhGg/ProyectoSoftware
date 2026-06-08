@@ -42,6 +42,7 @@ export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
   const [error, setError] = useState('');
   const [eventoInfo, setEventoInfo] = useState(null);
   const [cargandoEvento, setCargandoEvento] = useState(true);
+  const [existingPromo, setExistingPromo] = useState(null);
 
   // Cargar planes desde el backend
   useEffect(() => {
@@ -78,6 +79,11 @@ export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
       try {
         const evento = await eventosService.getEventoById(eventoId);
         setEventoInfo(evento);
+        const promoRes = await eventosService.getPromotionStatus(eventoId);
+        const promoData = promoRes.data || promoRes;
+        if (promoData.status !== 'no_promotion') {
+           setExistingPromo(promoData.promotion);
+        }
       } catch (err) {
         setError('No se pudo cargar la información del evento.');
         console.error(err);
@@ -91,29 +97,15 @@ export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
     }
   }, [eventoId]);
 
-  const handleContinuarAlPago = async () => {
+  const handleContinuarAlPago = () => {
     if (!planSeleccionado) {
       setError('Por favor selecciona un plan.');
       return;
     }
-
-    setLoading(true);
     setError('');
-
-    try {
-      const qrResponse = await eventosService.generarQRPromocion(eventoId, {
-        plan: planSeleccionado.id,
-        monto: planSeleccionado.precio
-      });
-
-      setQrData(qrResponse);
-      setModalPagoAbierto(true);
-    } catch (err) {
-      setError(err.message || 'Error al generar código QR. Intenta de nuevo.');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    // No necesitamos llamar al backend para generar QR, simularemos localmente
+    setQrData({ total_price: planSeleccionado.precio });
+    setModalPagoAbierto(true);
   };
 
   const handlePagoConfirmado = async (comprobante) => {
@@ -122,7 +114,7 @@ export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
       setError('');
 
       await eventosService.promocionarEvento(eventoId, {
-        plan: planSeleccionado.id,
+        plan: planSeleccionado.planId,
         comprobante: comprobante
       });
 
@@ -164,30 +156,39 @@ export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
             else navigate('/dashboard/mis-eventos');
           }}
         >
-          ← Volver
+          &larr; Volver
         </button>
-        <div>
-          <h1>🚀 Promociona tu Evento</h1>
-          {eventoInfo && <p className="evento-nombre">{eventoInfo.nombre}</p>}
-        </div>
+        <h2>🚀 Promociona tu Evento</h2>
+        {eventoInfo && <p className="evento-nombre-destacado">{eventoInfo.nombre}</p>}
       </div>
 
-      {/* Error Alert */}
-      {error && (
-        <div className="alert alert-error">
-          <span>❌ {error}</span>
-          <button className="alert-close" onClick={() => setError('')}>✕</button>
+      {existingPromo ? (
+        <div style={{ padding: '20px', background: '#fef3c7', borderRadius: '12px', margin: '20px', textAlign: 'center', border: '1px solid #f59e0b' }}>
+          <h3 style={{ color: '#b45309', marginBottom: '10px' }}>⭐ Ya tienes una promoción activa</h3>
+          <p style={{ color: '#92400e', marginBottom: '15px' }}>
+            Este evento ya cuenta con el plan <strong>{existingPromo.plan_name || 'Pro'}</strong> activo hasta el {new Date(existingPromo.expires_at).toLocaleDateString('es-ES')}. No puedes adquirir otra promoción mientras esta esté vigente.
+          </p>
+          <button 
+            className="btn-primario" 
+            onClick={() => {
+              if (onClose) onClose();
+              else navigate('/dashboard/mis-eventos');
+            }}
+            style={{ display: 'inline-block' }}
+          >
+            Entendido
+          </button>
         </div>
-      )}
-
-      {/* Descripción */}
-      <div className="promocionar-description">
-        <p>
-          Selecciona un plan de promoción para que tu evento aparezca en la sección 
-          <strong> "Eventos Destacados"</strong> del dashboard del comprador. 
-          A mayor plan, mayor prioridad de visibilidad.
-        </p>
-      </div>
+      ) : (
+        <>
+          {error && <div className="alert alert-error"><span>❌ {error}</span><button className="alert-close" onClick={() => setError('')}>✕</button></div>}
+          <div className="promocionar-description">
+            <p>
+              Selecciona un plan de promoción para que tu evento aparezca en la sección 
+              <strong> "Eventos Destacados"</strong> del dashboard del comprador. 
+              A mayor plan, mayor prioridad de visibilidad.
+            </p>
+          </div>
 
       {/* Grid de Planes */}
       <div className="planes-container">
@@ -304,6 +305,8 @@ export default function PromocionarEvento({ eventoId: propEventoId, onClose }) {
           onPagoConfirmado={handlePagoConfirmado}
           concepto={`Promoción ${planSeleccionado?.nombre} - Evento #${eventoId}`}
         />
+      )}
+        </>
       )}
       </div>
     </div>

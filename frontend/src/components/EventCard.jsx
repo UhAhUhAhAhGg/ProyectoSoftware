@@ -37,7 +37,14 @@ export default function EventCard({
   };
 
   return (
-    <article className={`evento-card evento-card-${variant}`}>
+    <article 
+      className={`evento-card evento-card-${variant} ${evento.promocion ? 'evento-promocionado' : ''}`}
+      style={{
+        borderLeft: evento.promocion === 'pro' ? '5px solid #8B5CF6' :
+                    evento.promocion === 'premium' ? '5px solid #F59E0B' :
+                    evento.promocion === 'basico' ? '5px solid #6B7280' : undefined
+      }}
+    >
       {/* Imagen */}
       <div className="card-image-wrapper">
         <img
@@ -61,14 +68,6 @@ export default function EventCard({
         {evento.estado && variant === 'admin' && (
           <div className={`card-badge estado-${evento.estado}`}>
             {evento.estado}
-          </div>
-        )}
-        {/* Badge de promoción si existe */}
-        {evento.promocion && (
-          <div className={`badge-destacado badge-${evento.promocion}`}>
-            {evento.promocion === 'basico' && '⭐ Destacado'}
-            {evento.promocion === 'premium' && '🥇 Premium'}
-            {evento.promocion === 'pro' && '🚀 Pro'}
           </div>
         )}
       </div>

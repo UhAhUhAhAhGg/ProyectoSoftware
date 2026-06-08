@@ -7,6 +7,8 @@ import EventoCardFinanciero from './EventoCardFinanciero';
 import ModalFinancieroEvento from './ModalFinancieroEvento';
 import FormularioEvento from './FormularioEvento';
 import ConfiguracionCola from './ConfiguracionCola';
+import PromocionesList from './PromocionesList';
+import CodigosDescuentoList from './CodigosDescuentoList';
 import './ListaEventos.css';
 
 function ListaEventos() {
@@ -20,6 +22,7 @@ function ListaEventos() {
   const [cargando, setCargando] = useState(true);
   const [eventoDetalle, setEventoDetalle] = useState(null);
   const [eventoAEditarId, setEventoAEditarId] = useState(null);
+  const [activeTab, setActiveTab] = useState(location.state?.activeTab || 'eventos');
 
   // Modal financiero
   const [modalEvento, setModalEvento] = useState(null);
@@ -155,18 +158,49 @@ function ListaEventos() {
           <p className="eventos-count">{eventosFiltrados.length} eventos encontrados</p>
         </div>
         <div className="header-right">
-          <Link to="/dashboard/crear-evento" className="btn-crear-evento">
-            <span className="btn-icono">➕</span>
-            Crear Nuevo Evento
-          </Link>
+          {activeTab === 'eventos' && (
+            <Link to="/dashboard/crear-evento" className="btn-crear-evento">
+              <span className="btn-icono">➕</span>
+              Crear Nuevo Evento
+            </Link>
+          )}
         </div>
       </div>
 
-      {/* Filtros y búsqueda */}
-      <div className="eventos-filtros">
-        <div className="busqueda-container">
-          <span className="busqueda-icono">🔍</span>
-          <input
+      {/* Navegación Principal (Tabs Generales) */}
+      <div className="lista-eventos-tabs-generales">
+        <button 
+          className={`tab-general ${activeTab === 'eventos' ? 'activo' : ''}`}
+          onClick={() => setActiveTab('eventos')}
+        >
+          📋 Mis Eventos
+        </button>
+        <button 
+          className={`tab-general ${activeTab === 'promociones' ? 'activo' : ''}`}
+          onClick={() => setActiveTab('promociones')}
+        >
+          🚀 Mis Promociones
+        </button>
+        <button 
+          className={`tab-general ${activeTab === 'codigos' ? 'activo' : ''}`}
+          onClick={() => setActiveTab('codigos')}
+        >
+          🏷️ Mis Códigos de Descuento
+        </button>
+      </div>
+
+      {/* Renderizado Condicional de Contenido */}
+      {activeTab === 'promociones' && <PromocionesList />}
+      
+      {activeTab === 'codigos' && <CodigosDescuentoList />}
+
+      {activeTab === 'eventos' && (
+        <>
+          {/* Filtros y búsqueda */}
+          <div className="eventos-filtros">
+            <div className="busqueda-container">
+              <span className="busqueda-icono">🔍</span>
+              <input
             type="text"
             placeholder="Buscar por nombre o ubicación..."
             value={busqueda}
@@ -218,6 +252,8 @@ function ListaEventos() {
             />
           ))}
         </div>
+      )}
+      </>
       )}
 
       {/* Modal de confirmación para eliminar */}

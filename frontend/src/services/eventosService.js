@@ -54,6 +54,7 @@ export const mapEvento = (e) => {
     promotorId: e.promoter_id,
     categoria: e.category ?? null,
     categoriaNombre: e.category_name ?? null,
+    promocion: e.promocion ?? null,
     tiposEntrada,
   };
 };
@@ -66,6 +67,31 @@ export const eventosService = {
     return data.results ?? data;
   },
 
+  getEventosCategoria: async (idCategoria) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/events/?status=published&category=${idCategoria}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const results = Array.isArray(data) ? data : data.results || [];
+    return results.map(mapEvento);
+  },
+
+  // Obtener eventos destacados
+  getEventosDestacados: async () => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/events/featured/`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const results = Array.isArray(data) ? data : data.featured_events || data.results || [];
+    return results.map(mapEvento);
+  },
+
+  getPromotionStatus: async (eventoId) => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/promotor/events/${eventoId}/promotion/`);
+    if (!res.ok) throw new Error('Error al obtener el estado de la promoción');
+    return res.json();
+  },
+
+  // ==========================================
+  // COMPRADORES (TIC-364 / TIC-21 / TIC-25)
   getEventosDisponibles: async () => {
     const res = await apiFetch(`${EVENTS_URL}/api/v1/events/?status=published`);
     if (!res.ok) throw new Error('No se pudieron cargar los eventos.');
@@ -514,16 +540,16 @@ export const eventosService = {
 
   /**
    * Registra la promoción del evento después de confirmado el pago
-   * Backend: POST /api/v1/events/{id}/promocionar/
+   * Backend: POST /api/v1/promotor/events/{id}/promote/
    */
   promocionarEvento: async (eventoId, datos) => {
     const res = await apiFetch(
-      `${EVENTS_URL}/api/v1/events/${eventoId}/promocionar/`,
+      `${EVENTS_URL}/api/v1/promotor/events/${eventoId}/promote/`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          plan: datos.plan,
+          plan_id: datos.plan,
           comprobante: datos.comprobante,
         }),
       }
@@ -538,4 +564,30 @@ export const eventosService = {
 
     return await res.json();
   },
+
+  /**
+   * Obtiene todas las promociones contratadas por el promotor
+   * Backend: GET /api/v1/promotor/promotions/
+   */
+  getMisPromociones: async () => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/promotor/promotions/`);
+    if (!res.ok) {
+      throw new Error('Error al obtener promociones.');
+    }
+    const data = await res.json();
+    return data.results || [];
+  },
+
+  /**
+   * Obtiene todos los códigos de descuento creados por el promotor
+   * Backend: GET /api/v1/promotor/promo-codes/
+   */
+  getMisCodigosDescuento: async () => {
+    const res = await apiFetch(`${EVENTS_URL}/api/v1/promotor/promo-codes/`);
+    if (!res.ok) {
+      throw new Error('Error al obtener códigos de descuento.');
+    }
+    const data = await res.json();
+    return data.results || [];
+  }
 };

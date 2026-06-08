@@ -4755,6 +4755,26 @@ class EventPromoteView(APIView):
         )
 
 
+class PromotorPromotionListView(APIView):
+    """
+    GET /api/v1/promotor/promotions/
+
+    El Promotor consulta el historial de todas sus promociones (activas, expiradas, pendientes).
+    """
+    permission_classes = [IsAuthenticated, IsPromotor]
+
+    def get(self, request):
+        from .serializers import EventPromotionReadSerializer
+        promotions = EventPromotion.objects.filter(
+            promoter_id=request.user.id
+        ).select_related('plan', 'event').order_by('-created_at')
+
+        return Response({
+            "status": "ok",
+            "results": EventPromotionReadSerializer(promotions, many=True).data,
+        })
+
+
 class EventPromotionStatusView(APIView):
     """
     GET /api/v1/promotor/events/{event_id}/promotion/
@@ -4792,7 +4812,9 @@ class FeaturedEventsView(APIView):
     del plan (Pro > Premium > Básico) y luego por fecha del evento.
     Acceso: público (AllowAny).
     """
-    permission_classes = []  # Público
+    from rest_framework.permissions import AllowAny
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
     def get(self, request):
         from django.utils import timezone as tz

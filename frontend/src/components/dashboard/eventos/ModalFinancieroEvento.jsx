@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import PromotorService from '../../../services/promotorService';
 import { authService } from '../../../services/authService';
+import { eventosService } from '../../../services/eventosService';
 import ListaCompradoresModal from './ListaCompradoresModal';
 import PromocionarEvento from '../../../pages/PromocionarEvento';
 import PromocodesModal from './PromocodesModal';
@@ -16,8 +17,22 @@ function ModalFinancieroEvento({ evento, financiero, onClose }) {
   const [showPromocodes, setShowPromocodes] = useState(false);
   const [exportando, setExportando] = useState(null);
   const [buyerNames, setBuyerNames] = useState({});
+  const [promotionStatus, setPromotionStatus] = useState(null);
 
   useEffect(() => {
+    const fetchPromoStatus = async () => {
+      try {
+        const promoData = await eventosService.getPromotionStatus(evento.id);
+        const data = promoData.data || promoData;
+        if (data.status !== 'no_promotion') {
+           setPromotionStatus(data.promotion);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    fetchPromoStatus();
+
     const fetchTopBuyersNames = async () => {
       const topCompradores = financiero?.topCompradores || [];
       const userIds = topCompradores.map(c => c.userId).filter(Boolean);
@@ -274,21 +289,25 @@ function ModalFinancieroEvento({ evento, financiero, onClose }) {
 
               {/* TIC-35: Códigos de Descuento */}
               <button 
-                className="mfe-action-btn" 
-                style={{ background: '#10b981', color: 'white' }}
+                className="mfe-action-btn mfe-action-promocode" 
                 onClick={() => setShowPromocodes(true)}
               >
                 🏷️ Crear Código de Descuento
               </button>
 
               {/* TIC-570: Destacar Evento */}
-              <button 
-                className="mfe-action-btn"
-                style={{ background: '#eab308', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onClick={() => setShowPromocionar(true)}
-              >
-                ⭐ Destacar Evento
-              </button>
+              {promotionStatus ? (
+                <div className="mfe-action-promocion-activa">
+                  ⭐ Promoción Activa ({promotionStatus.plan_name || 'Pro'})
+                </div>
+              ) : (
+                <button 
+                  className="mfe-action-btn mfe-action-destacar"
+                  onClick={() => setShowPromocionar(true)}
+                >
+                  ⭐ Destacar Evento
+                </button>
+              )}
             </div>
           </div>
         </div>

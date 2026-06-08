@@ -118,9 +118,17 @@ function ExplorarEventos() {
 
     // Si el usuario tiene preferencias activas → priorizar (favoritos primero)
     if (favSlugs.length > 0) {
-      const score = (e) => favSlugs.includes(slugify(e.categoriaNombre)) ? 1 : 0;
-      lista.sort((a, b) => score(b) - score(a));
+      const scoreFav = (e) => favSlugs.includes(slugify(e.categoriaNombre)) ? 1 : 0;
+      lista.sort((a, b) => scoreFav(b) - scoreFav(a));
     }
+
+    // Finalmente, priorizar por promoción (pro > premium > basico > nada)
+    const promoScore = {
+      'pro': 3,
+      'premium': 2,
+      'basico': 1,
+    };
+    lista.sort((a, b) => (promoScore[b.promocion] || 0) - (promoScore[a.promocion] || 0));
 
     return lista;
   }, [eventos, busqueda, categoriaFiltro, orden, mostrarSoloFav, favSlugs]);

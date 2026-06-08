@@ -89,11 +89,11 @@ export const authService = {
   },
 
   // Registro de nuevo usuario (Comprador / Promotor)
-  register: async (email, password, roleName) => {
+  register: async (email, password, roleName, first_name = '') => {
     const response = await fetch(`${API_URL}/api/v1/users/register/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, role: roleName }),
+      body: JSON.stringify({ email, password, role: roleName, first_name }),
     });
 
     const data = await response.json();

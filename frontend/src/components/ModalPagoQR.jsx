@@ -1,37 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
-// Recibe la data REAL que nos devolvió Django en el endpoint anterior
-export default function ModalPagoQR({ qrData, onCancel }) {
-  const [tiempoRestante, setTiempoRestante] = useState('');
-  const [expiro, setExpiro] = useState(false);
+export default function ModalPagoQR({ qrData, onCancel, onPagoConfirmado, concepto }) {
+  const [simulando, setSimulando] = useState(false);
 
-  useEffect(() => {
-    // Leemos la fecha exacta de expiración que mandó la Base de Datos
-    const fechaExpiracion = new Date(qrData.expires_at).getTime();
-
-    const intervalo = setInterval(() => {
-      const ahora = new Date().getTime();
-      const diferencia = fechaExpiracion - ahora;
-
-      // Si el tiempo se acabó
-      if (diferencia <= 0) {
-        clearInterval(intervalo);
-        setTiempoRestante("00:00");
-        setExpiro(true);
-      } else {
-        // Calcular minutos y segundos restantes reales
-        const minutos = Math.floor((diferencia % (1000 * 60 * 60)) / (1000 * 60));
-        const segundos = Math.floor((diferencia % (1000 * 60)) / 1000);
-        
-        // Formatear para que siempre tenga 2 dígitos (ej: 09:05)
-        setTiempoRestante(
-          `${minutos.toString().padStart(2, '0')}:${segundos.toString().padStart(2, '0')}`
-        );
-      }
-    }, 1000);
-
-    return () => clearInterval(intervalo);
-  }, [qrData.expires_at]);
+  const handleSimularPago = async () => {
+    setSimulando(true);
+    // onPagoConfirmado hace la llamada al backend para activar la promoción
+    await onPagoConfirmado('COMPROBANTE_SIMULADO');
+    setSimulando(false);
+  };
 
   return (
     <div style={{
@@ -41,45 +18,54 @@ export default function ModalPagoQR({ qrData, onCancel }) {
     }}>
       <div style={{
         background: 'white', padding: '30px', borderRadius: '12px',
-        textAlign: 'center', maxWidth: '400px', width: '90%'
+        textAlign: 'center', maxWidth: '400px', width: '90%',
+        boxShadow: '0 20px 50px rgba(0,0,0,0.15)'
       }}>
-        <h2>Total a pagar: Bs. {qrData.total_price}</h2>
+        <h2 style={{ margin: '0 0 10px 0', color: '#1e293b' }}>Resumen de pago</h2>
+        <p style={{ margin: '0 0 15px 0', color: '#64748b' }}>{concepto}</p>
         
-        {expiro ? (
-          <div style={{ color: 'red', margin: '20px 0' }}>
-            <h3>⏱️ El tiempo ha expirado</h3>
-            <p>El código QR ya no es válido. Por favor, cierra esta ventana e intenta comprar de nuevo.</p>
-          </div>
-        ) : (
-          <>
-            <p style={{ color: '#666' }}>Escanea este código con tu aplicación bancaria.</p>
-            {/* Renderizamos el QR REAL generado por Django */}
-            <img 
-              src={`data:image/png;base64,${qrData.qr_image}`} 
-              alt="Código QR de Pago"
-              style={{ width: '250px', height: '250px', border: '2px solid #eee', borderRadius: '8px' }}
-            />
-            
-            <div style={{ margin: '20px 0', padding: '10px', background: '#fff3cd', borderRadius: '8px' }}>
-              <p style={{ margin: 0, fontWeight: 'bold', color: '#856404' }}>
-                ⏳ Tiempo restante para pagar:
-              </p>
-              <p style={{ fontSize: '2rem', margin: '5px 0', fontWeight: '900', color: '#856404' }}>
-                {tiempoRestante}
-              </p>
-            </div>
-          </>
-        )}
+        <div style={{ borderBottom: '1px dashed #ccc', marginBottom: '15px' }}></div>
+        
+        <h3 style={{ color: '#16a34a', fontSize: '1.5rem', margin: '0 0 20px 0' }}>
+          Total: Bs. {qrData.total_price}
+        </h3>
+        
+        <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '10px' }}>
+          Escanea este código para completar tu compra
+        </p>
+        
+        <img 
+          src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=PagoPromocion`} 
+          alt="Código QR de Pago"
+          style={{ width: '220px', height: '220px', border: '2px solid #eee', borderRadius: '8px', marginBottom: '20px' }}
+        />
+
+        <div style={{ background: '#fef3c7', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #fde68a' }}>
+          <p style={{ margin: '0 0 10px 0', fontWeight: 'bold', color: '#92400e', fontSize: '0.85rem' }}>
+            🛠️ MODO DESARROLLO
+          </p>
+          <button 
+            onClick={handleSimularPago}
+            disabled={simulando}
+            style={{
+              width: '100%', padding: '12px', background: '#16a34a', color: 'white', 
+              border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: simulando ? 'not-allowed' : 'pointer', 
+              fontSize: '1rem', transition: 'background 0.2s'
+            }}
+          >
+            {simulando ? 'Procesando...' : '✅ Simular pago aprobado'}
+          </button>
+        </div>
 
         <button 
           onClick={onCancel}
           style={{
-            padding: '10px 20px', background: expiro ? '#dc3545' : '#6c757d',
+            padding: '10px 20px', background: '#64748b',
             color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer',
-            width: '100%', fontSize: '1.1rem', fontWeight: 'bold'
+            width: '100%', fontSize: '1.1rem', fontWeight: 'bold', transition: 'background 0.2s'
           }}
         >
-          {expiro ? "Volver al evento" : "Cancelar Pago"}
+          Cancelar Pago
         </button>
       </div>
     </div>

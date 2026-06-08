@@ -1,0 +1,190 @@
+.lista-general-container {
+  background: var(--color-blanco);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  padding: 20px;
+  margin-bottom: 30px;
+  border: 1px solid var(--color-gris-claro);
+  animation: fadeIn 0.4s ease-out;
+}
+
+body.dark-mode .lista-general-container {
+  background: var(--color-negro);
+  border-color: #333;
+}
+
+.lista-general-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--color-gris-claro);
+}
+
+body.dark-mode .lista-general-header {
+  border-bottom-color: #333;
+}
+
+.lista-general-header h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  color: var(--color-marron);
+}
+
+body.dark-mode .lista-general-header h3 {
+  color: var(--color-oro);
+}
+
+.lista-badge {
+  background: var(--color-marron);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.table-responsive {
+  overflow-x: auto;
+}
+
+.lista-general-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+}
+
+.lista-general-table th {
+  text-align: left;
+  padding: 12px 15px;
+  color: var(--color-verde-gris);
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-bottom: 2px solid var(--color-gris-claro);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+body.dark-mode .lista-general-table th {
+  color: #a0aec0;
+  border-bottom-color: #444;
+}
+
+.lista-general-table td {
+  padding: 15px;
+  border-bottom: 1px solid var(--color-gris-claro);
+  color: #444;
+  font-size: 0.95rem;
+  vertical-align: middle;
+}
+
+body.dark-mode .lista-general-table td {
+  border-bottom-color: #333;
+  color: #e2e8f0;
+}
+
+.lista-general-table tr:last-child td {
+  border-bottom: none;
+}
+
+.lista-general-table tr:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+body.dark-mode .lista-general-table tr:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Badges */
+.plan-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+.plan-basico { background: #e5e7eb; color: #4b5563; }
+.plan-premium { background: #fef3c7; color: #d97706; }
+.plan-pro { background: #ede9fe; color: #7c3aed; }
+
+body.dark-mode .plan-basico { background: #374151; color: #d1d5db; }
+body.dark-mode .plan-premium { background: #78350f; color: #fde68a; }
+body.dark-mode .plan-pro { background: #4c1d95; color: #ddd6fe; }
+
+.codigo-badge {
+  font-family: monospace;
+  background: #f1f5f9;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #0f172a;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+body.dark-mode .codigo-badge {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+.status-active { background: #dcfce7; color: #15803d; }
+.status-expired, .status-cancelled { background: #fee2e2; color: #b91c1c; }
+.status-pending { background: #fef9c3; color: #a16207; }
+
+body.dark-mode .status-active { background: #14532d; color: #86efac; }
+body.dark-mode .status-expired, body.dark-mode .status-cancelled { background: #7f1d1d; color: #fca5a5; }
+body.dark-mode .status-pending { background: #713f12; color: #fde047; }
+
+/* Empty / Loading States */
+.lista-general-loading, .lista-general-error, .lista-general-vacia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 50px 20px;
+  background: var(--color-blanco);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--color-gris-claro);
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+body.dark-mode .lista-general-loading, 
+body.dark-mode .lista-general-error, 
+body.dark-mode .lista-general-vacia {
+  background: var(--color-negro);
+  border-color: #333;
+}
+
+.icono-vacio {
+  font-size: 3rem;
+  margin-bottom: 15px;
+  display: inline-block;
+}
+
+.lista-general-vacia h3 {
+  color: var(--color-marron);
+  margin-bottom: 10px;
+  font-size: 1.4rem;
+}
+
+body.dark-mode .lista-general-vacia h3 {
+  color: var(--color-oro);
+}
+
+.lista-general-vacia p {
+  color: #666;
+  max-width: 400px;
+}
+
+body.dark-mode .lista-general-vacia p {
+  color: #aaa;
+}

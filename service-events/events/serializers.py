@@ -36,6 +36,7 @@ class EventSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     tickets = TicketTypeSerializer(source='ticket_types', many=True, read_only=True)
     disponibilidad = serializers.SerializerMethodField()
+    promocion = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
@@ -55,9 +56,18 @@ class EventSerializer(serializers.ModelSerializer):
             'category',
             'category_name',
             'tickets',
-            'disponibilidad'
+            'disponibilidad',
+            'promocion'
         ]
         read_only_fields = ['id', 'created_at', 'admin_status']
+
+    def get_promocion(self, obj):
+        from django.utils import timezone as tz
+        now = tz.now()
+        promo = obj.promotions.filter(status='active', expires_at__gt=now).first()
+        if promo:
+            return promo.plan.tier
+        return None
 
     def get_disponibilidad(self, obj):
         # Si el evento no está publicado, no debe mostrarse como disponible

@@ -52,6 +52,7 @@ from .views import (
     SuperAdminPromotionPlanUpdateView,
     EventPromoteView,             # POST /promotor/events/{id}/promote/
     EventPromotionStatusView,     # GET /promotor/events/{id}/promotion/
+    PromotorPromotionListView,    # GET /promotor/promotions/
     FeaturedEventsView,           # GET /events/featured/
     AdminPromotionListView,       # GET /admin/promotions/
     
@@ -86,6 +87,7 @@ router.register(r'events', EventViewSet, basename='event')
 router.register(r'ticket-types', TicketTypeViewSet, basename='ticket-type')
 
 urlpatterns = [
+    path('events/featured/', FeaturedEventsView.as_view(), name='events-featured'),
     path('', include(router.urls)),
 
     # Compra: iniciar orden (→ pending) y confirmar pago
@@ -194,7 +196,7 @@ urlpatterns = [
     path('promotion-plans/', PromotionPlanListView.as_view(), name='promotion-plan-list'),
     path('promotor/events/<uuid:event_id>/promote/', EventPromoteView.as_view(), name='event-promote'),
     path('promotor/events/<uuid:event_id>/promotion/', EventPromotionStatusView.as_view(), name='event-promotion-status'),
-    path('events/featured/', FeaturedEventsView.as_view(), name='events-featured'),
+    path('promotor/promotions/', PromotorPromotionListView.as_view(), name='promotor-promotions-list'),
     path('admin/promotions/', AdminPromotionListView.as_view(), name='admin-promotion-list'),
     path('superadmin/promotion-plans/', SuperAdminPromotionPlanListView.as_view(), name='superadmin-promotion-plans-list'),
     path('superadmin/promotion-plans/<uuid:pk>/', SuperAdminPromotionPlanUpdateView.as_view(), name='superadmin-promotion-plans-update'),

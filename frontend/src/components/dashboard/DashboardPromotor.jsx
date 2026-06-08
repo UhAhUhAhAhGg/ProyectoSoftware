@@ -397,8 +397,11 @@ const DashboardPromotor = ({ promoterId, promoterName }) => {
         <Link to="/dashboard/mis-eventos" className="pd__action">
           <span>📋</span> Mis eventos
         </Link>
-        <Link to="/dashboard/perfil" className="pd__action">
-          <span>👤</span> Mi perfil
+        <Link to="/dashboard/mis-eventos" state={{ activeTab: 'promociones' }} className="pd__action">
+          <span>🚀</span> Mis promociones
+        </Link>
+        <Link to="/dashboard/mis-eventos" state={{ activeTab: 'codigos' }} className="pd__action">
+          <span>🏷️</span> Mis códigos
         </Link>
       </div>
 
