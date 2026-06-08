@@ -100,6 +100,7 @@ const DashboardPromotor = ({ promoterId, promoterName }) => {
   const [events, setEvents] = useState([]);
   const [error, setError] = useState(null);
   const [range, setRange] = useState('6m');
+  const [exportandoPdf, setExportandoPdf] = useState(false);
   const intervalRef = useRef(null);
   const isFetchingRef = useRef(false);
 
@@ -361,9 +362,27 @@ const DashboardPromotor = ({ promoterId, promoterName }) => {
     }
   };
 
+  const handleExportCSV = async () => {
+    try {
+      await PromotorService.exportPromotorDashboard('csv');
+    } catch (error) {
+      alert('Error al exportar a CSV.');
+      console.error(error);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      await PromotorService.exportPromotorDashboard('pdf');
+    } catch (error) {
+      alert('Error al exportar a PDF.');
+      console.error(error);
+    }
+  };
+
   /* ── Render ─────────────────────────────────────────── */
   return (
-    <div className="pd" id="finanzas">
+    <div className="pd" id="dashboard-promotor-content">
       {/* ═══ HEADER ═══ */}
       <header className="pd__header">
         <div className="pd__header-left">
@@ -403,6 +422,12 @@ const DashboardPromotor = ({ promoterId, promoterName }) => {
         <Link to="/dashboard/mis-eventos" state={{ activeTab: 'codigos' }} className="pd__action">
           <span>🏷️</span> Mis códigos
         </Link>
+        <button onClick={handleExportPDF} disabled={exportandoPdf} className="pd__action" style={{ background: '#e0e7ff', color: '#4338ca', borderColor: '#c7d2fe' }}>
+          {exportandoPdf ? '⏳ Generando PDF...' : '📄 Exportar PDF'}
+        </button>
+        <button onClick={handleExportCSV} className="pd__action" style={{ background: '#dcfce7', color: '#15803d', borderColor: '#bbf7d0' }}>
+          <span>📥</span> Exportar CSV
+        </button>
       </div>
 
       {/* ═══ ERROR ═══ */}

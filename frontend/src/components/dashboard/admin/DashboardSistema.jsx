@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import api from '../../../services/api';
 import { userManagementService } from '../../../services/userManagementService';
+import PromotorService from '../../../services/promotorService';
 import './DashboardSistema.css';
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -23,6 +24,7 @@ const DashboardSistema = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [exportandoPdf, setExportandoPdf] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -109,13 +111,46 @@ const DashboardSistema = () => {
     );
   }
 
+  const handleExportCSV = async () => {
+    try {
+      await PromotorService.exportSuperAdminDashboard('csv');
+    } catch (error) {
+      alert('Error al exportar a CSV.');
+      console.error(error);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      await PromotorService.exportSuperAdminDashboard('pdf');
+    } catch (error) {
+      alert('Error al exportar a PDF.');
+      console.error(error);
+    }
+  };
+
   return (
-    <div className="ds-wrapper">
-      <header className="ds-header">
-        <h1 className="ds-title">
+    <div className="ds-wrapper" id="dashboard-sistema-content">
+      <header className="ds-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 className="ds-title" style={{ margin: 0 }}>
           <span className="ds-title-icon">🌍</span>
           Rendimiento Financiero Global
         </h1>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            onClick={handleExportPDF} 
+            disabled={exportandoPdf} 
+            style={{ padding: '8px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            {exportandoPdf ? '⏳ Generando PDF...' : '📄 Exportar PDF'}
+          </button>
+          <button 
+            onClick={handleExportCSV} 
+            style={{ padding: '8px 16px', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            📥 Exportar CSV
+          </button>
+        </div>
       </header>
 
       {/* Tarjetas KPI */}

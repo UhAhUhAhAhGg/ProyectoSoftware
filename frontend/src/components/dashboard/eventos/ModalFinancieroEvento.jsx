@@ -77,13 +77,13 @@ function ModalFinancieroEvento({ evento, financiero, onClose }) {
     vendidos: d.vendidos,
   }));
 
-  const handleExport = async (type) => {
-    setExportando(type);
+  const handleExport = async (type, format = 'csv') => {
+    setExportando(`${type}-${format}`);
     try {
       if (type === 'buyers') {
-        await PromotorService.exportEventBuyersCSV(evento.id);
+        await PromotorService.exportEventBuyersCSV(evento.id, format);
       } else {
-        await PromotorService.exportEventFinancialCSV(evento.id);
+        await PromotorService.exportEventFinancialCSV(evento.id, format);
       }
     } catch (err) {
       alert('Error al exportar: ' + (err?.message || 'Intenta de nuevo'));
@@ -269,15 +269,23 @@ function ModalFinancieroEvento({ evento, financiero, onClose }) {
           <div className="mfe-section mfe-acciones-section">
             <h3>⚡ Acciones</h3>
             <div className="mfe-acciones-grid">
-              {/* TIC-36: Exportar */}
-              <button className="mfe-action-btn mfe-action-export" onClick={() => handleExport('financial')} disabled={exportando === 'financial'}>
-                📥 {exportando === 'financial' ? 'Exportando...' : 'Exportar Reporte CSV'}
+              {/* TIC-36: Exportar Reporte Financiero */}
+              <button className="mfe-action-btn mfe-action-export" onClick={() => handleExport('financial', 'csv')} disabled={exportando === 'financial-csv'}>
+                📥 {exportando === 'financial-csv' ? 'Exportando...' : 'Exportar Reporte CSV'}
               </button>
-              <button className="mfe-action-btn mfe-action-export" onClick={() => handleExport('buyers')} disabled={exportando === 'buyers'}>
-                📥 {exportando === 'buyers' ? 'Exportando...' : 'Exportar Compradores CSV'}
+              <button className="mfe-action-btn mfe-action-export" onClick={() => handleExport('financial', 'pdf')} disabled={exportando === 'financial-pdf'}>
+                📄 {exportando === 'financial-pdf' ? 'Exportando...' : 'Exportar Reporte PDF'}
               </button>
 
-              {/* TIC-33: Compradores */}
+              {/* Exportar Compradores */}
+              <button className="mfe-action-btn mfe-action-compradores" onClick={() => handleExport('buyers', 'csv')} disabled={exportando === 'buyers-csv'}>
+                📥 {exportando === 'buyers-csv' ? 'Exportando...' : 'Compradores a CSV'}
+              </button>
+              <button className="mfe-action-btn mfe-action-compradores" onClick={() => handleExport('buyers', 'pdf')} disabled={exportando === 'buyers-pdf'}>
+                📄 {exportando === 'buyers-pdf' ? 'Exportando...' : 'Compradores a PDF'}
+              </button>
+
+              {/* TIC-33: Ver Compradores */}
               <button className="mfe-action-btn mfe-action-compradores" onClick={() => setShowCompradores(true)}>
                 👥 Ver Lista de Compradores
               </button>

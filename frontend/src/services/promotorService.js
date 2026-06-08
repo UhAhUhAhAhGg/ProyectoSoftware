@@ -145,20 +145,52 @@ const PromotorService = {
   },
 
   // ── TIC-36: Exportar Reportes ───────────────────────────────────────
-  exportEventBuyersCSV: async (eventId) => {
-    const res = await api.get(
-      `${EVENTS_URL}/api/v1/promotor/events/${eventId}/buyers/export/`,
-      { responseType: 'blob' }
-    );
-    return _downloadBlob(res, `compradores_${eventId}.csv`);
+  exportEventBuyersCSV: async (eventId, format = 'csv') => {
+    const ext = format === 'pdf' ? 'pdf' : 'csv';
+    let user = {};
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr && userStr !== 'undefined') {
+        user = JSON.parse(userStr);
+      }
+    } catch(e) {}
+    const isAdmin = user.role === 'SuperAdmin' || user.is_superadmin;
+    const baseUrl = isAdmin
+      ? `${EVENTS_URL}/api/v1/admin/events/${eventId}/buyers/export/?export_format=${format}`
+      : `${EVENTS_URL}/api/v1/promotor/events/${eventId}/buyers/export/?export_format=${format}`;
+
+    const res = await api.get(baseUrl, { responseType: 'blob' });
+    return _downloadBlob(res, `compradores_${eventId}.${ext}`);
   },
 
-  exportEventFinancialCSV: async (eventId) => {
-    const res = await api.get(
-      `${EVENTS_URL}/api/v1/promotor/events/${eventId}/financial/export/`,
-      { responseType: 'blob' }
-    );
-    return _downloadBlob(res, `financiero_${eventId}.csv`);
+  exportEventFinancialCSV: async (eventId, format = 'csv') => {
+    const ext = format === 'pdf' ? 'pdf' : 'csv';
+    let user = {};
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr && userStr !== 'undefined') {
+        user = JSON.parse(userStr);
+      }
+    } catch(e) {}
+    const isAdmin = user.role === 'SuperAdmin' || user.is_superadmin;
+    const baseUrl = isAdmin
+      ? `${EVENTS_URL}/api/v1/admin/events/${eventId}/financial/export/?export_format=${format}`
+      : `${EVENTS_URL}/api/v1/promotor/events/${eventId}/financial/export/?export_format=${format}`;
+
+    const res = await api.get(baseUrl, { responseType: 'blob' });
+    return _downloadBlob(res, `financiero_${eventId}.${ext}`);
+  },
+
+  exportPromotorDashboard: async (format = 'csv') => {
+    const ext = format === 'pdf' ? 'pdf' : 'csv';
+    const res = await api.get(`${EVENTS_URL}/api/v1/promotor/dashboard/export/?export_format=${format}`, { responseType: 'blob' });
+    return _downloadBlob(res, `reporte_promotor.${ext}`);
+  },
+
+  exportSuperAdminDashboard: async (format = 'csv') => {
+    const ext = format === 'pdf' ? 'pdf' : 'csv';
+    const res = await api.get(`${EVENTS_URL}/api/v1/admin/dashboard/export/?export_format=${format}`, { responseType: 'blob' });
+    return _downloadBlob(res, `reporte_superadmin.${ext}`);
   },
 
   // ---------------------------------------------------------

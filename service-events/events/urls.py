@@ -65,6 +65,9 @@ from .views import (
     ExportEventBuyersView,       # GET /promotor/events/{id}/buyers/export/
     ExportEventFinancialView,    # GET /promotor/events/{id}/financial/export/
     AdminExportEventBuyersView,  # GET /admin/events/{id}/buyers/export/
+    AdminExportEventFinancialView,  # GET /admin/events/{id}/financial/export/
+    PromotorDashboardExportView,
+    SuperAdminDashboardExportView,
     # US33 (US-28): Lista de Compradores por Evento
     EventBuyersListView,         # GET /promotor/events/{id}/buyers/
     PromotorEventBuyersSummaryView, # GET /promotor/events/{id}/buyers/summary/
@@ -168,7 +171,10 @@ urlpatterns = [
     # US36 (US-33): Exportar Reportes a CSV / PDF
     path('promotor/events/<uuid:event_id>/buyers/export/', ExportEventBuyersView.as_view(), name='export-event-buyers'),
     path('promotor/events/<uuid:event_id>/financial/export/', ExportEventFinancialView.as_view(), name='export-event-financial'),
+    path('promotor/dashboard/export/', PromotorDashboardExportView.as_view(), name='export-promotor-dashboard'),
     path('admin/events/<uuid:event_id>/buyers/export/', AdminExportEventBuyersView.as_view(), name='admin-export-event-buyers'),
+    path('admin/events/<uuid:event_id>/financial/export/', AdminExportEventFinancialView.as_view(), name='admin-export-event-financial'),
+    path('admin/dashboard/export/', SuperAdminDashboardExportView.as_view(), name='export-admin-dashboard'),
     # US33 (US-28): Lista de Compradores por Evento
     path('promotor/events/<uuid:event_id>/buyers/', EventBuyersListView.as_view(), name='event-buyers-list'),
     path('promotor/events/<uuid:event_id>/buyers/summary/', PromotorEventBuyersSummaryView.as_view(), name='promotor-event-buyers-summary'),

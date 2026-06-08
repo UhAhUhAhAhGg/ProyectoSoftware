@@ -39,7 +39,7 @@ function SuperAdminDashboard() {
     }
   }, [isAuthenticated, user, router]);
 
-  if (!user) {
+  if (!mounted || !user) {
     return (
       <div className="admin-loading">
         <div className="spinner"></div>

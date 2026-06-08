@@ -3551,24 +3551,43 @@ def _build_buyers_rows(compras_qs):
     return header, rows
 
 
-def _csv_response(filename, header, rows):
+
+import unicodedata
+
+def sanitize_text(text):
+    if text is None: return ""
+    if not isinstance(text, str): return str(text)
+    # Convert special chars like 'í' to 'i'
+    return unicodedata.normalize('NFKD', text).encode('ASCII', 'ignore').decode('ASCII')
+
+def _csv_response(filename, header, rows, summary_header=None, summary_rows=None):
     """Genera un HttpResponse con Content-Type text/csv."""
     import csv
     from django.http import HttpResponse
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
-    response.write('Â´â•—â”')          # BOM UTF-8 para compatibilidad con Excel
+    response.write('\ufeff')          # BOM UTF-8 para compatibilidad con Excel
     writer = csv.writer(response)
     writer.writerow(header)
-    writer.writerows(rows)
+    for r in rows:
+        writer.writerow([sanitize_text(c) for c in r])
+        
+    if summary_header and summary_rows:
+        writer.writerow([])
+        writer.writerow([])
+        writer.writerow(['--- RESUMEN ---'])
+        writer.writerow(summary_header)
+        for r in summary_rows:
+            writer.writerow([sanitize_text(c) for c in r])
+
     return response
 
 
-def _pdf_response(filename, title, subtitle, header, rows):
+def _pdf_response(filename, title, subtitle, header, rows, summary_header=None, summary_rows=None, charts_data=None):
     """
     Genera un HttpResponse con Content-Type application/pdf usando ReportLab.
-    Crea un documento con tâ”œÂ¡tulo, subtâ”œÂ¡tulo y tabla de datos.
+    Crea un documento con título, subtítulo, tabla de datos y gráficos.
     """
     import io
     from django.http import HttpResponse
@@ -3577,6 +3596,9 @@ def _pdf_response(filename, title, subtitle, header, rows):
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.lib.units import cm
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.graphics.shapes import Drawing, String
+    from reportlab.graphics.charts.piecharts import Pie
+    from reportlab.graphics.charts.barcharts import VerticalBarChart
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -3584,40 +3606,83 @@ def _pdf_response(filename, title, subtitle, header, rows):
         pagesize=landscape(A4),
         rightMargin=1.5 * cm,
         leftMargin=1.5 * cm,
-        topMargin=2 * cm,
-        bottomMargin=2 * cm,
+        topMargin=1.5 * cm,
+        bottomMargin=1.5 * cm,
     )
 
     styles = getSampleStyleSheet()
     elements = []
 
-    # Tâ”œÂ¡tulo y subtâ”œÂ¡tulo
-    elements.append(Paragraph(title, styles['Title']))
+    # Título y subtítulo
+    elements.append(Paragraph(sanitize_text(title), styles['Title']))
     elements.append(Spacer(1, 0.3 * cm))
-    elements.append(Paragraph(subtitle, styles['Normal']))
+    elements.append(Paragraph(sanitize_text(subtitle), styles['Normal']))
     elements.append(Spacer(1, 0.6 * cm))
 
-    # Tabla
-    table_data = [header] + [[str(cell) for cell in row] for row in rows]
-    col_count = len(header)
-    available_width = landscape(A4)[0] - 3 * cm
-    col_width = available_width / col_count
+    if charts_data:
+        for cdata in charts_data:
+            d = Drawing(400, 200)
+            d.add(String(200, 180, sanitize_text(cdata.get('title', '')), textAnchor='middle', fontSize=12))
 
-    table = Table(table_data, colWidths=[col_width] * col_count, repeatRows=1)
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 8),
-        ('FONTSIZE', (0, 1), (-1, -1), 7),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#EFF6FF')]),
-        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#CBD5E1')),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-    ]))
-    elements.append(table)
+            if cdata['type'] == 'pie':
+                pc = Pie()
+                pc.x = 125
+                pc.y = 20
+                pc.width = 140
+                pc.height = 140
+                try:
+                    pc.data = [float(x) for x in cdata['data']]
+                except:
+                    pc.data = [0 for x in cdata['data']]
+                pc.labels = [sanitize_text(l) for l in cdata['labels']]
+                pc.sideLabels = 1
+                d.add(pc)
+            elif cdata['type'] == 'bar':
+                bc = VerticalBarChart()
+                bc.x = 50
+                bc.y = 20
+                bc.height = 120
+                bc.width = 300
+                try:
+                    bc.data = [[float(x) for x in cdata['data']]]
+                except:
+                    bc.data = [[0 for x in cdata['data']]]
+                bc.categoryAxis.categoryNames = [sanitize_text(l) for l in cdata['labels']]
+                bc.valueAxis.valueMin = 0
+                d.add(bc)
+
+            elements.append(d)
+            elements.append(Spacer(1, 0.5 * cm))
+
+    def make_table(th, tr):
+        table_data = [th] + [[sanitize_text(cell) for cell in row] for row in tr]
+        col_count = len(th)
+        available_width = landscape(A4)[0] - 3 * cm
+        col_width = available_width / col_count
+
+        t = Table(table_data, colWidths=[col_width] * col_count, repeatRows=1)
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#EFF6FF')]),
+            ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#CBD5E1')),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        return t
+
+    elements.append(make_table(header, rows))
+
+    if summary_header and summary_rows:
+        elements.append(Spacer(1, 1 * cm))
+        elements.append(Paragraph("Resumen", styles['Heading3']))
+        elements.append(Spacer(1, 0.3 * cm))
+        elements.append(make_table(summary_header, summary_rows))
 
     doc.build(elements)
     pdf_bytes = buffer.getvalue()
@@ -3632,62 +3697,147 @@ def _pdf_response(filename, title, subtitle, header, rows):
 class ExportEventBuyersView(APIView):
     """
     US36 (US-33): Exportar lista de compradores de un evento.
-    GET /api/v1/promotor/events/<event_id>/buyers/export/?format=csv|pdf
-
-    Solo el promotor dueâ”œâ–’o del evento puede acceder.
-    Parâ”œÃ­metros:
-      - format: 'csv' (default) o 'pdf'
-      - status: filtrar por estado (default: active,used)
-
-    Permisos: IsAuthenticated + IsPromotor.
+    GET /api/v1/promotor/events/<event_id>/buyers/export/?export_format=csv|pdf
     """
     permission_classes = [IsAuthenticated, IsPromotor]
 
     def get(self, request, event_id):
         evento = get_object_or_404(Event, id=event_id)
         if str(evento.promoter_id) != str(request.user.id):
-            return Response(
-                {'error': 'No tienes permisos sobre este evento.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            return Response({'error': 'No tienes permisos sobre este evento.'}, status=403)
 
         status_filtro = request.query_params.get('status', 'active,used')
         status_list = [s.strip() for s in status_filtro.split(',') if s.strip()]
         compras_qs = Purchase.objects.filter(event=evento, status__in=status_list)
 
-        fmt = request.query_params.get('format', 'csv').lower()
+        fmt = request.query_params.get('export_format', 'csv').lower()
         header, rows = _build_buyers_rows(compras_qs)
+        
+        # Summary
+        from django.db.models import Sum
+        from django.db.models.functions import Coalesce
+        from decimal import Decimal as D
+        
+        tot_active = compras_qs.filter(status='active').count()
+        tot_used = compras_qs.filter(status='used').count()
+        tot_cancelled = Purchase.objects.filter(event=evento, status='cancelled').count()
+        tot_qty = compras_qs.aggregate(t=Coalesce(Sum('quantity'), 0))['t']
+        
+        summary_header = ['Estado de Ticket', 'Cantidad de Compras', 'Detalle Opcional']
+        summary_rows = [
+            ['Activos (Por Usar)', str(tot_active), 'Tickets emitidos válidos'],
+            ['Usados (Escaneados)', str(tot_used), 'Tickets ya ingresados al evento'],
+            ['Cancelados/Reembolsados', str(tot_cancelled), 'Tickets anulados'],
+            ['Total Tickets (Cantidad)', str(tot_qty), 'Sumatoria de cantidad en compras activas/usadas']
+        ]
+
+        charts = []
+        if tot_active > 0 or tot_used > 0:
+            charts.append({
+                'type': 'pie', 
+                'data': [float(tot_active), float(tot_used)], 
+                'labels': ['Activos', 'Usados'], 
+                'title': 'Estado de Entradas Vendidas'
+            })
+
         safe_name = evento.name.replace(' ', '_')[:30]
 
         if fmt == 'pdf':
             from django.utils import timezone as _tz
-            subtitle = (
-                f"Evento: {evento.name} | Fecha: {evento.event_date} | "
-                f"Generado: {_tz.now().strftime('%Y-%m-%d %H:%M')}"
-            )
-            return _pdf_response(
-                filename=f"compradores_{safe_name}.pdf",
-                title="Lista de Compradores",
-                subtitle=subtitle,
-                header=header,
-                rows=rows,
-            )
+            subtitle = f"Evento: {evento.name} | Fecha: {evento.event_date} | Generado: {_tz.now().strftime('%Y-%m-%d %H:%M')}"
+            return _pdf_response(f"compradores_{safe_name}.pdf", "Lista de Compradores", subtitle, header, rows, summary_header, summary_rows, charts)
 
-        return _csv_response(f"compradores_{safe_name}.csv", header, rows)
-
+        return _csv_response(f"compradores_{safe_name}.csv", header, rows, summary_header, summary_rows)
 
 class ExportEventFinancialView(APIView):
     """
     US36 (US-33): Exportar reporte financiero de un evento.
-    GET /api/v1/promotor/events/<event_id>/financial/export/?format=csv|pdf
-
-    Exporta el desglose financiero por tipo de ticket del evento.
-    Solo el promotor dueâ”œâ–’o puede acceder.
-
-    Permisos: IsAuthenticated + IsPromotor.
+    GET /api/v1/promotor/events/<event_id>/financial/export/?export_format=csv|pdf
     """
     permission_classes = [IsAuthenticated, IsPromotor]
+    PAID_STATUSES = ['active', 'used']
 
+    def get(self, request, event_id):
+        from decimal import Decimal as D
+        from django.db.models import Sum
+        from django.db.models.functions import Coalesce
+
+        evento = Event.objects.filter(id=event_id).first()
+        if not evento:
+            return Response({'error': f'Evento {event_id} no encontrado.'}, status=404)
+        if str(evento.promoter_id) != str(request.user.id):
+            return Response({'error': 'No tienes permisos.'}, status=403)
+
+        compras_qs = Purchase.objects.filter(event=evento, status__in=self.PAID_STATUSES)
+
+        total_tickets = compras_qs.aggregate(t=Coalesce(Sum('quantity'), 0))['t']
+        try:
+            aggs = compras_qs.aggregate(
+                ingresos=Coalesce(Sum('total_price'), D('0')),
+                comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                netos=Coalesce(Sum('net_amount'), D('0')),
+            )
+        except:
+            aggs = compras_qs.aggregate(ingresos=Coalesce(Sum('total_price'), D('0')))
+            aggs.update({'comisiones': D('0'), 'netos': aggs['ingresos']})
+
+        header = ['Tipo Ticket', 'Zona', 'VIP', 'Precio Unit.', 'Capacidad', 'Vendidos', 'Ocupacion %', 'Ingresos Brutos', 'Comisiones', 'Ingresos Netos']
+        rows = []
+        pie_data, pie_labels, bar_data, bar_labels = [], [], [], []
+        
+        for tt in TicketType.objects.filter(event=evento):
+            qs_tt = compras_qs.filter(ticket_type=tt)
+            tt_tix = qs_tt.aggregate(t=Coalesce(Sum('quantity'), 0))['t']
+            try:
+                tt_fin = qs_tt.aggregate(ing=Coalesce(Sum('total_price'), D('0')), com=Coalesce(Sum('commission_amount'), D('0')), net=Coalesce(Sum('net_amount'), D('0')))
+            except:
+                tt_fin = qs_tt.aggregate(ing=Coalesce(Sum('total_price'), D('0')))
+                tt_fin.update({'com': D('0'), 'net': tt_fin['ing']})
+
+            oc = round(tt_tix / tt.max_capacity * 100, 1) if tt.max_capacity else 0.0
+            rows.append([
+                tt.name, tt.zone_type, 'Si' if tt.is_vip else 'No',
+                str(tt.price), str(tt.max_capacity), str(tt_tix), f"{oc}%",
+                str(tt_fin['ing']), str(tt_fin['com']), str(tt_fin['net']),
+            ])
+            
+            if tt_tix > 0:
+                pie_data.append(tt_tix)
+                pie_labels.append(tt.name)
+            if tt_fin['net'] > 0:
+                bar_data.append(float(tt_fin['net']))
+                bar_labels.append(tt.name)
+
+        summary_header = ['Concepto', 'Monto']
+        summary_rows = [
+            ['Capacidad Total Evento', str(evento.capacity)],
+            ['Total Tickets Vendidos', str(total_tickets)],
+            ['Ocupacion Global (%)', f"{round((total_tickets/evento.capacity*100),1) if evento.capacity else 0}%"],
+            ['Total Ingresos Brutos (BOB)', str(aggs['ingresos'])],
+            ['Comisiones Generadas (BOB)', str(aggs['comisiones'])],
+            ['Total Ingresos Netos (BOB)', str(aggs['netos'])],
+        ]
+
+        charts = []
+        if pie_data: charts.append({'type': 'pie', 'data': pie_data, 'labels': pie_labels, 'title': 'Tickets Vendidos por Zona'})
+        if bar_data: charts.append({'type': 'bar', 'data': bar_data, 'labels': bar_labels, 'title': 'Ingresos Netos por Zona (BOB)'})
+
+        fmt = request.query_params.get('export_format', 'csv').lower()
+        safe_name = evento.name.replace(' ', '_')[:30]
+
+        if fmt == 'pdf':
+            from django.utils import timezone as _tz
+            subtitle = f"Evento: {evento.name} | Fecha: {evento.event_date} | Generado: {_tz.now().strftime('%Y-%m-%d %H:%M')}"
+            return _pdf_response(f"financiero_{safe_name}.pdf", "Reporte Financiero por Evento", subtitle, header, rows, summary_header, summary_rows, charts)
+
+        return _csv_response(f"financiero_{safe_name}.csv", header, rows, summary_header, summary_rows)
+
+class AdminExportEventFinancialView(APIView):
+    """
+    Exportar reporte financiero de un evento para Administradores.
+    GET /api/v1/admin/events/<event_id>/financial/export/?export_format=csv|pdf
+    """
+    permission_classes = [IsAuthenticated, HasAdminCapability('view_reports')]
     PAID_STATUSES = ['active', 'used']
 
     def get(self, request, event_id):
@@ -3696,15 +3846,8 @@ class ExportEventFinancialView(APIView):
         from django.db.models.functions import Coalesce
 
         evento = get_object_or_404(Event, id=event_id)
-        if str(evento.promoter_id) != str(request.user.id):
-            return Response(
-                {'error': 'No tienes permisos sobre este evento.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         compras_qs = Purchase.objects.filter(event=evento, status__in=self.PAID_STATUSES)
 
-        # Resumen global
         total_tickets = compras_qs.aggregate(t=Coalesce(Sum('quantity'), 0))['t']
         try:
             aggs = compras_qs.aggregate(
@@ -3712,108 +3855,111 @@ class ExportEventFinancialView(APIView):
                 comisiones=Coalesce(Sum('commission_amount'), D('0')),
                 netos=Coalesce(Sum('net_amount'), D('0')),
             )
-        except Exception:
+        except:
             aggs = compras_qs.aggregate(ingresos=Coalesce(Sum('total_price'), D('0')))
             aggs.update({'comisiones': D('0'), 'netos': aggs['ingresos']})
 
-        # Desglose por ticket type
-        header = [
-            'Tipo Ticket', 'Zona', 'VIP', 'Precio Unit.',
-            'Capacidad', 'Vendidos', 'Ocupacion %',
-            'Ingresos Brutos', 'Comisiones', 'Ingresos Netos',
-        ]
+        header = ['Tipo Ticket', 'Zona', 'VIP', 'Precio Unit.', 'Capacidad', 'Vendidos', 'Ocupacion %', 'Ingresos Brutos', 'Comisiones', 'Ingresos Netos']
         rows = []
+        pie_data, pie_labels, bar_data, bar_labels = [], [], [], []
+        
         for tt in TicketType.objects.filter(event=evento):
             qs_tt = compras_qs.filter(ticket_type=tt)
             tt_tix = qs_tt.aggregate(t=Coalesce(Sum('quantity'), 0))['t']
             try:
-                tt_fin = qs_tt.aggregate(
-                    ing=Coalesce(Sum('total_price'), D('0')),
-                    com=Coalesce(Sum('commission_amount'), D('0')),
-                    net=Coalesce(Sum('net_amount'), D('0')),
-                )
-            except Exception:
+                tt_fin = qs_tt.aggregate(ing=Coalesce(Sum('total_price'), D('0')), com=Coalesce(Sum('commission_amount'), D('0')), net=Coalesce(Sum('net_amount'), D('0')))
+            except:
                 tt_fin = qs_tt.aggregate(ing=Coalesce(Sum('total_price'), D('0')))
                 tt_fin.update({'com': D('0'), 'net': tt_fin['ing']})
 
             oc = round(tt_tix / tt.max_capacity * 100, 1) if tt.max_capacity else 0.0
             rows.append([
-                tt.name, tt.zone_type, 'Sâ”œÂ¡' if tt.is_vip else 'No',
-                str(tt.price), tt.max_capacity, tt_tix, f"{oc}%",
+                tt.name, tt.zone_type, 'Si' if tt.is_vip else 'No',
+                str(tt.price), str(tt.max_capacity), str(tt_tix), f"{oc}%",
                 str(tt_fin['ing']), str(tt_fin['com']), str(tt_fin['net']),
             ])
+            
+            if tt_tix > 0:
+                pie_data.append(tt_tix)
+                pie_labels.append(tt.name)
+            if tt_fin['net'] > 0:
+                bar_data.append(float(tt_fin['net']))
+                bar_labels.append(tt.name)
 
-        # Fila de totales
-        rows.append([
-            'TOTAL', '', '', '',
-            evento.capacity, total_tickets,
-            f"{round(total_tickets/evento.capacity*100,1) if evento.capacity else 0}%",
-            str(aggs['ingresos']), str(aggs['comisiones']), str(aggs['netos']),
-        ])
+        summary_header = ['Concepto', 'Monto']
+        summary_rows = [
+            ['Capacidad Total Evento', str(evento.capacity)],
+            ['Total Tickets Vendidos', str(total_tickets)],
+            ['Ocupacion Global (%)', f"{round((total_tickets/evento.capacity*100),1) if evento.capacity else 0}%"],
+            ['Total Ingresos Brutos (BOB)', str(aggs['ingresos'])],
+            ['Comisiones de Plataforma (BOB)', str(aggs['comisiones'])],
+            ['Total Ingresos Netos (Promotor) (BOB)', str(aggs['netos'])],
+        ]
 
-        fmt = request.query_params.get('format', 'csv').lower()
+        charts = []
+        if pie_data: charts.append({'type': 'pie', 'data': pie_data, 'labels': pie_labels, 'title': 'Tickets Vendidos por Zona'})
+        if bar_data: charts.append({'type': 'bar', 'data': bar_data, 'labels': bar_labels, 'title': 'Ingresos Netos por Zona (BOB)'})
+
+        fmt = request.query_params.get('export_format', 'csv').lower()
         safe_name = evento.name.replace(' ', '_')[:30]
 
         if fmt == 'pdf':
             from django.utils import timezone as _tz
-            subtitle = (
-                f"Evento: {evento.name} | Fecha: {evento.event_date} | "
-                f"Generado: {_tz.now().strftime('%Y-%m-%d %H:%M')}"
-            )
-            return _pdf_response(
-                filename=f"financiero_{safe_name}.pdf",
-                title="Reporte Financiero por Evento",
-                subtitle=subtitle,
-                header=header,
-                rows=rows,
-            )
+            subtitle = f"Evento: {evento.name} | Promotor: {evento.promoter_id} | Generado: {_tz.now().strftime('%Y-%m-%d %H:%M')}"
+            return _pdf_response(f"admin_financiero_{safe_name}.pdf", "Reporte Financiero (Admin)", subtitle, header, rows, summary_header, summary_rows, charts)
 
-        return _csv_response(f"financiero_{safe_name}.csv", header, rows)
-
+        return _csv_response(f"admin_financiero_{safe_name}.csv", header, rows, summary_header, summary_rows)
 
 class AdminExportEventBuyersView(APIView):
     """
-    US36 (US-33): El Admin exporta la lista de compradores de cualquier evento.
-    GET /api/v1/admin/events/<event_id>/buyers/export/?format=csv|pdf
-
-    Sin restricciâ”œâ”‚n de ownership Ã”Ã‡Ã¶ el Admin puede exportar cualquier evento.
-    Expone promoter_id en el nombre del archivo para identificaciâ”œâ”‚n.
-
-    Permisos: IsAuthenticated + HasAdminCapability('view_reports').
+    GET /api/v1/admin/events/<event_id>/buyers/export/?export_format=csv|pdf
     """
     permission_classes = [IsAuthenticated, HasAdminCapability('view_reports')]
 
     def get(self, request, event_id):
         evento = get_object_or_404(Event, id=event_id)
-        compras_qs = Purchase.objects.filter(
-            event=evento,
-            status__in=['active', 'used'],
-        )
+        status_filtro = request.query_params.get('status', 'active,used')
+        status_list = [s.strip() for s in status_filtro.split(',') if s.strip()]
+        compras_qs = Purchase.objects.filter(event=evento, status__in=status_list)
 
-        fmt = request.query_params.get('format', 'csv').lower()
+        fmt = request.query_params.get('export_format', 'csv').lower()
         header, rows = _build_buyers_rows(compras_qs)
+        
+        # Summary
+        from django.db.models import Sum
+        from django.db.models.functions import Coalesce
+        from decimal import Decimal as D
+        
+        tot_active = compras_qs.filter(status='active').count()
+        tot_used = compras_qs.filter(status='used').count()
+        tot_cancelled = Purchase.objects.filter(event=evento, status='cancelled').count()
+        tot_qty = compras_qs.aggregate(t=Coalesce(Sum('quantity'), 0))['t']
+        
+        summary_header = ['Estado de Ticket', 'Cantidad de Compras', 'Detalle Opcional']
+        summary_rows = [
+            ['Activos (Por Usar)', str(tot_active), 'Tickets emitidos válidos'],
+            ['Usados (Escaneados)', str(tot_used), 'Tickets ya ingresados al evento'],
+            ['Cancelados/Reembolsados', str(tot_cancelled), 'Tickets anulados'],
+            ['Total Tickets (Cantidad)', str(tot_qty), 'Sumatoria de cantidad en compras activas/usadas']
+        ]
+
+        charts = []
+        if tot_active > 0 or tot_used > 0:
+            charts.append({
+                'type': 'pie', 
+                'data': [float(tot_active), float(tot_used)], 
+                'labels': ['Activos', 'Usados'], 
+                'title': 'Estado de Entradas Vendidas'
+            })
+
         safe_name = evento.name.replace(' ', '_')[:30]
 
         if fmt == 'pdf':
             from django.utils import timezone as _tz
-            subtitle = (
-                f"Evento: {evento.name} | Promotor: {evento.promoter_id} | "
-                f"Fecha: {evento.event_date} | Generado: {_tz.now().strftime('%Y-%m-%d %H:%M')}"
-            )
-            return _pdf_response(
-                filename=f"admin_compradores_{safe_name}.pdf",
-                title="Lista de Compradores (Admin)",
-                subtitle=subtitle,
-                header=header,
-                rows=rows,
-            )
+            subtitle = f"Evento: {evento.name} | Promotor: {evento.promoter_id} | Generado: {_tz.now().strftime('%Y-%m-%d %H:%M')}"
+            return _pdf_response(f"admin_compradores_{safe_name}.pdf", "Lista de Compradores (Admin)", subtitle, header, rows, summary_header, summary_rows, charts)
 
-        return _csv_response(f"admin_compradores_{safe_name}.csv", header, rows)
-
-
-# ==============================================================================
-# HISTORIA DE USUARIO: REPORTES DE PROMOTOR (TIC-150)
-# ==============================================================================
+        return _csv_response(f"admin_compradores_{safe_name}.csv", header, rows, summary_header, summary_rows)
 
 class PromotorEventBuyersSummaryView(APIView):
     """
@@ -4880,4 +5026,194 @@ class AdminPromotionListView(APIView):
             "total_ingresos_promociones_bob": str(total_ingresos),
             "results": serializer.data,
         })
+
+
+# ==============================================================================
+# EXPORTACIÓN GLOBAL DE DASHBOARDS (PDF / CSV)
+# ==============================================================================
+
+class PromotorDashboardExportView(APIView):
+    """
+    GET /api/v1/promotor/dashboard/export/?export_format=csv|pdf
+    Exporta el resumen de todos los eventos del promotor.
+    """
+    permission_classes = [IsPromotor]
+
+    def get(self, request):
+        payload = getattr(request.auth, 'payload', {}) if request.auth else {}
+        promotor_id = payload.get('user_id')
+
+        eventos = Event.objects.filter(promoter_id=promotor_id)
+        
+        header = ['Evento', 'Fecha', 'Ubicacion', 'Estado', 'Capacidad', 'Tickets Vendidos', 'Ingresos Brutos', 'Comisiones', 'Ingresos Netos']
+        rows = []
+        
+        from decimal import Decimal as D
+        from django.db.models import Sum
+        from django.db.models.functions import Coalesce
+
+        tot_tickets_global = 0
+        tot_bruto = D('0')
+        tot_comision = D('0')
+        tot_neto = D('0')
+
+        bar_data_neto = []
+        bar_labels = []
+
+        pie_data_status = {}
+
+        for ev in eventos:
+            compras_qs = Purchase.objects.filter(event=ev, status__in=['active', 'used'])
+            total_tickets = compras_qs.aggregate(t=Coalesce(Sum('quantity'), 0))['t']
+            
+            try:
+                aggs = compras_qs.aggregate(
+                    ingresos=Coalesce(Sum('total_price'), D('0')),
+                    comisiones=Coalesce(Sum('commission_amount'), D('0')),
+                    netos=Coalesce(Sum('net_amount'), D('0')),
+                )
+            except:
+                aggs = compras_qs.aggregate(ingresos=Coalesce(Sum('total_price'), D('0')))
+                aggs.update({'comisiones': D('0'), 'netos': aggs['ingresos']})
+
+            rows.append([
+                ev.name, 
+                ev.event_date.strftime('%Y-%m-%d') if ev.event_date else '', 
+                ev.location, 
+                ev.status, 
+                str(ev.capacity), 
+                str(total_tickets), 
+                str(aggs['ingresos']), 
+                str(aggs['comisiones']), 
+                str(aggs['netos'])
+            ])
+
+            tot_tickets_global += total_tickets
+            tot_bruto += aggs['ingresos']
+            tot_comision += aggs['comisiones']
+            tot_neto += aggs['netos']
+
+            if aggs['netos'] > 0:
+                bar_data_neto.append(float(aggs['netos']))
+                bar_labels.append(ev.name[:15])
+
+            pie_data_status[ev.status] = pie_data_status.get(ev.status, 0) + 1
+
+        summary_header = ['Concepto', 'Total General']
+        summary_rows = [
+            ['Total de Eventos', str(eventos.count())],
+            ['Total Tickets Vendidos', str(tot_tickets_global)],
+            ['Ingresos Brutos Generados (BOB)', str(tot_bruto)],
+            ['Comisiones Pagadas (BOB)', str(tot_comision)],
+            ['Ingresos Netos Totales (BOB)', str(tot_neto)],
+        ]
+
+        charts = []
+        if bar_data_neto:
+            charts.append({'type': 'bar', 'data': bar_data_neto, 'labels': bar_labels, 'title': 'Ingresos Netos por Evento (BOB)'})
+        if pie_data_status:
+            charts.append({'type': 'pie', 'data': list(pie_data_status.values()), 'labels': list(pie_data_status.keys()), 'title': 'Estado de Eventos'})
+
+        fmt = request.query_params.get('export_format', 'csv').lower()
+        
+        if fmt == 'pdf':
+            from django.utils import timezone as _tz
+            subtitle = f"Generado: {_tz.now().strftime('%Y-%m-%d %H:%M')}"
+            return _pdf_response("promotor_dashboard_report.pdf", "Reporte Global del Promotor", subtitle, header, rows, summary_header, summary_rows, charts)
+
+        return _csv_response("promotor_dashboard_report.csv", header, rows, summary_header, summary_rows)
+
+class SuperAdminDashboardExportView(APIView):
+    """
+    GET /api/v1/admin/dashboard/export/?export_format=csv|pdf
+    Exporta el reporte consolidado de todo el sistema para el SuperAdmin.
+    """
+    permission_classes = [IsAuthenticated, HasAdminCapability('view_reports')]
+
+    def get(self, request):
+        from decimal import Decimal as D
+        from django.db.models import Sum
+        from django.db.models.functions import Coalesce
+
+        compras_qs = Purchase.objects.filter(status__in=['active', 'used']).select_related('event')
+        
+        promotores_data = compras_qs.values('event__promoter_id').annotate(
+            tickets=Coalesce(Sum('quantity'), 0),
+            ingresos=Coalesce(Sum('total_price'), D('0')),
+            comisiones=Coalesce(Sum('commission_amount'), D('0'))
+        ).order_by('-comisiones')
+
+        # Intentar obtener los nombres de los promotores desde service-auth
+        auth_header = request.headers.get('Authorization')
+        map_promotores = {}
+        if auth_header:
+            try:
+                import requests
+                from django.conf import settings
+                # Si existe AUTH_SERVICE_URL o usar default
+                auth_url = getattr(settings, 'AUTH_SERVICE_URL', 'http://service-auth:8000') + '/api/v1/users/promotores/'
+                resp = requests.get(auth_url, headers={'Authorization': auth_header}, timeout=5)
+                if resp.status_code == 200:
+                    proms = resp.json()
+                    map_promotores = {str(p.get('id')): p.get('nombre', 'Desconocido') for p in proms}
+            except Exception:
+                pass
+
+        header = ['Promotor', 'Tickets Vendidos', 'Ingresos Brutos', 'Comisiones Plataforma']
+        rows = []
+        
+        tot_tickets = 0
+        tot_bruto = D('0')
+        tot_comisiones = D('0')
+
+        bar_data = []
+        bar_labels = []
+
+        for p in promotores_data[:15]:
+            pid = str(p['event__promoter_id'])
+            nombre = map_promotores.get(pid)
+            if not nombre:
+                nombre = pid[:8]
+            nombre = str(nombre)
+            rows.append([
+                nombre,
+                str(p['tickets']),
+                str(p['ingresos']),
+                str(p['comisiones'])
+            ])
+            tot_tickets += p['tickets']
+            tot_bruto += p['ingresos']
+            tot_comisiones += p['comisiones']
+            
+            if p['comisiones'] > 0:
+                bar_data.append(float(p['comisiones']))
+                bar_labels.append(nombre[:15])
+
+        # Add remaining as others if > 15
+        if len(promotores_data) > 15:
+            for p in promotores_data[15:]:
+                tot_tickets += p['tickets']
+                tot_bruto += p['ingresos']
+                tot_comisiones += p['comisiones']
+
+        summary_header = ['Metrica Sistema', 'Valor Total']
+        summary_rows = [
+            ['Total Promotores con Ventas', str(len(promotores_data))],
+            ['Total Tickets Vendidos', str(tot_tickets)],
+            ['Volumen Transaccional Bruto (BOB)', str(tot_bruto)],
+            ['Ingresos Netos Plataforma (Comisiones) (BOB)', str(tot_comisiones)],
+        ]
+
+        charts = []
+        if bar_data:
+            charts.append({'type': 'bar', 'data': bar_data, 'labels': bar_labels, 'title': 'Comisiones por Top Promotores (BOB)'})
+
+        fmt = request.query_params.get('export_format', 'csv').lower()
+        
+        if fmt == 'pdf':
+            from django.utils import timezone as _tz
+            subtitle = f"Generado: {_tz.now().strftime('%Y-%m-%d %H:%M')}"
+            return _pdf_response("superadmin_dashboard_report.pdf", "Reporte Consolidado del Sistema", subtitle, header, rows, summary_header, summary_rows, charts)
+
+        return _csv_response("superadmin_dashboard_report.csv", header, rows, summary_header, summary_rows)
 
