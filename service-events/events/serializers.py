@@ -391,6 +391,7 @@ class PromoCodeReadSerializer(serializers.ModelSerializer):
     event_name = serializers.CharField(source='event.name', read_only=True, default=None)
     is_currently_valid = serializers.SerializerMethodField()
     uses_remaining = serializers.SerializerMethodField()
+    total_descontado = serializers.SerializerMethodField()
 
     class Meta:
         model = PromoCode
@@ -407,6 +408,7 @@ class PromoCodeReadSerializer(serializers.ModelSerializer):
             'max_uses',
             'times_used',
             'uses_remaining',
+            'total_descontado',
             'is_active',
             'is_currently_valid',
             'created_at',
@@ -421,6 +423,12 @@ class PromoCodeReadSerializer(serializers.ModelSerializer):
         if obj.max_uses is None:
             return None  # ilimitado
         return max(0, obj.max_uses - obj.times_used)
+        
+    def get_total_descontado(self, obj):
+        from django.db.models import Sum
+        from decimal import Decimal
+        total = obj.purchases.filter(status__in=['active', 'completed']).aggregate(total=Sum('discount_amount'))['total']
+        return float(total or Decimal('0.00'))
 
     def _get_any_event(self, obj):
         """Helper para is_valid_for cuando el code aplica a todos los eventos."""

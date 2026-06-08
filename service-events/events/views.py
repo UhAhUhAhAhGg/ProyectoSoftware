@@ -961,33 +961,35 @@ class SimularPagoView(APIView):
         # Procesar código promocional si viene en la solicitud
         promo_code_str = request.data.get('promo_code')
         if promo_code_str:
+            promo_code_str = promo_code_str.strip().upper()
             try:
                 from .models import PromoCode
                 promo = PromoCode.objects.get(code=promo_code_str)
-                is_valid, _ = promo.is_valid_for(purchase.event)
-                if is_valid:
-                    # Aplicar descuento
-                    from decimal import Decimal
-                    try:
-                        monto_descuento = float(promo.calcular_descuento(Decimal(str(purchase.total_price))))
-                    except Exception:
-                        if promo.discount_type == 'porcentaje':
-                            monto_descuento = float(purchase.total_price) * (float(promo.discount_value) / 100.0)
-                        else:
-                            monto_descuento = float(promo.discount_value)
-                    
-                    if monto_descuento > float(purchase.total_price):
-                        monto_descuento = float(purchase.total_price)
-                    
-                    purchase.promo_code_id = promo.id
-                    purchase.discount_amount = round(monto_descuento, 2)
-                    purchase.total_price = round(float(purchase.total_price) - monto_descuento, 2)
-                    
-                    # Incrementar contador de usos del código de forma segura (sin F expressions por simplicidad en tests)
-                    promo.times_used += 1
-                    promo.save(update_fields=['times_used'])
+                is_valid, msg = promo.is_valid_for(purchase.event)
+                if not is_valid:
+                    return Response({"error": f"Código inválido: {msg}"}, status=400)
+                
+                # Aplicar descuento
+                from decimal import Decimal
+                monto_descuento = promo.calcular_descuento(Decimal(str(purchase.total_price)))
+                
+                if monto_descuento > Decimal(str(purchase.total_price)):
+                    monto_descuento = Decimal(str(purchase.total_price))
+                
+                purchase.promo_code_id = promo.id
+                purchase.discount_amount = monto_descuento
+                purchase.total_price = Decimal(str(purchase.total_price)) - monto_descuento
+                
+                # Incrementar contador de usos del código
+                promo.times_used += 1
+                promo.save(update_fields=['times_used'])
+                
+            except PromoCode.DoesNotExist:
+                return Response({"error": "Código promocional no encontrado"}, status=400)
             except Exception as e:
-                print(f"No se pudo aplicar el código {promo_code_str}: {e}")
+                import traceback
+                print(f"Error al aplicar el código {promo_code_str}: {traceback.format_exc()}")
+                return Response({"error": f"No se pudo aplicar el código: {str(e)}"}, status=400)
 
         purchase.save()
 
@@ -4386,8 +4388,16 @@ class PromoCodeListCreateView(APIView):
 
     def get(self, request):
         from .serializers import PromoCodeReadSerializer
+        from django.db.models import Q
         promoter_id = request.user.id
-        codes = PromoCode.objects.filter(promoter_id=promoter_id).order_by('-created_at')
+        event_id = request.query_params.get('event')
+        
+        codes = PromoCode.objects.filter(promoter_id=promoter_id)
+        
+        if event_id:
+            codes = codes.filter(Q(event_id=event_id) | Q(event__isnull=True))
+            
+        codes = codes.order_by('-created_at')
         serializer = PromoCodeReadSerializer(codes, many=True)
         return Response({
             "status": "ok",
