@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { eventosService } from '../../../services/eventosService';
+import PromotorService from '../../../services/promotorService';
 import { useAuth } from '../../../context/AuthContext';
 import EventoCardFinanciero from './EventoCardFinanciero';
 import ModalFinancieroEvento from './ModalFinancieroEvento';
 import FormularioEvento from './FormularioEvento';
 import ConfiguracionCola from './ConfiguracionCola';
+import PromocionesList from './PromocionesList';
+import CodigosDescuentoList from './CodigosDescuentoList';
 import './ListaEventos.css';
 
 function ListaEventos() {
   const { user } = useAuth();
+  const location = useLocation();
   const [eventos, setEventos] = useState([]);
   const [filtro, setFiltro] = useState('todos');
   const [busqueda, setBusqueda] = useState('');
@@ -18,6 +22,7 @@ function ListaEventos() {
   const [cargando, setCargando] = useState(true);
   const [eventoDetalle, setEventoDetalle] = useState(null);
   const [eventoAEditarId, setEventoAEditarId] = useState(null);
+  const [activeTab, setActiveTab] = useState(location.state?.activeTab || 'eventos');
 
   // Modal financiero
   const [modalEvento, setModalEvento] = useState(null);
@@ -38,6 +43,27 @@ function ListaEventos() {
       setCargando(false);
     }
   };
+
+  useEffect(() => {
+    const openId = location.state?.openEventId;
+    if (openId && eventos.length > 0) {
+      const ev = eventos.find(e => e.id === openId);
+      if (ev) {
+        PromotorService.getEventReport(openId)
+          .then(data => {
+            setModalEvento(ev);
+            setModalFinanciero(data);
+            // Limpiar state para que no se reabra si el user cierra el modal y recarga
+            window.history.replaceState({}, document.title);
+          })
+          .catch(() => {
+            setModalEvento(ev);
+            setModalFinanciero(null);
+            window.history.replaceState({}, document.title);
+          });
+      }
+    }
+  }, [location.state, eventos]);
 
   const cargarEventos = fetchEventos; // alias de compatibilidad
 
@@ -132,18 +158,49 @@ function ListaEventos() {
           <p className="eventos-count">{eventosFiltrados.length} eventos encontrados</p>
         </div>
         <div className="header-right">
-          <Link to="/dashboard/crear-evento" className="btn-crear-evento">
-            <span className="btn-icono">➕</span>
-            Crear Nuevo Evento
-          </Link>
+          {activeTab === 'eventos' && (
+            <Link to="/dashboard/crear-evento" className="btn-crear-evento">
+              <span className="btn-icono">➕</span>
+              Crear Nuevo Evento
+            </Link>
+          )}
         </div>
       </div>
 
-      {/* Filtros y búsqueda */}
-      <div className="eventos-filtros">
-        <div className="busqueda-container">
-          <span className="busqueda-icono">🔍</span>
-          <input
+      {/* Navegación Principal (Tabs Generales) */}
+      <div className="lista-eventos-tabs-generales">
+        <button 
+          className={`tab-general ${activeTab === 'eventos' ? 'activo' : ''}`}
+          onClick={() => setActiveTab('eventos')}
+        >
+          📋 Mis Eventos
+        </button>
+        <button 
+          className={`tab-general ${activeTab === 'promociones' ? 'activo' : ''}`}
+          onClick={() => setActiveTab('promociones')}
+        >
+          🚀 Mis Promociones
+        </button>
+        <button 
+          className={`tab-general ${activeTab === 'codigos' ? 'activo' : ''}`}
+          onClick={() => setActiveTab('codigos')}
+        >
+          🏷️ Mis Códigos de Descuento
+        </button>
+      </div>
+
+      {/* Renderizado Condicional de Contenido */}
+      {activeTab === 'promociones' && <PromocionesList />}
+      
+      {activeTab === 'codigos' && <CodigosDescuentoList />}
+
+      {activeTab === 'eventos' && (
+        <>
+          {/* Filtros y búsqueda */}
+          <div className="eventos-filtros">
+            <div className="busqueda-container">
+              <span className="busqueda-icono">🔍</span>
+              <input
             type="text"
             placeholder="Buscar por nombre o ubicación..."
             value={busqueda}
@@ -195,6 +252,8 @@ function ListaEventos() {
             />
           ))}
         </div>
+      )}
+      </>
       )}
 
       {/* Modal de confirmación para eliminar */}

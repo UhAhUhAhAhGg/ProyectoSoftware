@@ -63,10 +63,10 @@ function OpcionesComprador() {
       }
     })();
 
-    // 2) Eventos destacados (TIC-362 + TIC-364 fallback)
+    // 2) Eventos destacados (Promocionados)
     (async () => {
       try {
-        const evts = await recommendationsService.getRecommendedEvents();
+        const evts = await eventosService.getEventosDestacados();
         if (!cancelled) setEventosDestacados(Array.isArray(evts) ? evts.slice(0, 3) : []);
       } catch {
         if (!cancelled) setEventosDestacados([]);
@@ -107,10 +107,6 @@ function OpcionesComprador() {
 
   return (
     <div className="opciones-comprador">
-      <div className="bienvenida-comprador">
-        <h2>¡Hola Comprador! 👋</h2>
-        <p>Explora los mejores eventos y consigue tus boletos</p>
-      </div>
 
       <div className="acciones-rapidas">
         <Link to="/dashboard/eventos" className="accion-rapida principal">
@@ -194,7 +190,12 @@ function OpcionesComprador() {
               <Link
                 to={`/dashboard/evento/${evento.id}`}
                 key={evento.id}
-                className="evento-mini-card"
+                className={`evento-mini-card ${evento.promocion ? 'evento-promocionado' : ''}`}
+                style={{
+                  borderTop: evento.promocion === 'pro' ? '4px solid #8B5CF6' :
+                              evento.promocion === 'premium' ? '4px solid #F59E0B' :
+                              evento.promocion === 'basico' ? '4px solid #6B7280' : 'none'
+                }}
               >
                 {evento.imagen ? (
                   <img src={evento.imagen} alt={evento.nombre} className="evento-mini-imagen-img" />
@@ -205,7 +206,7 @@ function OpcionesComprador() {
                   <h4>{evento.nombre}</h4>
                   <p>📍 {evento.ubicacion || 'Por confirmar'}</p>
                   {evento.categoriaNombre && (
-                    <p className="evento-mini-cat">🏷️ {evento.categoriaNombre}</p>
+                    <span className="evento-mini-cat">{evento.categoriaNombre}</span>
                   )}
                   <span className="evento-mini-precio">
                     {evento.precio > 0 ? `Desde Bs. ${evento.precio}` : 'Gratis'}

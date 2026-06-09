@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { useNotifications } from '../context/NotificationContext';
 import OpcionesComprador from '../components/dashboard/OpcionesComprador';
-import OpcionesPromotor from '../components/dashboard/OpcionesPromotor';
 import DashboardPromotor from '../components/dashboard/DashboardPromotor';
 import './Dashboard.css';
 
@@ -25,6 +24,14 @@ function Dashboard() {
   } = useNotifications();
 
   const [notifOpen, setNotifOpen] = useState(false);
+  const displayName = user?.nombre || user?.first_name || user?.email || 'Usuario';
+  const todayLabel = useMemo(() => (
+    new Intl.DateTimeFormat('es-BO', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+    }).format(new Date())
+  ), []);
 
   // Redirigir si no está autenticado o si es admin
   useEffect(() => {
@@ -286,25 +293,30 @@ function Dashboard() {
         <div className="content-wrapper">
           <div className="welcome-message">
             <h2>
-              ¡Hola de nuevo, {user.nombre || 'Usuario'}!
+              ¡Hola de nuevo, {displayName}!
               <span className="welcome-emoji">👋</span>
             </h2>
 
             <p>
               {isComprador
                 ? '¿Listo para encontrar los mejores eventos?'
-                : '¿Cómo van las ventas de tus eventos hoy?'}
+                : 'Revisa tus ventas, eventos próximos y alertas operativas en un solo lugar.'}
             </p>
+
+            <div className="dashboard-hero-chips">
+              <span className="dashboard-hero-chip">📅 {todayLabel}</span>
+              <span className="dashboard-hero-chip">{isPromotor ? '📢 Promotor' : '🛍️ Comprador'}</span>
+              {conteoNoLeidas > 0 && (
+                <span className="dashboard-hero-chip dashboard-hero-chip--warning">
+                  🔔 {conteoNoLeidas} notificación{conteoNoLeidas === 1 ? '' : 'es'}
+                </span>
+              )}
+            </div>
           </div>
 
           {isComprador && <OpcionesComprador />}
           {isPromotor && (
-            <>
-              <OpcionesPromotor />
-              <div style={{ marginTop: 20 }}>
-                <DashboardPromotor />
-              </div>
-            </>
+              <DashboardPromotor promoterId={user.id} promoterName={displayName} />
           )}
         </div>
       </main>

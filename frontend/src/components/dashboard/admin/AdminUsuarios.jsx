@@ -176,7 +176,25 @@ function AdminUsuarios({ module, onViewPromotorDashboard }) {
     try {
       let data;
       if (module === 'promotores') {
-        data = await userManagementService.getPromotores();
+        const eventsUrl = process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002';
+        const [promData, rankRes] = await Promise.all([
+          userManagementService.getPromotores(),
+          api.get(`${eventsUrl}/api/v1/superadmin/dashboard/promotores/?limit=1000`)
+            .catch(() => ({ data: { ranking: [] } }))
+        ]);
+        
+        const rankingMap = new Map(
+          (rankRes.data?.ranking || rankRes?.ranking || []).map(r => [r.promoter_id, Number(r.comisiones || 0)])
+        );
+        
+        data = (Array.isArray(promData) ? promData : []).map(p => ({
+          ...p,
+          comisiones: rankingMap.get(p.id) || 0
+        }));
+        
+        // Ordenar de mayor a menor aportación por defecto
+        data.sort((a, b) => b.comisiones - a.comisiones);
+        
       } else if (module === 'compradores') {
         data = await userManagementService.getCompradores();
       } else {
@@ -597,6 +615,7 @@ const cambiarPagina = (numeroPagina) => {
                     <th>Tipo</th>
                     <th>Estado</th>
                     <th>Registrado</th>
+                    {module === 'promotores' && <th>Comisiones Generadas</th>}
                     <th>Acciones</th>
                   </tr>
                 </thead>
@@ -626,7 +645,12 @@ const cambiarPagina = (numeroPagina) => {
                           {obtenerEstado(usuario) === 'inactivo' && '○ Inactivo'}
                         </span>
                       </td>
-                      <td>{usuario.date_joined ? new Date(usuario.date_joined).toLocaleDateString('es-ES') : '—'}</td>
+                      <td>{usuario.created_at ? new Date(usuario.created_at).toLocaleDateString('es-ES') : (usuario.date_joined ? new Date(usuario.date_joined).toLocaleDateString('es-ES') : '—')}</td>
+                      {module === 'promotores' && (
+                        <td style={{ fontWeight: 600, color: usuario.comisiones > 0 ? '#2ecc71' : '#95a5a6' }}>
+                          Bs {Number(usuario.comisiones || 0).toFixed(2)}
+                        </td>
+                      )}
                       <td>
                         <div className="admin-acciones">
                           {/* Botón Ver Dashboard para Promotores */}

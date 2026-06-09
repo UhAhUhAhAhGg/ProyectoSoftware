@@ -12,19 +12,24 @@
 .btn-volver-dashboard {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  color: #b8884a;
-  font-weight: 600;
+  gap: 6px;
+  color: #4A3219;
+  font-weight: 700;
   text-decoration: none;
-  font-size: 0.9rem;
-  padding: 6px 12px;
-  border-radius: 6px;
-  background: #f5ede0;
-  transition: background 0.15s ease;
+  font-size: 0.95rem;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: white;
+  border: 1px solid rgba(173, 129, 73, 0.2);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
 }
 
 .btn-volver-dashboard:hover {
-  background: #ebdfc7;
+  background: #fdf7eb;
+  transform: translateX(-4px);
+  border-color: #AD8149;
+  box-shadow: 0 4px 12px rgba(173, 129, 73, 0.15);
 }
 
 .explorar-header {
@@ -64,14 +69,16 @@
 .explorar-info-box {
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: linear-gradient(90deg, #fef3c7 0%, #fff8eb 100%);
-  border: 1px solid #f6c878;
-  color: #78350f;
-  padding: 12px 16px;
-  border-radius: 10px;
-  margin-bottom: 18px;
-  font-size: 0.92rem;
+  gap: 16px;
+  background: linear-gradient(135deg, rgba(253, 247, 235, 0.8) 0%, rgba(255, 255, 255, 0.9) 100%);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(173, 129, 73, 0.3);
+  color: #4A3219;
+  padding: 16px 24px;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  font-size: 0.95rem;
+  box-shadow: 0 4px 15px rgba(173, 129, 73, 0.08);
 }
 
 .explorar-info-box span {
@@ -92,12 +99,13 @@
 .explorar-filtros {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr auto;
-  gap: 12px;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 14px;
-  margin-bottom: 16px;
+  gap: 16px;
+  background: white;
+  border: 1px solid rgba(173, 129, 73, 0.15);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
 }
 
 .filtro-grupo {
@@ -116,23 +124,24 @@
 
 .filtro-grupo input,
 .filtro-grupo select {
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 7px;
-  background: white;
+  padding: 10px 14px;
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 10px;
+  background: #f9fafb;
   color: #1f2937;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: all 0.3s ease;
   font-family: inherit;
-  min-height: 38px;
+  min-height: 42px;
   box-sizing: border-box;
 }
 
 .filtro-grupo input:focus,
 .filtro-grupo select:focus {
-  border-color: #d4a256;
-  box-shadow: 0 0 0 3px rgba(212, 162, 86, 0.12);
+  background: white;
+  border-color: #AD8149;
+  box-shadow: 0 0 0 4px rgba(173, 129, 73, 0.1);
 }
 
 .filtro-fav {
@@ -140,28 +149,30 @@
 }
 
 .btn-toggle-fav {
-  background: white;
-  border: 1px solid #d1d5db;
-  color: #6b7280;
-  padding: 8px 14px;
-  border-radius: 7px;
+  background: #f9fafb;
+  border: 1px solid rgba(0,0,0,0.1);
+  color: #4A3219;
+  padding: 10px 18px;
+  border-radius: 10px;
   cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 0.95rem;
+  font-weight: 700;
   white-space: nowrap;
-  min-height: 38px;
-  transition: all 0.15s ease;
+  min-height: 42px;
+  transition: all 0.3s ease;
 }
 
 .btn-toggle-fav:hover {
-  border-color: #d4a256;
-  color: #b8884a;
+  background: white;
+  border-color: #AD8149;
+  box-shadow: 0 4px 10px rgba(173, 129, 73, 0.1);
 }
 
 .btn-toggle-fav.active {
-  background: linear-gradient(135deg, #b8884a, #d4a256);
-  color: #1a1a1a;
-  border-color: #b8884a;
+  background: linear-gradient(135deg, #4A3219, #AD8149);
+  color: white;
+  border: none;
+  box-shadow: 0 4px 12px rgba(173, 129, 73, 0.2);
 }
 
 /* ─── Resultados ───────────────────────────────────────────────────────── */
@@ -187,8 +198,8 @@
 /* ─── Grid de eventos ──────────────────────────────────────────────────── */
 .eventos-grid-comprador {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 25px;
 }
 
 .evento-card-wrapper {
@@ -244,21 +255,23 @@
 
 .btn-volver {
   display: inline-block;
-  background: linear-gradient(135deg, #b8884a, #d4a256);
-  color: #1a1a1a;
-  padding: 9px 22px;
-  border-radius: 8px;
+  background: linear-gradient(135deg, #4A3219, #AD8149);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 10px;
   text-decoration: none;
   font-weight: 700;
   cursor: pointer;
   border: none;
   font-family: inherit;
-  font-size: 0.92rem;
-  transition: transform 0.15s ease;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 10px rgba(173, 129, 73, 0.2);
 }
 
 .btn-volver:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(173, 129, 73, 0.3);
 }
 
 /* ─── Responsive ───────────────────────────────────────────────────────── */

@@ -134,6 +134,30 @@ class UserViewSet(viewsets.ModelViewSet):
                 "message": "Tu cuenta y todos tus datos personales han sido eliminados correctamente."
             }, status=status.HTTP_200_OK)
 
+    # --- BÚSQUEDA DE USUARIOS (Para filtros del dashboard) ---
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def search(self, request):
+        query = request.query_params.get('q', '').strip().lower()
+        if not query:
+            return Response([], status=status.HTTP_200_OK)
+        
+        # Filtramos por email o first_name/last_name en profile
+        from django.db.models import Q
+        users = User.objects.filter(
+            Q(email__icontains=query) |
+            Q(profile__first_name__icontains=query) |
+            Q(profile__last_name__icontains=query)
+        ).distinct()[:50]
+        
+        return Response([
+            {
+                "id": u.id,
+                "email": u.email,
+                "first_name": u.profile.first_name if hasattr(u, 'profile') else '',
+                "last_name": u.profile.last_name if hasattr(u, 'profile') else ''
+            } for u in users
+        ], status=status.HTTP_200_OK)
+
     # --- REGISTRO ---
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def register(self, request):

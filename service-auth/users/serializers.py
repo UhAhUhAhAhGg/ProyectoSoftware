@@ -84,9 +84,11 @@ class UserCreateSerializer(serializers.ModelSerializer):
         slug_field='name'
     )
 
+    first_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
     class Meta:
         model = User
-        fields = ['email', 'password', 'role']
+        fields = ['email', 'password', 'role', 'first_name']
 
     def validate_email(self, value):
         try:
@@ -100,8 +102,17 @@ class UserCreateSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        first_name = validated_data.pop('first_name', '')
         password = validated_data.pop('password')
-        return User.objects.create_user(password=password, **validated_data)
+        user = User.objects.create_user(password=password, **validated_data)
+        
+        if first_name:
+            profile = UserProfile.objects.filter(user=user).first()
+            if profile:
+                profile.first_name = first_name
+                profile.save()
+            
+        return user
 
 
 # --- LOGIN con JWT ---

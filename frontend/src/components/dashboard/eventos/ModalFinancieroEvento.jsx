@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import PromotorService from '../../../services/promotorService';
+import { authService } from '../../../services/authService';
+import { eventosService } from '../../../services/eventosService';
 import ListaCompradoresModal from './ListaCompradoresModal';
 import PromocionarEvento from '../../../pages/PromocionarEvento';
 import PromocodesModal from './PromocodesModal';
@@ -14,6 +16,51 @@ function ModalFinancieroEvento({ evento, financiero, onClose }) {
   const [showPromocionar, setShowPromocionar] = useState(false);
   const [showPromocodes, setShowPromocodes] = useState(false);
   const [exportando, setExportando] = useState(null);
+  const [buyerNames, setBuyerNames] = useState({});
+  const [promotionStatus, setPromotionStatus] = useState(null);
+
+  useEffect(() => {
+    const fetchPromoStatus = async () => {
+      try {
+        const promoData = await eventosService.getPromotionStatus(evento.id);
+        const data = promoData.data || promoData;
+        if (data.status !== 'no_promotion') {
+           setPromotionStatus(data.promotion);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    fetchPromoStatus();
+
+    const fetchTopBuyersNames = async () => {
+      const topCompradores = financiero?.topCompradores || [];
+      const userIds = topCompradores.map(c => c.userId).filter(Boolean);
+      if (userIds.length === 0) return;
+
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const newNames = { ...buyerNames };
+      const fetchPromises = userIds.map(async (id) => {
+        if (newNames[id]) return; // ya lo tenemos
+        try {
+          const userData = await authService.getUserById(id, token);
+          const profile = userData.profile || {};
+          const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ');
+          newNames[id] = fullName ? `${fullName} (${userData.email})` : userData.email;
+        } catch (e) {
+          console.error(`Error fetching user ${id}:`, e);
+          newNames[id] = 'Usuario Desconocido';
+        }
+      });
+
+      await Promise.all(fetchPromises);
+      setBuyerNames(newNames);
+    };
+
+    fetchTopBuyersNames();
+  }, [financiero]);
 
   if (!evento) return null;
 
@@ -30,13 +77,13 @@ function ModalFinancieroEvento({ evento, financiero, onClose }) {
     vendidos: d.vendidos,
   }));
 
-  const handleExport = async (type) => {
-    setExportando(type);
+  const handleExport = async (type, format = 'csv') => {
+    setExportando(`${type}-${format}`);
     try {
       if (type === 'buyers') {
-        await PromotorService.exportEventBuyersCSV(evento.id);
+        await PromotorService.exportEventBuyersCSV(evento.id, format);
       } else {
-        await PromotorService.exportEventFinancialCSV(evento.id);
+        await PromotorService.exportEventFinancialCSV(evento.id, format);
       }
     } catch (err) {
       alert('Error al exportar: ' + (err?.message || 'Intenta de nuevo'));
@@ -206,7 +253,9 @@ function ModalFinancieroEvento({ evento, financiero, onClose }) {
                   <div key={c.userId || i} className="mfe-top-item">
                     <span className="mfe-top-rank">#{i + 1}</span>
                     <div className="mfe-top-info">
-                      <span className="mfe-top-user">👤 {c.userId?.slice(0, 8)}...</span>
+                      <span className="mfe-top-user">
+                        👤 {buyerNames[c.userId] || `${c.userId?.slice(0, 8)}...`}
+                      </span>
                       <span className="mfe-top-tickets">{c.ticketsComprados} tickets</span>
                     </div>
                     <span className="mfe-top-gasto">{formatMoney(c.gastoTotal)}</span>
@@ -220,15 +269,23 @@ function ModalFinancieroEvento({ evento, financiero, onClose }) {
           <div className="mfe-section mfe-acciones-section">
             <h3>⚡ Acciones</h3>
             <div className="mfe-acciones-grid">
-              {/* TIC-36: Exportar */}
-              <button className="mfe-action-btn mfe-action-export" onClick={() => handleExport('financial')} disabled={exportando === 'financial'}>
-                📥 {exportando === 'financial' ? 'Exportando...' : 'Exportar Reporte CSV'}
+              {/* TIC-36: Exportar Reporte Financiero */}
+              <button className="mfe-action-btn mfe-action-export" onClick={() => handleExport('financial', 'csv')} disabled={exportando === 'financial-csv'}>
+                📥 {exportando === 'financial-csv' ? 'Exportando...' : 'Exportar Reporte CSV'}
               </button>
-              <button className="mfe-action-btn mfe-action-export" onClick={() => handleExport('buyers')} disabled={exportando === 'buyers'}>
-                📥 {exportando === 'buyers' ? 'Exportando...' : 'Exportar Compradores CSV'}
+              <button className="mfe-action-btn mfe-action-export" onClick={() => handleExport('financial', 'pdf')} disabled={exportando === 'financial-pdf'}>
+                📄 {exportando === 'financial-pdf' ? 'Exportando...' : 'Exportar Reporte PDF'}
               </button>
 
-              {/* TIC-33: Compradores */}
+              {/* Exportar Compradores */}
+              <button className="mfe-action-btn mfe-action-compradores" onClick={() => handleExport('buyers', 'csv')} disabled={exportando === 'buyers-csv'}>
+                📥 {exportando === 'buyers-csv' ? 'Exportando...' : 'Compradores a CSV'}
+              </button>
+              <button className="mfe-action-btn mfe-action-compradores" onClick={() => handleExport('buyers', 'pdf')} disabled={exportando === 'buyers-pdf'}>
+                📄 {exportando === 'buyers-pdf' ? 'Exportando...' : 'Compradores a PDF'}
+              </button>
+
+              {/* TIC-33: Ver Compradores */}
               <button className="mfe-action-btn mfe-action-compradores" onClick={() => setShowCompradores(true)}>
                 👥 Ver Lista de Compradores
               </button>
@@ -240,21 +297,25 @@ function ModalFinancieroEvento({ evento, financiero, onClose }) {
 
               {/* TIC-35: Códigos de Descuento */}
               <button 
-                className="mfe-action-btn" 
-                style={{ background: '#10b981', color: 'white' }}
+                className="mfe-action-btn mfe-action-promocode" 
                 onClick={() => setShowPromocodes(true)}
               >
                 🏷️ Crear Código de Descuento
               </button>
 
               {/* TIC-570: Destacar Evento */}
-              <button 
-                className="mfe-action-btn"
-                style={{ background: '#eab308', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onClick={() => setShowPromocionar(true)}
-              >
-                ⭐ Destacar Evento
-              </button>
+              {promotionStatus ? (
+                <div className="mfe-action-promocion-activa">
+                  ⭐ Promoción Activa ({promotionStatus.plan_name || 'Pro'})
+                </div>
+              ) : (
+                <button 
+                  className="mfe-action-btn mfe-action-destacar"
+                  onClick={() => setShowPromocionar(true)}
+                >
+                  ⭐ Destacar Evento
+                </button>
+              )}
             </div>
           </div>
         </div>

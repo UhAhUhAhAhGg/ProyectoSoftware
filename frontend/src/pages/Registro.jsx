@@ -123,7 +123,7 @@ function Registro() {
 
       try {
         const roleName = formData.tipoUsuario === 'comprador' ? 'Comprador' : 'Promotor';
-        await authService.register(formData.email, formData.password, roleName);
+        await authService.register(formData.email, formData.password, roleName, formData.nombre);
 
         // Auto-login post-registro para que puedan entrar al dashboard directamente
         try {

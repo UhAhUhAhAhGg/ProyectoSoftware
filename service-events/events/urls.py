@@ -48,8 +48,11 @@ from .views import (
 
     # TIC-561/562 (US-34): Planes de promoción y eventos destacados
     PromotionPlanListView,        # GET /promotion-plans/
+    SuperAdminPromotionPlanListView,
+    SuperAdminPromotionPlanUpdateView,
     EventPromoteView,             # POST /promotor/events/{id}/promote/
     EventPromotionStatusView,     # GET /promotor/events/{id}/promotion/
+    PromotorPromotionListView,    # GET /promotor/promotions/
     FeaturedEventsView,           # GET /events/featured/
     AdminPromotionListView,       # GET /admin/promotions/
     
@@ -62,6 +65,9 @@ from .views import (
     ExportEventBuyersView,       # GET /promotor/events/{id}/buyers/export/
     ExportEventFinancialView,    # GET /promotor/events/{id}/financial/export/
     AdminExportEventBuyersView,  # GET /admin/events/{id}/buyers/export/
+    AdminExportEventFinancialView,  # GET /admin/events/{id}/financial/export/
+    PromotorDashboardExportView,
+    SuperAdminDashboardExportView,
     # US33 (US-28): Lista de Compradores por Evento
     EventBuyersListView,         # GET /promotor/events/{id}/buyers/
     PromotorEventBuyersSummaryView, # GET /promotor/events/{id}/buyers/summary/
@@ -84,6 +90,7 @@ router.register(r'events', EventViewSet, basename='event')
 router.register(r'ticket-types', TicketTypeViewSet, basename='ticket-type')
 
 urlpatterns = [
+    path('events/featured/', FeaturedEventsView.as_view(), name='events-featured'),
     path('', include(router.urls)),
 
     # Compra: iniciar orden (→ pending) y confirmar pago
@@ -164,7 +171,10 @@ urlpatterns = [
     # US36 (US-33): Exportar Reportes a CSV / PDF
     path('promotor/events/<uuid:event_id>/buyers/export/', ExportEventBuyersView.as_view(), name='export-event-buyers'),
     path('promotor/events/<uuid:event_id>/financial/export/', ExportEventFinancialView.as_view(), name='export-event-financial'),
+    path('promotor/dashboard/export/', PromotorDashboardExportView.as_view(), name='export-promotor-dashboard'),
     path('admin/events/<uuid:event_id>/buyers/export/', AdminExportEventBuyersView.as_view(), name='admin-export-event-buyers'),
+    path('admin/events/<uuid:event_id>/financial/export/', AdminExportEventFinancialView.as_view(), name='admin-export-event-financial'),
+    path('admin/dashboard/export/', SuperAdminDashboardExportView.as_view(), name='export-admin-dashboard'),
     # US33 (US-28): Lista de Compradores por Evento
     path('promotor/events/<uuid:event_id>/buyers/', EventBuyersListView.as_view(), name='event-buyers-list'),
     path('promotor/events/<uuid:event_id>/buyers/summary/', PromotorEventBuyersSummaryView.as_view(), name='promotor-event-buyers-summary'),
@@ -192,6 +202,8 @@ urlpatterns = [
     path('promotion-plans/', PromotionPlanListView.as_view(), name='promotion-plan-list'),
     path('promotor/events/<uuid:event_id>/promote/', EventPromoteView.as_view(), name='event-promote'),
     path('promotor/events/<uuid:event_id>/promotion/', EventPromotionStatusView.as_view(), name='event-promotion-status'),
-    path('events/featured/', FeaturedEventsView.as_view(), name='events-featured'),
+    path('promotor/promotions/', PromotorPromotionListView.as_view(), name='promotor-promotions-list'),
     path('admin/promotions/', AdminPromotionListView.as_view(), name='admin-promotion-list'),
+    path('superadmin/promotion-plans/', SuperAdminPromotionPlanListView.as_view(), name='superadmin-promotion-plans-list'),
+    path('superadmin/promotion-plans/<uuid:pk>/', SuperAdminPromotionPlanUpdateView.as_view(), name='superadmin-promotion-plans-update'),
 ]

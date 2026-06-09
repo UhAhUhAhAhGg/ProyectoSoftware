@@ -89,11 +89,11 @@ export const authService = {
   },
 
   // Registro de nuevo usuario (Comprador / Promotor)
-  register: async (email, password, roleName) => {
+  register: async (email, password, roleName, first_name = '') => {
     const response = await fetch(`${API_URL}/api/v1/users/register/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, role: roleName }),
+      body: JSON.stringify({ email, password, role: roleName, first_name }),
     });
 
     const data = await response.json();
@@ -195,4 +195,36 @@ export const authService = {
     if (!response.ok) throw new Error('No autorizado');
     return response.json();
   },
+
+  // Obtener perfil de un usuario específico por su ID
+  getUserById: async (id, token) => {
+    const response = await fetch(`${API_URL}/api/v1/users/${id}/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Error al obtener datos del usuario');
+    }
+    
+    return data;
+  },
+
+  // Busca usuarios por nombre o correo
+  searchUsers: async (query, token) => {
+    const response = await fetch(`${API_URL}/api/v1/users/search/?q=${encodeURIComponent(query)}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+    
+    return await response.json();
+  }
 };

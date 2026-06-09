@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { eventosService } from '../../../services/eventosService';
 import FormularioTipoEntrada from './FormularioTipoEntrada';
 import VenueLayoutPreview from './VenueLayoutPreview';
+import api from '../../../services/api';
 import './GestionTiposEntrada.css';
 
 const getZoneLabel = (tipoZona) => {
@@ -24,6 +25,7 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
   const [filtro, setFiltro] = useState('activos');
   const [error, setError] = useState('');
   const [capacidadDisponible, setCapacidadDisponible] = useState(0);
+  const [comision, setComision] = useState(null);
 
   const cargarTiposEntrada = useCallback(async () => {
     if (!eventoId) return;
@@ -38,6 +40,21 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
       setCargando(false);
     }
   }, [eventoId]);
+
+  useEffect(() => {
+    const fetchComision = async () => {
+      try {
+        const EVENTS_URL = process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002';
+        const res = await api.get(`${EVENTS_URL}/api/v1/admin/platform/commission/current/`);
+        if (res.data?.configured && res.data?.commission) {
+          setComision(res.data.commission);
+        }
+      } catch (err) {
+        console.error("No se pudo obtener la configuración de comisiones:", err);
+      }
+    };
+    fetchComision();
+  }, []);
 
   useEffect(() => {
     if (eventoId) {
@@ -179,6 +196,19 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
         </div>
       )}
 
+      {comision && (
+        <div className="comision-info-banner">
+          <span className="comision-icon">💡</span>
+          <div className="comision-text">
+            <strong>Información sobre comisiones</strong>
+            La plataforma retiene una comisión por cada entrada vendida de 
+            {comision.commission_type === 'porcentaje' && <b> {comision.percentage_value}% del precio.</b>}
+            {comision.commission_type === 'fijo' && <b> {comision.fixed_value} Bs fijos.</b>}
+            {comision.commission_type === 'hibrido' && <b> {comision.percentage_value}% del precio + {comision.fixed_value} Bs fijos.</b>}
+          </div>
+        </div>
+      )}
+
       <VenueLayoutPreview
         tiposEntrada={tiposEntrada}
         capacidadTotal={evento?.capacidad}
@@ -230,7 +260,29 @@ function GestionTiposEntrada({ eventoId, evento, onChange }) {
                     {tipo.esVIP && <span className="tipo-badge-secundario vip">VIP</span>}
                   </div>
                 </div>
-                <span className="tipo-precio">${tipo.precio}</span>
+                <div style={{ textAlign: 'right' }}>
+                  <span className="tipo-precio">${tipo.precio}</span>
+                  {comision && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginTop: '6px' }}>
+                      <span style={{ fontSize: '11px', color: '#f44336', fontWeight: '600' }}>
+                        - Comisión: ${(
+                          comision.commission_type === 'porcentaje' ? tipo.precio * (comision.percentage_value / 100) : 
+                          comision.commission_type === 'fijo' ? parseFloat(comision.fixed_value) : 
+                          tipo.precio * (comision.percentage_value / 100) + parseFloat(comision.fixed_value)
+                        ).toFixed(2)}
+                      </span>
+                      <span className="ganancia-neta" style={{ marginTop: '2px' }}>
+                        Neta: ${(
+                          Math.max(0, tipo.precio - (
+                            comision.commission_type === 'porcentaje' ? tipo.precio * (comision.percentage_value / 100) : 
+                            comision.commission_type === 'fijo' ? parseFloat(comision.fixed_value) : 
+                            tipo.precio * (comision.percentage_value / 100) + parseFloat(comision.fixed_value)
+                          ))
+                        ).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <p className="tipo-descripcion">{tipo.descripcion}</p>

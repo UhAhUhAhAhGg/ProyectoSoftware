@@ -139,7 +139,7 @@ function OpcionesPromotor() {
 
       {/* Herramientas de gestion */}
       <div className="gestion-section">
-        <h3>Herramientas de Gestión</h3>
+        <h3>Atajos de Gestión</h3>
         <div className="gestion-grid">
           {herramientas.map(opcion => (
             opcion.disabled ? (
@@ -161,30 +161,6 @@ function OpcionesPromotor() {
               </Link>
             )
           ))}
-        </div>
-      </div>
-
-            {/* US35 - Gestión de códigos de descuento */}
-      <div className="gestion-section">
-        <h3>Códigos de Descuento</h3>
-
-        <div className="evento-proximo-card">
-          <div className="evento-proximo-info">
-            <h4>PROMO2026</h4>
-            <p>💸 Descuento: 15%</p>
-            <p>📅 Expira: 31/12/2026</p>
-
-            <div className="evento-proximo-stats">
-              <span>🎟️ Máx. usos: 100</span>
-              <span>✅ Usados: 12</span>
-            </div>
-          </div>
-
-          <div className="evento-proximo-acciones">
-            <button className="btn-accion" disabled>
-              Crear Código
-            </button>
-          </div>
         </div>
       </div>
 

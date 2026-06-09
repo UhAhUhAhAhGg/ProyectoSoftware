@@ -45,9 +45,14 @@ function PromocodesModal({ eventId, eventoNombre, onClose }) {
         event: eventId,
         code: nuevoCodigo.code.toUpperCase(),
         discount_value: parseFloat(nuevoCodigo.discount_value),
-        max_uses: nuevoCodigo.max_uses ? parseInt(nuevoCodigo.max_uses) : 0,
-        valid_until: nuevoCodigo.valid_until || null
+        max_uses: (nuevoCodigo.max_uses && parseInt(nuevoCodigo.max_uses) > 0) ? parseInt(nuevoCodigo.max_uses) : null,
       };
+
+      if (nuevoCodigo.valid_until) {
+        data.valid_until = nuevoCodigo.valid_until;
+      } else {
+        delete data.valid_until;
+      }
 
       await PromotorService.createPromoCode(data);
       setNuevoCodigo({ code: '', discount_type: 'porcentaje', discount_value: '', max_uses: '', valid_until: '' });
@@ -182,6 +187,7 @@ function PromocodesModal({ eventId, eventoNombre, onClose }) {
                     <th>Código</th>
                     <th>Descuento</th>
                     <th>Usos</th>
+                    <th>Total Descontado</th>
                     <th>Expiración</th>
                     <th>Estado</th>
                     <th>Acciones</th>
@@ -193,6 +199,7 @@ function PromocodesModal({ eventId, eventoNombre, onClose }) {
                       <td className="pcm-td-code">{c.code}</td>
                       <td>{formatMoney(c.discount_value, c.discount_type)}</td>
                       <td>{c.times_used || 0} / {c.max_uses > 0 ? c.max_uses : '∞'}</td>
+                      <td style={{ color: '#dc3545', fontWeight: '500' }}>Bs. {parseFloat(c.total_descontado || 0).toFixed(2)}</td>
                       <td>{formatDate(c.valid_until)}</td>
                       <td>
                         <span className={`pcm-status ${c.is_active ? 'active' : 'inactive'}`}>

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Event, TicketType, UserFavorite, Notification, EventAuditLog, PromoCode, PromotionPlan, EventPromotion
+from .models import Category, Event, TicketType, UserFavorite, Notification, EventAuditLog, PromoCode, PromotionPlan, EventPromotion, PlatformCommission
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -36,6 +36,9 @@ class EventSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     tickets = TicketTypeSerializer(source='ticket_types', many=True, read_only=True)
     disponibilidad = serializers.SerializerMethodField()
+    promocion = serializers.SerializerMethodField()
+    comisiones_tickets = serializers.SerializerMethodField()
+    comisiones_promociones = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
@@ -55,9 +58,20 @@ class EventSerializer(serializers.ModelSerializer):
             'category',
             'category_name',
             'tickets',
-            'disponibilidad'
+            'disponibilidad',
+            'promocion',
+            'comisiones_tickets',
+            'comisiones_promociones'
         ]
         read_only_fields = ['id', 'created_at', 'admin_status']
+
+    def get_promocion(self, obj):
+        from django.utils import timezone as tz
+        now = tz.now()
+        promo = obj.promotions.filter(status='active', expires_at__gt=now).first()
+        if promo:
+            return promo.plan.tier
+        return None
 
     def get_disponibilidad(self, obj):
         # Si el evento no está publicado, no debe mostrarse como disponible
@@ -70,6 +84,26 @@ class EventSerializer(serializers.ModelSerializer):
             return "Disponible"
             
         return "Agotado"
+
+    def get_comisiones_tickets(self, obj):
+        try:
+            from django.db.models import Sum
+            comisiones_tickets = obj.purchase_set.filter(status__in=['active', 'used']).aggregate(
+                total=Sum('commission_amount')
+            )['total']
+            return float(comisiones_tickets or 0.0)
+        except Exception:
+            return 0.0
+
+    def get_comisiones_promociones(self, obj):
+        try:
+            from django.db.models import Sum
+            comisiones_promos = obj.promotions.filter(status='active').aggregate(
+                total=Sum('amount_paid')
+            )['total']
+            return float(comisiones_promos or 0.0)
+        except Exception:
+            return 0.0
 
 
 class EventCreateSerializer(serializers.ModelSerializer):
@@ -320,6 +354,13 @@ class PromotionPlanSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+class PromotionPlanUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializador para que el SuperAdmin actualice el plan de promoción.
+    """
+    class Meta:
+        model = PromotionPlan
+        fields = ['price_bob', 'is_active']
 
 class EventPromotionReadSerializer(serializers.ModelSerializer):
     """
@@ -384,6 +425,7 @@ class PromoCodeReadSerializer(serializers.ModelSerializer):
     event_name = serializers.CharField(source='event.name', read_only=True, default=None)
     is_currently_valid = serializers.SerializerMethodField()
     uses_remaining = serializers.SerializerMethodField()
+    total_descontado = serializers.SerializerMethodField()
 
     class Meta:
         model = PromoCode
@@ -400,6 +442,7 @@ class PromoCodeReadSerializer(serializers.ModelSerializer):
             'max_uses',
             'times_used',
             'uses_remaining',
+            'total_descontado',
             'is_active',
             'is_currently_valid',
             'created_at',
@@ -414,6 +457,12 @@ class PromoCodeReadSerializer(serializers.ModelSerializer):
         if obj.max_uses is None:
             return None  # ilimitado
         return max(0, obj.max_uses - obj.times_used)
+        
+    def get_total_descontado(self, obj):
+        from django.db.models import Sum
+        from decimal import Decimal
+        total = obj.purchases.filter(status__in=['active', 'completed']).aggregate(total=Sum('discount_amount'))['total']
+        return float(total or Decimal('0.00'))
 
     def _get_any_event(self, obj):
         """Helper para is_valid_for cuando el code aplica a todos los eventos."""
@@ -440,6 +489,22 @@ class PromoCodeCreateSerializer(serializers.ModelSerializer):
             'max_uses',
             'is_active',
         ]
+        extra_kwargs = {
+            'valid_from': {'required': False},
+            'valid_until': {'required': False},
+        }
+
+    def create(self, validated_data):
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        if 'valid_from' not in validated_data:
+            validated_data['valid_from'] = timezone.now()
+        if 'valid_until' not in validated_data or not validated_data['valid_until']:
+            # Set to 10 years by default if null or not provided
+            validated_data['valid_until'] = timezone.now() + timedelta(days=3650)
+            
+        return super().create(validated_data)
 
     def validate_code(self, value):
         return value.upper().strip()
@@ -532,3 +597,14 @@ class DashboardEvolutionSerializer(serializers.Serializer):
     """
     mes = serializers.CharField(read_only=True)  # Formato: "YYYY-MM"
     ingresos_comisiones = serializers.FloatField(read_only=True)
+    ingresos_promociones = serializers.FloatField(read_only=True)
+
+class PlatformCommissionReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlatformCommission
+        fields = '__all__'
+
+class PlatformCommissionCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlatformCommission
+        fields = ['commission_type', 'percentage_value', 'fixed_value', 'valid_from', 'notes']
