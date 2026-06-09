@@ -1,0 +1,19 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copiar package.json y dependencias
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copiar el resto del código
+COPY . .
+
+# Construir la aplicación para producción
+RUN npm run build
+
+# Exponer el puerto
+EXPOSE 3000
+
+# Comando para correr en producción
+CMD ["npm", "run", "start"]

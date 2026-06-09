@@ -9,7 +9,7 @@ import { authService } from '../services/authService';
 import './AdminLogin.css';
 
 function AdminLogin() {
-  const [formData, setFormData] = useState({ email: 'admin@ticketproject.com', password: 'Admin1234!' });
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [errores, setErrores] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -127,7 +127,7 @@ function AdminLogin() {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
-                placeholder="admin@ticketproject.com"
+                placeholder="correo@ejemplo.com"
                 className={errores.email ? 'error' : ''}
                 disabled={loading}
               />
