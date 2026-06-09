@@ -14,7 +14,7 @@ const EVENTS_URL = process.env.NEXT_PUBLIC_EVENTS_URL || 'http://localhost:8002'
 
 const formatCurrency = (val) => new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', maximumFractionDigits: 0 }).format(val || 0);
 
-const DashboardSistema = () => {
+const DashboardSistema = ({ onViewPromotorDashboard }) => {
   const [data, setData] = useState({
     kpis: { comisiones: 0, promociones: 0, total: 0, activos: 0 },
     fuentes: [],
@@ -56,7 +56,7 @@ const DashboardSistema = () => {
         const mappedEvolucion = Array.isArray(evolution) ? evolution.map(e => ({
           mes: e.mes,
           comisiones: Number(e.ingresos_comisiones || 0),
-          promociones: 0 // Mock porque evolution no trae promociones aún
+          promociones: Number(e.ingresos_promociones || 0)
         })) : [];
 
         const financiero = global.financiero || {};
@@ -216,7 +216,13 @@ const DashboardSistema = () => {
           {data.topPromotores.length > 0 ? (
             <ul className="ds-ranking-list">
               {data.topPromotores.map((p, i) => (
-                <li key={p.id} className="ds-ranking-item">
+                <li 
+                  key={p.id} 
+                  className={`ds-ranking-item ${onViewPromotorDashboard ? 'ds-ranking-clickable' : ''}`}
+                  onClick={() => onViewPromotorDashboard && onViewPromotorDashboard(p.id)}
+                  style={onViewPromotorDashboard ? { cursor: 'pointer', transition: 'background 0.2s' } : {}}
+                  title={onViewPromotorDashboard ? 'Ver dashboard del promotor' : ''}
+                >
                   <div className="ds-ranking-left">
                     <span className="ds-ranking-pos">#{i + 1}</span>
                     <span className="ds-ranking-name">{p.nombre}</span>

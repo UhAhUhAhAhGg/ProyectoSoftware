@@ -202,18 +202,28 @@ Esta es la entrega más reciente.
 - `docker compose up` corriendo
 - Seeds ejecutados (incluyendo `seed_planes.py`)
 
-### Dashboard Financiero del Promotor y Comisiones
+### 1. Panel Unificado de SuperAdmin y Admin
+1. Login como `admin@ticketproject.com` (SuperAdmin) → verás un Dashboard renovado que unifica el control de la plataforma.
+2. Explora las pestañas: "Gestión de Eventos" (para moderación) y "Gestión de Usuarios". 
+3. Dentro de "Gestión de Usuarios", revisa las sub-pestañas:
+   - **Administradores:** Solo visible para el SuperAdmin. Permite crear nuevos admins y dar/quitar permisos.
+   - **Promotores:** Lista todos los promotores de la plataforma. Ahora incluye una columna de **"Comisiones"** que muestra cuánto ha generado cada promotor para la plataforma, permitiendo ordenarlos para ver el "Top Promotores".
+   - **Compradores:** Lista todos los compradores.
 
-1. Login como `admin@ticketproject.com` (SuperAdmin) → "Gestión de Usuarios → Promotores".
-2. Clic en "Ver Dashboard" en algún promotor para ver sus ingresos brutos, comisiones de plataforma, ingresos netos y entradas vendidas.
-3. El SuperAdmin puede ir a "Configuración Global" para modificar las tasas de comisión y los precios de los planes de promoción.
+### 2. Dashboard Financiero y Comisiones (Admin/SuperAdmin)
+1. En la pestaña de **Dashboard Sistema**, el SuperAdmin puede visualizar el gráfico lineal de ingresos que ahora separa los ingresos por **Comisiones de Tickets** e **Ingresos por Promociones**.
+2. Al revisar la tabla de **Eventos**, verás que cada evento tiene desglosado exactamente cuánto aportó en ganancias a la plataforma.
 
-### Promocionar un Evento
-
+### 3. Promocionar un Evento (Promotor)
 1. Login como Promotor → "Gestión de Eventos" → Crear un evento o usar uno existente.
 2. En la lista de eventos, selecciona "Promocionar Evento".
 3. Se mostrarán los planes de promoción disponibles (Básico, Premium, Pro) con los precios configurados globalmente.
-4. Selecciona un plan, paga con QR y el evento será destacado en la plataforma.
+4. Al pagar el plan, el evento obtendrá insignias visuales (badges premium/pro) y será priorizado en la búsqueda de los compradores.
+
+### 4. Interfaz Premium del Comprador (Rediseño UI)
+1. Login como Comprador → Serás recibido por el nuevo **Hero Banner** con un diseño moderno y gradientes Marrón/Dorado.
+2. Revisa la sección **Eventos Destacados**: ahora se muestran en una cuadrícula amplia (grid) con imágenes grandes y animaciones fluidas de elevación (*hover*).
+3. Navega a **Explorar Eventos**: verás la nueva barra de filtros interactiva y las tarjetas de eventos con el diseño "glassmorphism", eliminando los antiguos botones azules por botones dorados elegantes.
 
 ---
 

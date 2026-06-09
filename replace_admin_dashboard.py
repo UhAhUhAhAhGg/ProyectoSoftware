@@ -1,4 +1,10 @@
-'use client';
+import sys
+
+with open('frontend/src/pages/AdminDashboard.jsx', 'r', encoding='utf-8') as f:
+    content = f.read()
+
+# Escribir el nuevo archivo directamente, es más fácil
+new_content = """'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -15,7 +21,6 @@ import AdminAuditoria from '../components/dashboard/admin/AdminAuditoria';
 import DashboardPromotorAdmin from '../components/dashboard/admin/DashboardPromotorAdmin';
 import DashboardSistema from '../components/dashboard/admin/DashboardSistema';
 import AdminTable from '../components/dashboard/admin/AdminTable';
-import SuperAdminCrearAdmin from '../components/dashboard/admin/SuperAdminCrearAdmin';
 
 // TIC-398/445: cada seccion del panel requiere una capability del admin.
 // SuperAdmin tiene bypass total en hasPermission().
@@ -54,7 +59,6 @@ function AdminDashboard() {
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [selectedPromotorId, setSelectedPromotorId] = useState(null);
-  const [adminsRefreshKey, setAdminsRefreshKey] = useState(0);
 
   useEffect(() => {
     setMounted(true);
@@ -279,21 +283,9 @@ function AdminDashboard() {
           ) : (
             <>
               {activeSection === 'home' && <AdminDashboardHome onNavigate={handleSelectSection} user={user} />}
-              {activeSection === 'dashboard-sistema' && (
-                <DashboardSistema 
-                  onViewPromotorDashboard={(promotorId) => {
-                    setSelectedPromotorId(promotorId);
-                    setActiveSection('dashboard-promotor');
-                  }}
-                />
-              )}
+              {activeSection === 'dashboard-sistema' && <DashboardSistema />}
               {activeSection === 'auditoria' && <AdminAuditoria />}
-              {activeSection === 'administradores' && (
-                <>
-                  <AdminTable key={adminsRefreshKey} />
-                  <SuperAdminCrearAdmin onAdminCreated={() => setAdminsRefreshKey(prev => prev + 1)} />
-                </>
-              )}
+              {activeSection === 'administradores' && <AdminTable />}
               {activeSection === 'promotores' && (
                 <AdminUsuarios 
                   module="promotores" 
@@ -480,3 +472,9 @@ function SinPermisos({ cap }) {
 }
 
 export default AdminDashboard;
+"""
+
+with open('frontend/src/pages/AdminDashboard.jsx', 'w', encoding='utf-8') as f:
+    f.write(new_content)
+
+print("Exito")

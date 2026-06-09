@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { adminEventsService } from '../../../services/adminEventsService';
+import { userManagementService } from '../../../services/userManagementService';
 import './AdminEventsTable.css';
 
 function AdminEventsTable() {
   const [events, setEvents] = useState([]);
+  const [promotoresMap, setPromotoresMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -28,7 +30,23 @@ function AdminEventsTable() {
   useEffect(() => {
     cargarEventos();
     cargarEstadisticas();
+    cargarPromotores();
   }, []);
+
+  const cargarPromotores = async () => {
+    try {
+      const data = await userManagementService.getPromotores();
+      const map = {};
+      if (Array.isArray(data)) {
+        data.forEach(p => {
+          map[p.id] = p.email;
+        });
+      }
+      setPromotoresMap(map);
+    } catch (error) {
+      console.error('Error al cargar promotores:', error);
+    }
+  };
 
   const cargarEventos = async () => {
     try {
@@ -262,7 +280,13 @@ function AdminEventsTable() {
               <th onClick={() => handleSort('status')} className="sortable">
                 Estado {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
               </th>
-              <th>Acciones</th>
+              <th onClick={() => handleSort('comisiones_tickets')} className="sortable">
+                Comisiones {sortConfig.key === 'comisiones_tickets' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('comisiones_promociones')} className="sortable">
+                Promociones {sortConfig.key === 'comisiones_promociones' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th style={{ textAlign: 'center' }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -280,13 +304,19 @@ function AdminEventsTable() {
                   </td>
                   <td>{formatDate(event.event_date)}</td>
                   <td>
-                    <span className="promoter">{event.promoter_id || 'N/A'}</span>
+                    <span className="promoter">{promotoresMap[event.promoter_id] || event.promoter_id || 'N/A'}</span>
                   </td>
                   <td>{event.location}</td>
                   <td>
                     <span className="capacity">{event.capacity}</span>
                   </td>
                   <td>{getStatusBadge(event.status)}</td>
+                  <td style={{ fontWeight: 600, color: event.comisiones_tickets > 0 ? '#2ecc71' : '#95a5a6' }}>
+                    Bs {Number(event.comisiones_tickets || 0).toFixed(2)}
+                  </td>
+                  <td style={{ fontWeight: 600, color: event.comisiones_promociones > 0 ? '#10b981' : '#95a5a6' }}>
+                    Bs {Number(event.comisiones_promociones || 0).toFixed(2)}
+                  </td>
                   <td className="actions-cell">
                     <button
                       className="btn-action btn-edit"

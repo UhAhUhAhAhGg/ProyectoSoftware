@@ -37,6 +37,8 @@ class EventSerializer(serializers.ModelSerializer):
     tickets = TicketTypeSerializer(source='ticket_types', many=True, read_only=True)
     disponibilidad = serializers.SerializerMethodField()
     promocion = serializers.SerializerMethodField()
+    comisiones_tickets = serializers.SerializerMethodField()
+    comisiones_promociones = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
@@ -57,7 +59,9 @@ class EventSerializer(serializers.ModelSerializer):
             'category_name',
             'tickets',
             'disponibilidad',
-            'promocion'
+            'promocion',
+            'comisiones_tickets',
+            'comisiones_promociones'
         ]
         read_only_fields = ['id', 'created_at', 'admin_status']
 
@@ -80,6 +84,26 @@ class EventSerializer(serializers.ModelSerializer):
             return "Disponible"
             
         return "Agotado"
+
+    def get_comisiones_tickets(self, obj):
+        try:
+            from django.db.models import Sum
+            comisiones_tickets = obj.purchase_set.filter(status__in=['active', 'used']).aggregate(
+                total=Sum('commission_amount')
+            )['total']
+            return float(comisiones_tickets or 0.0)
+        except Exception:
+            return 0.0
+
+    def get_comisiones_promociones(self, obj):
+        try:
+            from django.db.models import Sum
+            comisiones_promos = obj.promotions.filter(status='active').aggregate(
+                total=Sum('amount_paid')
+            )['total']
+            return float(comisiones_promos or 0.0)
+        except Exception:
+            return 0.0
 
 
 class EventCreateSerializer(serializers.ModelSerializer):
@@ -573,6 +597,7 @@ class DashboardEvolutionSerializer(serializers.Serializer):
     """
     mes = serializers.CharField(read_only=True)  # Formato: "YYYY-MM"
     ingresos_comisiones = serializers.FloatField(read_only=True)
+    ingresos_promociones = serializers.FloatField(read_only=True)
 
 class PlatformCommissionReadSerializer(serializers.ModelSerializer):
     class Meta:

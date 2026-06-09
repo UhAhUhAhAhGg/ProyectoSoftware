@@ -7,11 +7,11 @@ import './SuperAdminCrearAdmin.css';
 // TIC-397/443: Formulario para que el SuperAdmin cree directamente
 // una cuenta de Administrador con permisos asignables.
 const PERMISOS_DISPONIBLES = [
-  { id: 'manage_users', label: 'Gestionar Usuarios', icon: '👥' },
+  { id: 'manage_users', label: 'Gestionar Promotores y Compradores', icon: '👥' },
   { id: 'manage_events', label: 'Gestionar Eventos', icon: '📅' },
-  { id: 'view_reports', label: 'Ver Reportes', icon: '📊' },
-  { id: 'manage_queue', label: 'Gestionar Cola', icon: '⏳' },
-  { id: 'system_config', label: 'Configuración del Sistema', icon: '🔧' },
+  { id: 'view_reports', label: 'Finanzas y Reportes', icon: '📊' },
+  { id: 'manage_queue', label: 'Gestionar Cola Virtual', icon: '⏳' },
+  { id: 'system_config', label: 'Configuración Global', icon: '🔧' },
 ];
 
 function SuperAdminCrearAdmin({ onCreated }) {

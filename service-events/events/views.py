@@ -4500,25 +4500,50 @@ class SuperAdminDashboardEvolutionView(APIView):
         if not is_superuser and user_role != 'Administrador':
             return Response({"error": "Acceso denegado."}, status=status.HTTP_403_FORBIDDEN)
         try:
-            from .models import Purchase
+            from .models import Purchase, EventPromotion
             from django.db.models import Sum
             from django.db.models.functions import TruncMonth
             from .serializers import DashboardEvolutionSerializer
 
-            evolucion_ingresos = (
+            evolucion_comisiones = (
                 Purchase.objects.filter(status__in=['active', 'used'])
                 .annotate(month=TruncMonth('created_at'))
                 .values('month')
                 .annotate(ingresos_comisiones=Sum('commission_amount'))
                 .order_by('month')
             )
-            data_formateada = []
-            for registro in evolucion_ingresos:
-                if registro['month']:
-                    data_formateada.append({
-                        "mes": registro['month'].strftime('%Y-%m'),
-                        "ingresos_comisiones": float(registro['ingresos_comisiones'] or 0.0)
-                    })
+            
+            evolucion_promociones = (
+                EventPromotion.objects.filter(status='active')
+                .annotate(month=TruncMonth('started_at'))
+                .values('month')
+                .annotate(ingresos_promociones=Sum('amount_paid'))
+                .order_by('month')
+            )
+            
+            data_map = {}
+            for r in evolucion_comisiones:
+                if r['month']:
+                    m_str = r['month'].strftime('%Y-%m')
+                    data_map[m_str] = {
+                        "mes": m_str, 
+                        "ingresos_comisiones": float(r['ingresos_comisiones'] or 0.0),
+                        "ingresos_promociones": 0.0
+                    }
+                    
+            for r in evolucion_promociones:
+                if r['month']:
+                    m_str = r['month'].strftime('%Y-%m')
+                    if m_str not in data_map:
+                        data_map[m_str] = {
+                            "mes": m_str,
+                            "ingresos_comisiones": 0.0,
+                            "ingresos_promociones": 0.0
+                        }
+                    data_map[m_str]["ingresos_promociones"] = float(r['ingresos_promociones'] or 0.0)
+            
+            data_formateada = sorted(list(data_map.values()), key=lambda x: x['mes'])
+
             serializer = DashboardEvolutionSerializer(data_formateada, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
