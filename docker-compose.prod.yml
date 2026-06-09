@@ -177,17 +177,17 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
       args:
-        - NEXT_PUBLIC_AUTH_URL=http://${SERVER_IP}/api/v1/users
-        - NEXT_PUBLIC_PROFILES_URL=http://${SERVER_IP}/api/v1/profiles
-        - NEXT_PUBLIC_EVENTS_URL=http://${SERVER_IP}/api/v1/events
-        - NEXT_PUBLIC_QUEUE_URL=http://${SERVER_IP}/api/v1/queue
+        - NEXT_PUBLIC_AUTH_URL=http://${SERVER_IP}
+        - NEXT_PUBLIC_PROFILES_URL=http://${SERVER_IP}
+        - NEXT_PUBLIC_EVENTS_URL=http://${SERVER_IP}
+        - NEXT_PUBLIC_QUEUE_URL=http://${SERVER_IP}
     container_name: frontend_prod
     restart: always
     environment:
-      NEXT_PUBLIC_AUTH_URL: "http://${SERVER_IP}/api/v1/users"
-      NEXT_PUBLIC_PROFILES_URL: "http://${SERVER_IP}/api/v1/profiles"
-      NEXT_PUBLIC_EVENTS_URL: "http://${SERVER_IP}/api/v1/events"
-      NEXT_PUBLIC_QUEUE_URL: "http://${SERVER_IP}/api/v1/queue"
+      NEXT_PUBLIC_AUTH_URL: "http://${SERVER_IP}"
+      NEXT_PUBLIC_PROFILES_URL: "http://${SERVER_IP}"
+      NEXT_PUBLIC_EVENTS_URL: "http://${SERVER_IP}"
+      NEXT_PUBLIC_QUEUE_URL: "http://${SERVER_IP}"
     depends_on:
       - service-auth
       - service-profiles
