@@ -9,6 +9,18 @@ RUN npm ci
 # Copiar el resto del código
 COPY . .
 
+# Recibir variables desde docker-compose.prod.yml
+ARG NEXT_PUBLIC_AUTH_URL
+ARG NEXT_PUBLIC_PROFILES_URL
+ARG NEXT_PUBLIC_EVENTS_URL
+ARG NEXT_PUBLIC_QUEUE_URL
+
+# Establecerlas para el proceso de build de Next.js
+ENV NEXT_PUBLIC_AUTH_URL=$NEXT_PUBLIC_AUTH_URL
+ENV NEXT_PUBLIC_PROFILES_URL=$NEXT_PUBLIC_PROFILES_URL
+ENV NEXT_PUBLIC_EVENTS_URL=$NEXT_PUBLIC_EVENTS_URL
+ENV NEXT_PUBLIC_QUEUE_URL=$NEXT_PUBLIC_QUEUE_URL
+
 # Construir la aplicación para producción
 RUN npm run build
 
