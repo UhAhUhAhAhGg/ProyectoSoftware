@@ -24,7 +24,7 @@ import django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'auth_config.settings')
 django.setup()
 
-from users.models import User, Role
+from users.models import User, Role, UserProfile
 from users.permissions import ADMIN_CAPABILITIES
 
 print('=== Seed de Usuarios de Prueba ===')
@@ -38,34 +38,62 @@ roles = {r.name: r for r in Role.objects.all()}
 
 USERS_TO_CREATE = [
     {
-        'email': 'admin@ticketproject.com',
+        'first_name': 'Gus',
+        'email': 'gus@ticketgo.com',
         'password': 'Admin1234!',
         'role': 'Administrador',
         'is_staff': True,
         'is_superadmin': True,
-        # SuperAdmin: bypass total. Asignamos igual el set completo por
-        # consistencia con el modelo (no afecta el bypass).
         'admin_permissions': list(ADMIN_CAPABILITIES),
     },
     {
-        'email': 'admin2@ticketproject.com',
-        'password': 'Admin1234!',
+        'first_name': 'Fernand',
+        'email': 'fernand@ticketgo.com',
+        'password': 'Admin123!',
         'role': 'Administrador',
         'is_staff': True,
         'is_superadmin': False,
-        # Admin limitado: solo gestiona eventos. Util para verificar gating.
-        'admin_permissions': ['manage_events'],
+        'admin_permissions': list(ADMIN_CAPABILITIES),
     },
     {
-        'email': 'promotor@ticketproject.com',
-        'password': 'Promotor1234!',
+        'first_name': 'MarciaPrin.',
+        'email': 'marciaprin@ticketgo.com',
+        'password': 'Romeo9&15',
         'role': 'Promotor',
         'is_staff': False,
         'is_superadmin': False,
         'admin_permissions': [],
     },
     {
-        'email': 'comprador@ticketproject.com',
+        'first_name': 'Ari',
+        'email': 'arianak@ticketgo.com',
+        'password': 'AriKrem$63',
+        'role': 'Promotor',
+        'is_staff': False,
+        'is_superadmin': False,
+        'admin_permissions': [],
+    },
+    {
+        'first_name': 'Quino',
+        'email': 'quinoerick@ticketgo.com',
+        'password': 'QuinoMir@04',
+        'role': 'Promotor',
+        'is_staff': False,
+        'is_superadmin': False,
+        'admin_permissions': [],
+    },
+    {
+        'first_name': 'Anghelo',
+        'email': 'anghelop@ticketgo.com',
+        'password': 'AngheloP3h@',
+        'role': 'Promotor',
+        'is_staff': False,
+        'is_superadmin': False,
+        'admin_permissions': [],
+    },
+    {
+        'first_name': 'Roberto',
+        'email': 'roberto@ticketgo.com',
         'password': 'Comprador1234!',
         'role': 'Comprador',
         'is_staff': False,
@@ -86,8 +114,21 @@ for u in USERS_TO_CREATE:
         )
         user.set_password(u['password'])
         user.save()
+        
+        # Crear perfil para que tengan nombre
+        from datetime import date
+        UserProfile.objects.get_or_create(
+            user=user,
+            defaults={
+                'first_name': u.get('first_name', ''),
+                'last_name': '',
+                'phone': '00000000',
+                'date_of_birth': date(2000, 1, 1),
+            }
+        )
+
         flag = ' [SUPERADMIN]' if u['is_superadmin'] else ''
-        print(f"  CREADO: {u['email']} ({u['role']}){flag}")
+        print(f"  CREADO: {u['email']} ({u['role']}) - {u.get('first_name', '')}{flag}")
     else:
         # Actualizar campos clave si difieren
         cambios = []
@@ -104,6 +145,22 @@ for u in USERS_TO_CREATE:
             print(f"  ACTUALIZADO: {u['email']} ({', '.join(cambios)})")
         else:
             print(f"  OK (sin cambios): {u['email']}")
+
+    # Asegurar que el perfil exista y esté actualizado SIEMPRE
+    from datetime import date
+    profile, created = UserProfile.objects.get_or_create(
+        user=user,
+        defaults={
+            'first_name': u.get('first_name', ''),
+            'last_name': '',
+            'phone': '00000000',
+            'date_of_birth': date(2000, 1, 1),
+        }
+    )
+    if not created and profile.first_name != u.get('first_name', ''):
+        profile.first_name = u.get('first_name', '')
+        profile.save()
+        print(f"  PERFIL ACTUALIZADO: {u['email']} -> {profile.first_name}")
 
 print(f"\nTotal usuarios en BD: {User.objects.count()}")
 print('\nCuentas de prueba listas:')

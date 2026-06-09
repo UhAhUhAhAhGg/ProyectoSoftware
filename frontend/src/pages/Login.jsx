@@ -62,16 +62,11 @@ function Login() {
 
   // Prellenar según el rol seleccionado
   const handleRoleChange = (role) => {
-    const credentials = {
-      comprador: { email: 'gustavo.quisbert.c@ucb.edu.bo', password: 'Comprador1234!' },
-      promotor: { email: 'promotor@ticketproject.com', password: 'Promotor1234!' }
-    };
-
     setFormData({
       ...formData,
       role: role,
-      email: credentials[role].email,
-      password: credentials[role].password
+      email: '',
+      password: ''
     });
   };
 
